@@ -112,6 +112,8 @@ function showCurrentCustomDnsUpdateAfterSort() {
             const row = document.createElement('tr');
             const th = document.createElement('th');
             th.setAttribute('colspan', '4');
+            th.setAttribute('role', 'heading');
+            th.setAttribute('aria-level', '4');
             th.style.backgroundColor = '#EEE';
             th.textContent = record.zone;
             row.appendChild(th);

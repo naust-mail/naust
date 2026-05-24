@@ -27,6 +27,7 @@ export function show_tls(keepProvisioningShown = false) {
 
             // Create domain column
             const th = document.createElement('th');
+            th.scope = 'row';
             th.className = 'domain';
             const domainLink = document.createElement('a');
             domainLink.href = `https://${domain.domain}`;

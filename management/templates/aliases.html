@@ -50,22 +50,24 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="addaliasSenders" class="form-label">Permitted Senders</label>
-            <div class="radio">
-                <label>
-                    <input id="addaliasForwardsToNotAdvanced" name="addaliasForwardsToDivToggle" type="radio" checked>
-                    Any mail user listed in the Forwards To box can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
-                </label>
-            </div>
-            <div class="radio">
-                <label>
-                    <input id="addaliasForwardsToAdvanced" name="addaliasForwardsToDivToggle" type="radio">
-                    I&rsquo;ll enter the mail users that can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
-                </label>
-            </div>
-            <div id="addaliasForwardsToDiv" style="display: none">
-                <textarea class="form-control" rows="3" id="addaliasSenders" placeholder="one user per line or separated by commas"></textarea>
-            </div>
+            <fieldset>
+                <legend><label for="addaliasSenders" class="form-label">Permitted Senders</label></legend>
+                <div class="radio">
+                    <label for="addaliasForwardsToNotAdvanced">
+                        <input id="addaliasForwardsToNotAdvanced" name="addaliasForwardsToDivToggle" type="radio" checked>
+                        Any mail user listed in the Forwards To box can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                    </label>
+                </div>
+                <div class="radio">
+                    <label for="addaliasForwardsToAdvanced">
+                        <input id="addaliasForwardsToAdvanced" name="addaliasForwardsToDivToggle" type="radio">
+                        I&rsquo;ll enter the mail users that can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                    </label>
+                </div>
+                <div id="addaliasForwardsToDiv" style="display: none">
+                    <textarea class="form-control" rows="3" id="addaliasSenders" placeholder="one user per line or separated by commas"></textarea>
+                </div>
+            </fieldset>
         </div>
         <div class="form-group">
             <button id="add-alias-button" type="submit" class="btn btn-primary">Add Alias</button>
@@ -77,10 +79,10 @@
     <table id="alias_table" class="table">
         <thead>
             <tr>
-                <th></th>
-                <th>Alias<br></th>
-                <th>Forwards To</th>
-                <th>Permitted Senders</th>
+                <th scope="col" aria-label="Actions"></th>
+                <th scope="col">Alias<br></th>
+                <th scope="col">Forwards To</th>
+                <th scope="col">Permitted Senders</th>
             </tr>
         </thead>
         <tbody>
@@ -124,11 +126,11 @@
     <h4 class="mb-0">Verbs</h4>
 
     <table class="table mt-1">
-        <thead>
-            <th>Verb</th>
-            <th>Action</th>
-            <th></th>
-        </thead>
+        <thead><tr>
+            <th scope="col">Verb</th>
+            <th scope="col">Action</th>
+            <th scope="col"></th>
+        </tr></thead>
         <tr>
             <td>GET</td>
             <td><i>(none)</i></td>

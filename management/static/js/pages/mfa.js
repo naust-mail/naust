@@ -32,6 +32,7 @@ function updateSetupDisabled(evt) {
 function renderTotpSetup(provisionedTotp) {
     const img = document.createElement('img');
     img.src = "data:image/png;base64," + provisionedTotp.qr_code_base64;
+    img.alt = "QR code, scan this in your authenticator app";
 
     const code = document.createElement('div');
     code.textContent = `Secret: ${provisionedTotp.secret}`;

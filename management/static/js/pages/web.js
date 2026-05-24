@@ -15,6 +15,7 @@ function showWeb() {
 
             // Domain column
             const domainTh = document.createElement('th');
+            domainTh.scope = 'row';
             domainTh.className = 'domain';
             const domainLink = document.createElement('a');
             domainLink.href = `https://${domain.domain}`;

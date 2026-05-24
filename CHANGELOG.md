@@ -1,6 +1,29 @@
 CHANGELOG
 =========
 
+Version 76 (May 24, 2026)
+-------------------------
+
+* Fixed Nextcloud broken after PHP update by updating Nextcloud settings.
+* Fixed invalid HTML in the control panel broken by the last version.
+
+Version 75 (April 20, 2026)
+---------------------------
+
+* Updated Roundcube to 1.6.15, fixing a security vulnerability.
+* Fixed error when configuring S3 backups on empty buckets.
+* Fixed issue in management daemon name resolution.
+* Fixed accessibility issues in the control panel.
+
+Version 74 (January 4, 2026)
+----------------------------
+
+* Updated Roundcube to 1.6.12, fixing a security vulnerability.
+* Updated zpush to version 2.7.6.
+* Fixed fail2ban filter for Nextcloud.
+* Fixed Thunderbird auto configuration.
+* Updated links in the control panel.
+
 Version 73 (July 11, 2025)
 --------------------------
 

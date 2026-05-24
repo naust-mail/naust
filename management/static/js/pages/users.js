@@ -12,6 +12,8 @@ function showUsers() {
             const hdr = document.createElement('tr');
             const th = document.createElement('th');
             th.setAttribute('colspan', '6');
+            th.setAttribute('role', 'heading');
+            th.setAttribute('aria-level', '4');
             th.style.backgroundColor = '#EEE';
             th.textContent = domainEntry.domain;
             hdr.appendChild(th);
