@@ -77,7 +77,7 @@ export const showModalError = (title, message, callback = undefined) => {
   };
 
   dialog.addEventListener('close', handleClose);
-  dialog.show();
+  dialog.showModal();
 
   return false;
 };
@@ -136,7 +136,7 @@ export const showModalConfirm = (title, question, verb, yes_callback, cancel_cal
   document.getElementById('modal-confirm-btn').addEventListener('click', handleConfirm);
   document.getElementById('modal-cancel-btn').addEventListener('click', handleCancel);
 
-  dialog.show();
+  dialog.showModal();
 
   return false;
 };

@@ -230,7 +230,7 @@ function enable_privacy(status) {
 function confirm_reboot() {
     showModalConfirm(
         "Reboot",
-        document.createElement('p').appendChild(document.createTextNode(`This will reboot your Mail-in-a-Box {{hostname}}.`)),
+        document.createElement('p').appendChild(document.createTextNode(`This will reboot your Mail-in-a-Box instance.`)),
         "Reboot Now",
         () => {
             api("/system/reboot", "POST", {}, (r) => {
@@ -242,21 +242,23 @@ function confirm_reboot() {
     );
 }
 
+const handlePrivacyToggle = (e) => {
+    e.preventDefault();
+    enable_privacy(!current_privacy_setting);
+};
+
 function setupEventListeners() {
     // Reboot button
     const rebootBtn = document.getElementById('reboot-box-btn');
-    if (rebootBtn && !rebootBtn.dataset.listenerAdded) {
+    if (rebootBtn) {
+        rebootBtn.removeEventListener('click', confirm_reboot);
         rebootBtn.addEventListener('click', confirm_reboot);
-        rebootBtn.dataset.listenerAdded = 'true';
     }
 
     // Privacy toggle
     const privacyToggle = document.getElementById('privacy-toggle');
-    if (privacyToggle && !privacyToggle.dataset.listenerAdded) {
-        privacyToggle.addEventListener('click', (e) => {
-            e.preventDefault();
-            enable_privacy(!current_privacy_setting);
-        });
-        privacyToggle.dataset.listenerAdded = 'true';
+    if (privacyToggle) {
+        privacyToggle.removeEventListener('click', handlePrivacyToggle);
+        privacyToggle.addEventListener('click', handlePrivacyToggle);
     }
 }

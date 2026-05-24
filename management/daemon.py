@@ -51,9 +51,17 @@ app = Flask(
     static_folder=static_dir
 )
 
-# app.config['TEMPLATES_AUTO_RELOAD'] = True
-# app.debug = True
-# app.jinja_env.auto_reload = True
+
+# Super simple CSRF protection: require a custom header on state-changing requests.
+# In the future, it may be worth implementing proper CSRF tokens, or at least checking the
+# Origin/Referer headers, as well as Sec-Fetch-Site (however these are only sent by modern browsers).
+def validate_csrf():
+	if request.method in ('POST', 'PUT', 'DELETE'):
+		xhr_header = request.headers.get('X-Requested-With')
+		if xhr_header != 'XMLHttpRequest':
+			return False
+	return True
+
 
 # Decorator to protect views that require a user with 'admin' privileges.
 def authorized_personnel_only(viewfunc):
@@ -77,13 +85,16 @@ def authorized_personnel_only(viewfunc):
 
 		# Authorized to access an API view?
 		if "admin" in privs:
-			# Store the email address of the logged in user so it can be accessed
-			# from the API methods that affect the calling user.
-			request.user_email = email
-			request.user_privs = privs
+			if not validate_csrf():
+				error = "Potential CSRF attack detected."
+			else:
+				# Store the email address of the logged in user so it can be accessed
+				# from the API methods that affect the calling user.
+				request.user_email = email
+				request.user_privs = privs
 
-			# Call view func.
-			return viewfunc(*args, **kwargs)
+				# Call view func.
+				return viewfunc(*args, **kwargs)
 
 		if not error:
 			error = "You are not an administrator."

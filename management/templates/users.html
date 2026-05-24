@@ -5,29 +5,19 @@
 
     <style>
         #user_table tr.account_inactive td.address {
-            color: #888;
+            color: var(--text-muted);
             text-decoration: line-through;
         }
 
         #user_table .actions {
-            margin-top: .33em;
-            font-size: 95%;
+            margin-top: 6px;
+            font-size: 14px;
         }
 
-        #user_table .account_inactive .if_active {
-            display: none;
-        }
-
-        #user_table .account_active .if_inactive {
-            display: none;
-        }
-
+        #user_table .account_inactive .if_active,
+        #user_table .account_active .if_inactive,
         #user_table .account_active.if_inactive {
             display: none;
-        }
-
-        .row-center {
-            text-align: center;
         }
     </style>
 
@@ -52,11 +42,11 @@
         </div>
         <div class="form-group">
             <label class="sr-only" for="adduserQuota">Quota</label>
-            <input type="text" class="form-control" id="adduserQuota" placeholder="Quota" style="width:5em;" value="0">
+            <input type="text" class="form-control" id="adduserQuota" placeholder="Quota" value="0">
         </div>
         <button type="submit" class="btn btn-primary">Add User</button>
     </form>
-    <ul style="margin-top: 1em; padding-left: 1.5em; font-size: 90%;">
+    <ul class="mt-2 text-small">
         <li>Passwords must be at least eight characters consisting of English letters and numbers only. For best
             results, <a href="#" id="generate-random-password">generate a random password</a>.
         </li>
@@ -71,7 +61,7 @@
     </ul>
 
     <h3>Existing mail users</h3>
-    <table id="user_table" class="table" style="width: auto">
+    <table id="user_table" class="table w-auto">
         <thead>
             <tr>
                 <th width="35%">Email Address</th>
@@ -122,7 +112,7 @@
             </tr>
             <tr id="user-extra-template" class="if_inactive">
                 <td colspan="3" style="border: 0; padding-top: 0">
-                    <div class="restore_info" style="color: #888; font-size: 90%">To restore account, create a new
+                    <div class="restore_info text-muted text-small">To restore account, create a new
                         account with this email address. Or to permanently delete the mailbox, delete the directory
                         <tt></tt> on the machine.
                     </div>
@@ -145,9 +135,9 @@
 
     <p>The email and password given to the <code>--user</code> option must be an administrative user on this system.</p>
 
-    <h4 style="margin-bottom: 0">Verbs</h4>
+    <h4 class="mb-0">Verbs</h4>
 
-    <table class="table" style="margin-top: .5em">
+    <table class="table mt-1">
         <thead>
             <th>Verb</th>
             <th>Action</th>

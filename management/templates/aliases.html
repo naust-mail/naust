@@ -21,74 +21,60 @@
     <p>To use an alias or any address besides your own login username in outbound mail, the sending user must be
         included as a permitted sender for the alias.</p>
 
-    <form id="addalias-form" class="form-horizontal" role="form">
+    <form id="addalias-form" role="form">
         <div class="form-group">
-            <div class="col-sm-offset-1 col-sm-11">
-                <div id="alias_type_buttons" class="btn-group btn-group-xs">
-                    <button type="button" class="btn btn-default" data-mode="regular">Regular</button>
-                    <button type="button" class="btn btn-default" data-mode="catchall">Catch-All</button>
-                    <button type="button" class="btn btn-default" data-mode="domainalias">Domain Alias</button>
-                </div>
-                <div id="alias_mode_info" class="text-info small" style="display: none; margin: .5em 0 0 0;">
-                    <span class="catchall hidden">A catch-all alias captures all otherwise unmatched email to a domain.</span>
-                    <span class="domainalias hidden">A domain alias forwards all otherwise unmatched email from one domain to another domain, preserving the part before the @-sign.</span>
-                </div>
+            <div id="alias_type_buttons" class="btn-group btn-group-xs">
+                <button type="button" class="btn btn-default" data-mode="regular">Regular</button>
+                <button type="button" class="btn btn-default" data-mode="catchall">Catch-All</button>
+                <button type="button" class="btn btn-default" data-mode="domainalias">Domain Alias</button>
+            </div>
+            <div id="alias_mode_info" class="text-info help-text" style="display: none">
+                <span class="catchall hidden">A catch-all alias captures all otherwise unmatched email to a domain.</span>
+                <span class="domainalias hidden">A domain alias forwards all otherwise unmatched email from one domain to another domain, preserving the part before the @-sign.</span>
             </div>
         </div>
         <div class="form-group">
-            <label for="addaliasAddress" class="col-sm-1 control-label">Alias</label>
-            <div class="col-sm-10">
-                <input type="email" class="form-control" id="addaliasAddress">
-                <div style="margin-top: 3px; padding-left: 3px; font-size: 90%" class="text-muted">
-                    <span class="catchall domainalias">Enter just the part of an email address starting with the @-sign.</span>
-                    You may use international (non-ASCII) characters for the domain part of the email address only.
-                </div>
+            <label for="addaliasAddress" class="form-label">Alias</label>
+            <input type="email" class="form-control" id="addaliasAddress">
+            <div class="help-text text-muted">
+                <span class="catchall domainalias">Enter just the part of an email address starting with the @-sign.</span>
+                You may use international (non-ASCII) characters for the domain part of the email address only.
             </div>
         </div>
         <div class="form-group">
-            <label for="addaliasForwardsTo" class="col-sm-1 control-label">Forwards To</label>
-            <div class="col-sm-10">
-                <textarea class="form-control" rows="3" id="addaliasForwardsTo"></textarea>
-                <div style="margin-top: 3px; padding-left: 3px; font-size: 90%">
-                    <span class="domainalias text-muted">Enter just the part of an email address starting with the @-sign.</span>
-                    <span class="text-danger">Only forward mail to addresses handled by this Mail-in-a-Box, since mail forwarded by aliases to other domains may be rejected or filtered by the receiver. To forward mail to other domains, create a mail user and then log into webmail for the user and create a filter rule to forward mail.</span>
-                </div>
+            <label for="addaliasForwardsTo" class="form-label">Forwards To</label>
+            <textarea class="form-control" rows="3" id="addaliasForwardsTo"></textarea>
+            <div class="help-text">
+                <span class="domainalias text-muted">Enter just the part of an email address starting with the @-sign.</span>
+                <span class="text-danger">Only forward mail to addresses handled by this Mail-in-a-Box, since mail forwarded by aliases to other domains may be rejected or filtered by the receiver. To forward mail to other domains, create a mail user and then log into webmail for the user and create a filter rule to forward mail.</span>
             </div>
         </div>
         <div class="form-group">
-            <label for="addaliasSenders" class="col-sm-1 control-label">Permitted Senders</label>
-            <div class="col-sm-10">
-                <div class="radio">
-                    <label>
-                        <input id="addaliasForwardsToNotAdvanced" name="addaliasForwardsToDivToggle" type="radio"
-                               checked>
-                        Any mail user listed in the Forwards To box can send mail claiming to be from <span
-                            class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
-                    </label>
-                </div>
-                <div class="radio">
-                    <label>
-                        <input id="addaliasForwardsToAdvanced" name="addaliasForwardsToDivToggle" type="radio">
-                        I&rsquo;ll enter the mail users that can send mail claiming to be from <span
-                            class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
-                    </label>
-                </div>
-                <div id="addaliasForwardsToDiv" style="margin-top: .5em; margin-left: 1.4em; display: none;">
-                    <textarea class="form-control" rows="3" id="addaliasSenders"
-                              placeholder="one user per line or separated by commas"></textarea>
-                </div>
+            <label for="addaliasSenders" class="form-label">Permitted Senders</label>
+            <div class="radio">
+                <label>
+                    <input id="addaliasForwardsToNotAdvanced" name="addaliasForwardsToDivToggle" type="radio" checked>
+                    Any mail user listed in the Forwards To box can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                </label>
+            </div>
+            <div class="radio">
+                <label>
+                    <input id="addaliasForwardsToAdvanced" name="addaliasForwardsToDivToggle" type="radio">
+                    I&rsquo;ll enter the mail users that can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                </label>
+            </div>
+            <div id="addaliasForwardsToDiv" style="display: none">
+                <textarea class="form-control" rows="3" id="addaliasSenders" placeholder="one user per line or separated by commas"></textarea>
             </div>
         </div>
         <div class="form-group">
-            <div class="col-sm-offset-1 col-sm-11">
-                <button id="add-alias-button" type="submit" class="btn btn-primary">Add Alias</button>
-                <button id="alias-cancel" type="button" class="btn btn-default hidden">Cancel</button>
-            </div>
+            <button id="add-alias-button" type="submit" class="btn btn-primary">Add Alias</button>
+            <button id="alias-cancel" type="button" class="btn btn-default hidden">Cancel</button>
         </div>
     </form>
 
     <h3>Existing mail aliases</h3>
-    <table id="alias_table" class="table" style="width: auto">
+    <table id="alias_table" class="table">
         <thead>
             <tr>
                 <th></th>
@@ -101,8 +87,7 @@
         </tbody>
     </table>
 
-    <p style="margin-top: 1.5em"><small>hostmaster@, postmaster@, admin@ and abuse@ email addresses are required on some
-        domains.</small></p>
+    <p class="help-text">hostmaster@, postmaster@, admin@ and abuse@ email addresses are required on some domains.</p>
 
     <div style="display: none">
         <table>
@@ -136,9 +121,9 @@
 
     <p>The email and password given to the <code>--user</code> option must be an administrative user on this system.</p>
 
-    <h4 style="margin-bottom: 0">Verbs</h4>
+    <h4 class="mb-0">Verbs</h4>
 
-    <table class="table" style="margin-top: .5em">
+    <table class="table mt-1">
         <thead>
             <th>Verb</th>
             <th>Action</th>

@@ -83,6 +83,11 @@ function doDownloadZonefile() {
     });
 }
 
+const handleDownloadZonefileSubmit = (e) => {
+    e.preventDefault();
+    doDownloadZonefile();
+};
+
 export function initExternalDns() {
     // Load external DNS records
     showExternalDns();
@@ -90,9 +95,7 @@ export function initExternalDns() {
     // Form submission for downloading zonefile
     const downloadForm = document.getElementById('download-zonefile-form');
     if (downloadForm) {
-        downloadForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            doDownloadZonefile();
-        });
+        downloadForm.removeEventListener('submit', handleDownloadZonefileSubmit);
+        downloadForm.addEventListener('submit', handleDownloadZonefileSubmit);
     }
 }

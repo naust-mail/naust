@@ -86,6 +86,14 @@ function showChangeWebRoot(elem) {
     );
 }
 
+const handleWebTableClick = (e) => {
+    const action = e.target.dataset.action;
+    if (action === 'change-root') {
+        e.preventDefault();
+        showChangeWebRoot(e.target);
+    }
+};
+
 export function initWeb() {
     // Load web domains
     showWeb();
@@ -93,12 +101,7 @@ export function initWeb() {
     // Delegate click events for change buttons
     const table = document.getElementById('web_domains_existing');
     if (table) {
-        table.addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
-            if (action === 'change-root') {
-                e.preventDefault();
-                showChangeWebRoot(e.target);
-            }
-        });
+        table.removeEventListener('click', handleWebTableClick);
+        table.addEventListener('click', handleWebTableClick);
     }
 }

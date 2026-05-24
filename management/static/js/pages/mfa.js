@@ -39,7 +39,10 @@ function renderTotpSetup(provisionedTotp) {
     el.totpQr.appendChild(img);
     el.totpQr.appendChild(code);
 
+    el.totpSetupToken.removeEventListener('input', updateSetupDisabled);
     el.totpSetupToken.addEventListener('input', updateSetupDisabled);
+
+    el.totpSetupForm.removeEventListener('submit', doEnableTotp);
     el.totpSetupForm.addEventListener('submit', doEnableTotp);
 
     el.totpSetupSecret.setAttribute('value', provisionedTotp.secret);
@@ -48,7 +51,9 @@ function renderTotpSetup(provisionedTotp) {
 }
 
 function renderDisable(mfa) {
+    el.disableForm.removeEventListener('submit', doDisable);
     el.disableForm.addEventListener('submit', doDisable);
+
     el.wrapper.classList.add('enabled');
 
     if (mfa.label) {

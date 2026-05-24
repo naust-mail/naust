@@ -14,28 +14,24 @@
         <div id="ssl_provision">
             <h3>Provision certificates</h3>
 
-            <div id="ssl_provision_p" style="display: none; margin-top: 1.5em">
-                <button id="provision-tls-btn" class="btn btn-primary"
-                        style="float: left; margin: 0 1.5em 1em 0;">Provision
-                </button>
+            <div id="ssl_provision_p" style="display: none">
+                <button id="provision-tls-btn" class="btn btn-primary">Provision</button>
                 <p>A TLS certificate can be automatically provisioned from <a href="https://letsencrypt.org/"
                                                                               target="_blank">Let&rsquo;s Encrypt</a>, a
                     free TLS certificate provider, for:<br>
                     <span class="text-primary"></span></p>
             </div>
 
-            <div class="clearfix"></div>
-
             <div id="ssl_provision_result"></div>
         </div>
 
         <h3>Certificate status</h3>
 
-        <p style="margin-top: 1.5em">Certificates expire after a period of time. All certificates will be automatically
+        <p>Certificates expire after a period of time. All certificates will be automatically
             renewed through <a href="https://letsencrypt.org/" target="_blank">Let&rsquo;s Encrypt</a> 14 days prior to
             expiration.</p>
 
-        <table id="ssl_domains" class="table" style="margin-bottom: 2em; width: auto; display: none">
+        <table id="ssl_domains" class="table" style="display: none">
             <thead>
                 <tr>
                     <th>Domain</th>
@@ -55,7 +51,7 @@
 
         <p>Which domain are you getting a certificate for?</p>
 
-        <p><select id="ssldomain" class="form-control" style="width: auto"></select></p>
+        <p><select id="ssldomain" class="form-control"></select></p>
 
         <p>(A multi-domain or wildcard certificate will be automatically applied to any domains it is valid for besides
             the one you choose above.)</p>
@@ -63,7 +59,7 @@
         <p>What country are you in? This is required by some TLS certificate providers. You may leave this blank if you
             know your TLS certificate provider doesn't require it.</p>
 
-        <p><select id="sslcc" class="form-control" style="width: auto">
+        <p><select id="sslcc" class="form-control">
             <option value="">(Select)</option>
             {% for code, name in csr_country_codes %}
             <option value="{{code}}">{{name}}</option>
@@ -81,13 +77,13 @@
             <p>The certificate provider will then provide you with a TLS/SSL certificate. They may also provide you with
                 an intermediate chain. Paste each separately into the boxes below:</p>
 
-            <p style="margin-bottom: .5em">TLS/SSL certificate:</p>
-            <p><textarea id="ssl_paste_cert" class="form-control" style="max-width: 40em; height: 8em"
+            <p>TLS/SSL certificate:</p>
+            <p><textarea id="ssl_paste_cert" class="form-control"
                          placeholder="-----BEGIN CERTIFICATE-----&#xA;stuff here&#xA;-----END CERTIFICATE-----"></textarea>
             </p>
 
-            <p style="margin-bottom: .5em">TLS/SSL intermediate chain (if provided):</p>
-            <p><textarea id="ssl_paste_chain" class="form-control" style="max-width: 40em; height: 8em"
+            <p>TLS/SSL intermediate chain (if provided):</p>
+            <p><textarea id="ssl_paste_chain" class="form-control"
                          placeholder="-----BEGIN CERTIFICATE-----&#xA;stuff here&#xA;-----END CERTIFICATE-----&#xA;-----BEGIN CERTIFICATE-----&#xA;more stuff here&#xA;-----END CERTIFICATE-----"></textarea>
             </p>
 

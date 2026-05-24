@@ -1,0 +1,2983 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{{hostname}} - Control Panel</title>
+        <meta name="robots" content="noindex, nofollow">
+
+        <!-- Self-hosted fonts for better security and privacy -->
+        <link href="/admin/static/css/fonts.css" rel="stylesheet">
+
+        <style>
+            :root {
+                /* Modern color palette - Dark sophisticated theme */
+                --primary: #6366f1;
+                --primary-light: #818cf8;
+                --primary-dark: #4f46e5;
+                --primary-glow: rgba(99, 102, 241, 0.25);
+
+                --accent: #f59e0b;
+                --accent-light: #fbbf24;
+                --accent-glow: rgba(245, 158, 11, 0.2);
+
+                --success: #10b981;
+                --warning: #f59e0b;
+                --danger: #ef4444;
+                --info: #06b6d4;
+
+                --bg-base: #0a0a0b;
+                --bg-surface: #111113;
+                --bg-elevated: #1a1a1d;
+                --bg-hover: #222226;
+                --bg-active: #2a2a2f;
+
+                --text-primary: #f1f1f3;
+                --text-secondary: #a8a8b0;
+                --text-muted: #6e6e78;
+
+                --border: rgba(255, 255, 255, 0.08);
+                --border-strong: rgba(255, 255, 255, 0.12);
+
+                --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+                --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+                --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
+                --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
+
+                --radius-sm: 6px;
+                --radius-md: 10px;
+                --radius-lg: 16px;
+                --radius-xl: 24px;
+
+                --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            /* Light theme (optional) */
+            @media (prefers-color-scheme: light) {
+                :root {
+                    --bg-base: #fafafa;
+                    --bg-surface: #ffffff;
+                    --bg-elevated: #ffffff;
+                    --bg-hover: #f5f5f5;
+                    --bg-active: #ebebeb;
+
+                    --text-primary: #0a0a0b;
+                    --text-secondary: #4a4a50;
+                    --text-muted: #9a9aa0;
+
+                    --border: rgba(0, 0, 0, 0.08);
+                    --border-strong: rgba(0, 0, 0, 0.12);
+
+                    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+                    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.12);
+                    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.16);
+                }
+            }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+                font-size: 15px;
+                line-height: 1.6;
+                color: var(--text-primary);
+                background: var(--bg-base);
+                min-height: 100vh;
+                position: relative;
+                overflow-x: hidden;
+            }
+
+            /* Background effects */
+            body::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background:
+                        radial-gradient(circle at 20% 50%, var(--primary-glow), transparent 50%),
+                        radial-gradient(circle at 80% 80%, var(--accent-glow), transparent 50%),
+                        radial-gradient(circle at 40% 20%, rgba(16, 185, 129, 0.1), transparent 50%);
+                pointer-events: none;
+                z-index: 0;
+            }
+
+            /* Subtle grid pattern */
+            body::after {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-image:
+                        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+                background-size: 50px 50px;
+                pointer-events: none;
+                z-index: 0;
+            }
+
+            /* Navigation Bar - Sleek and Modern */
+            .navbar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: rgba(17, 17, 19, 0.8);
+                backdrop-filter: blur(20px) saturate(180%);
+                -webkit-backdrop-filter: blur(20px) saturate(180%);
+                border-bottom: 1px solid var(--border);
+                z-index: 1000;
+                transition: var(--transition);
+            }
+
+            .navbar-container {
+                max-width: 1400px;
+                margin: 0 auto;
+                padding: 0 24px;
+                height: 72px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+
+            .navbar-brand {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                text-decoration: none;
+                transition: var(--transition);
+            }
+
+            .navbar-logo {
+                width: 40px;
+                height: 40px;
+                background: linear-gradient(135deg, var(--primary), var(--primary-light));
+                border-radius: var(--radius-md);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 700;
+                font-size: 18px;
+                color: white;
+                box-shadow: var(--shadow-sm);
+                position: relative;
+                overflow: hidden;
+            }
+
+            .navbar-logo::after {
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -50%;
+                width: 200%;
+                height: 200%;
+                background: linear-gradient(45deg, transparent, rgba(255,255,255,0.3), transparent);
+                transform: rotate(45deg);
+                transition: 0.5s;
+                opacity: 0;
+            }
+
+            .navbar-brand:hover .navbar-logo::after {
+                animation: shimmer 0.5s ease;
+            }
+
+            @keyframes shimmer {
+                0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); opacity: 0; }
+                50% { opacity: 1; }
+                100% { transform: translateX(100%) translateY(100%) rotate(45deg); opacity: 0; }
+            }
+
+            .navbar-title {
+                font-size: 20px;
+                font-weight: 600;
+                color: var(--text-primary);
+                letter-spacing: -0.5px;
+            }
+
+            .navbar-nav {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                list-style: none;
+            }
+
+            .nav-item {
+                position: relative;
+            }
+
+            .nav-link {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 10px 16px;
+                border-radius: var(--radius-md);
+                color: var(--text-secondary);
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 14px;
+                transition: var(--transition);
+                position: relative;
+                overflow: hidden;
+            }
+
+            .nav-link:hover {
+                color: var(--text-primary);
+                background: var(--bg-hover);
+            }
+
+            .nav-link.active {
+                color: var(--primary-light);
+                background: var(--primary-glow);
+            }
+
+            /* Dropdown Menu - Refined */
+            .dropdown {
+                position: relative;
+            }
+
+            .dropdown-toggle::after {
+                content: '▾';
+                font-size: 12px;
+                margin-left: 4px;
+                transition: transform 0.3s;
+            }
+
+            .dropdown:hover .dropdown-toggle::after {
+                transform: rotate(180deg);
+            }
+
+            .dropdown-menu {
+                position: absolute;
+                top: calc(100% + 8px);
+                left: 0;
+                background: var(--bg-elevated);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-lg);
+                min-width: 220px;
+                padding: 8px;
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(-10px) scale(0.95);
+                transition: var(--transition);
+                box-shadow: var(--shadow-lg);
+                backdrop-filter: blur(10px);
+            }
+
+            .dropdown:hover .dropdown-menu {
+                opacity: 1;
+                visibility: visible;
+                transform: translateY(0) scale(1);
+            }
+
+            .dropdown-item {
+                display: block;
+                padding: 10px 16px;
+                border-radius: var(--radius-sm);
+                color: var(--text-secondary);
+                text-decoration: none;
+                font-size: 14px;
+                transition: var(--transition);
+                position: relative;
+            }
+
+            .dropdown-item:hover {
+                color: var(--text-primary);
+                background: var(--bg-hover);
+                transform: translateX(4px);
+            }
+
+            .dropdown-divider {
+                height: 1px;
+                background: var(--border);
+                margin: 8px 0;
+            }
+
+            .dropdown-header {
+                padding: 8px 16px 4px;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                color: var(--text-muted);
+            }
+
+            /* Main Content */
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+                padding: 100px 24px 40px;
+                position: relative;
+                z-index: 1;
+            }
+
+            /* Panel Styling */
+            .admin_panel {
+                display: none;
+                animation: fadeIn 0.5s ease;
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .panel {
+                background: var(--bg-surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-xl);
+                padding: 32px;
+                margin-bottom: 24px;
+                position: relative;
+                overflow: hidden;
+                box-shadow: var(--shadow-md);
+            }
+
+            .panel::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background: linear-gradient(90deg, var(--primary), var(--accent));
+                opacity: 0;
+                transition: opacity 0.3s;
+            }
+
+            .panel:hover::before {
+                opacity: 1;
+            }
+
+            .panel-heading {
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .panel-title {
+                font-size: 24px;
+                font-weight: 600;
+                color: var(--text-primary);
+                letter-spacing: -0.5px;
+            }
+
+            .panel-subtitle {
+                font-size: 14px;
+                color: var(--text-secondary);
+                margin-top: 4px;
+            }
+
+            /* Typography */
+            h1, h2, h3, h4, h5, h6 {
+                font-weight: 600;
+                letter-spacing: -0.5px;
+                color: var(--text-primary);
+                margin-bottom: 16px;
+            }
+
+            h2 {
+                font-size: 28px;
+                margin-top: 32px;
+                margin-bottom: 20px;
+            }
+
+            h3 {
+                font-size: 20px;
+                margin-top: 24px;
+                margin-bottom: 16px;
+            }
+
+            p {
+                color: var(--text-secondary);
+                line-height: 1.7;
+            }
+
+            ol, ul {
+                margin-left: 20px;
+                margin-bottom: 16px;
+                color: var(--text-secondary);
+            }
+
+            /* Buttons - Modern and Refined */
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                padding: 12px 24px;
+                border: none;
+                border-radius: var(--radius-md);
+                font-size: 14px;
+                font-weight: 600;
+                text-decoration: none;
+                cursor: pointer;
+                transition: var(--transition);
+                position: relative;
+                overflow: hidden;
+                white-space: nowrap;
+            }
+
+            .btn::before {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 0;
+                height: 0;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.2);
+                transform: translate(-50%, -50%);
+                transition: width 0.6s, height 0.6s;
+            }
+
+            .btn:active::before {
+                width: 300px;
+                height: 300px;
+            }
+
+            .btn-primary {
+                background: linear-gradient(135deg, var(--primary), var(--primary-light));
+                color: white;
+                box-shadow: 0 4px 12px var(--primary-glow);
+            }
+
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px var(--primary-glow);
+            }
+
+            .btn-secondary, .btn-default {
+                background: var(--bg-elevated);
+                color: var(--text-primary);
+                border: 1px solid var(--border-strong);
+            }
+
+            .btn-secondary:hover, .btn-default:hover {
+                background: var(--bg-hover);
+                border-color: var(--primary);
+                color: var(--primary);
+            }
+
+            .btn-danger {
+                background: linear-gradient(135deg, var(--danger), #dc2626);
+                color: white;
+            }
+
+            .btn-danger:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+            }
+
+            .btn-sm {
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+
+            /* Forms - Clean and Modern */
+            .form-group {
+                margin-bottom: 24px;
+            }
+
+            .form-label {
+                display: block;
+                margin-bottom: 8px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .form-control {
+                width: 100%;
+                padding: 12px 16px;
+                background: var(--bg-elevated);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-md);
+                color: var(--text-primary);
+                font-size: 15px;
+                transition: var(--transition);
+            }
+
+            .form-control:focus {
+                outline: none;
+                border-color: var(--primary);
+                background: var(--bg-hover);
+                box-shadow: 0 0 0 3px var(--primary-glow);
+            }
+
+            .form-control::placeholder {
+                color: var(--text-muted);
+            }
+
+            select.form-control {
+                cursor: pointer;
+            }
+
+            textarea.form-control {
+                resize: vertical;
+                min-height: 120px;
+                font-family: 'JetBrains Mono', monospace;
+            }
+
+            /* Tables - Data Display */
+            .table-container {
+                overflow-x: auto;
+                margin: 24px 0;
+                border: 1px solid var(--border);
+                border-radius: var(--radius-lg);
+                background: var(--bg-elevated);
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            th {
+                text-align: left;
+                padding: 16px;
+                font-size: 13px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: var(--text-muted);
+                background: var(--bg-surface);
+                border-bottom: 1px solid var(--border);
+            }
+
+            td {
+                padding: 16px;
+                font-size: 14px;
+                color: var(--text-secondary);
+                border-bottom: 1px solid var(--border);
+            }
+
+            tr:last-child td {
+                border-bottom: none;
+            }
+
+            tr:hover {
+                background: var(--bg-hover);
+            }
+
+            /* Status Indicators */
+            .status-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 12px;
+                border-radius: 100px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .status-badge::before {
+                content: '';
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                animation: pulse 2s infinite;
+            }
+
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+
+            .status-success {
+                background: rgba(16, 185, 129, 0.1);
+                color: var(--success);
+            }
+
+            .status-success::before {
+                background: var(--success);
+            }
+
+            .status-warning {
+                background: rgba(245, 158, 11, 0.1);
+                color: var(--warning);
+            }
+
+            .status-warning::before {
+                background: var(--warning);
+            }
+
+            .status-danger {
+                background: rgba(239, 68, 68, 0.1);
+                color: var(--danger);
+            }
+
+            .status-danger::before {
+                background: var(--danger);
+            }
+
+            /* Cards Grid */
+            .cards-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                gap: 24px;
+                margin: 24px 0;
+            }
+
+            /* Cards Grid Horizontal */
+            .cards-grid-horizontal {
+                display: flex;
+                gap: 24px;
+                overflow-x: auto;
+                padding-bottom: 8px;
+                flex-direction: column;
+            }
+
+            .card {
+                background: var(--bg-elevated);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-lg);
+                padding: 24px;
+                transition: var(--transition);
+                position: relative;
+                overflow: hidden;
+            }
+
+            .card:hover {
+                box-shadow: var(--shadow-lg);
+                border-color: var(--primary);
+            }
+
+            .card-icon {
+                width: 48px;
+                height: 48px;
+                background: linear-gradient(135deg, var(--primary), var(--primary-light));
+                border-radius: var(--radius-md);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 16px;
+                font-size: 24px;
+                color: white;
+            }
+
+            .card-title {
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--text-primary);
+                margin-bottom: 8px;
+            }
+
+            .card-description {
+                font-size: 14px;
+                color: var(--text-secondary);
+                line-height: 1.6;
+            }
+
+            /* Code Blocks */
+            .code-block {
+                background: var(--bg-base);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-md);
+                padding: 16px;
+                overflow-x: auto;
+                margin: 16px 0;
+            }
+
+            code {
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 13px;
+                color: var(--primary-light);
+            }
+
+            pre {
+                margin: 0;
+                color: var(--text-secondary);
+            }
+
+            /* Alerts */
+            .alert {
+                padding: 16px 20px;
+                border-radius: var(--radius-md);
+                margin: 16px 0;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 14px;
+            }
+
+            .alert-icon {
+                flex-shrink: 0;
+                width: 20px;
+                height: 20px;
+            }
+
+            .alert-info {
+                background: rgba(6, 182, 212, 0.1);
+                border: 1px solid rgba(6, 182, 212, 0.2);
+                color: var(--info);
+            }
+
+            .alert-success {
+                background: rgba(16, 185, 129, 0.1);
+                border: 1px solid rgba(16, 185, 129, 0.2);
+                color: var(--success);
+            }
+
+            .alert-warning {
+                background: rgba(245, 158, 11, 0.1);
+                border: 1px solid rgba(245, 158, 11, 0.2);
+                color: var(--warning);
+            }
+
+            .alert-danger {
+                background: rgba(239, 68, 68, 0.1);
+                border: 1px solid rgba(239, 68, 68, 0.2);
+                color: var(--danger);
+            }
+
+            /* Modal Dialog */
+            .modal {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                backdrop-filter: blur(10px);
+                z-index: 2000;
+                padding: 20px;
+                overflow-y: auto;
+            }
+
+            .modal.show {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: fadeIn 0.3s ease;
+            }
+
+            .modal-dialog {
+                background: var(--bg-elevated);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-xl);
+                max-width: 500px;
+                width: 100%;
+                box-shadow: var(--shadow-lg);
+                animation: slideUp 0.3s ease;
+            }
+
+            @keyframes slideUp {
+                from {
+                    transform: translateY(40px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateY(0);
+                    opacity: 1;
+                }
+            }
+
+            .modal-header {
+                padding: 24px;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .modal-title {
+                font-size: 20px;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .modal-body {
+                padding: 24px;
+            }
+
+            .modal-footer {
+                padding: 24px;
+                border-top: 1px solid var(--border);
+                display: flex;
+                justify-content: flex-end;
+                gap: 12px;
+            }
+
+            /* Loading Indicator */
+            .loading-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.9);
+                display: none;
+                align-items: center;
+                justify-content: center;
+                z-index: 3000;
+            }
+
+            .loading-overlay.show {
+                display: flex;
+            }
+
+            .loading-spinner {
+                width: 48px;
+                height: 48px;
+                border: 3px solid var(--border);
+                border-top-color: var(--primary);
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+
+            /* Footer */
+            footer {
+                margin-top: 80px;
+                padding: 32px 0;
+                text-align: center;
+                color: var(--text-muted);
+                font-size: 13px;
+                border-top: 1px solid var(--border);
+            }
+
+            footer a, .panel a:not(.btn) {
+                color: var(--primary);
+                text-decoration: none;
+                transition: var(--transition);
+            }
+
+            footer a:hover, .panel a:not(.btn):hover {
+                color: var(--primary-light);
+            }
+
+            /* Responsive Design */
+            @media (max-width: 768px) {
+                .navbar-container {
+                    padding: 0 16px;
+                    height: 64px;
+                }
+
+                .navbar-nav {
+                    display: none;
+                }
+
+                .container {
+                    padding: 80px 16px 32px;
+                }
+
+                .panel {
+                    padding: 24px 16px;
+                }
+
+                .cards-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            /* Emoji Styling */
+            img.emoji {
+                height: 1em;
+                width: 1em;
+                margin: 0 .05em 0 .1em;
+                vertical-align: -0.1em;
+            }
+
+            /* Utility Classes */
+            .hidden { display: none !important; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .mb-0 { margin-bottom: 0; }
+            .mt-1 { margin-top: 8px; }
+            .mt-2 { margin-top: 16px; }
+            .mt-3 { margin-top: 24px; }
+            .mt-4 { margin-top: 32px; }
+            .w-100 { width: 100%; }
+
+            /* Text Colors */
+            .text-success { color: var(--success); }
+            .text-warning { color: var(--warning); }
+            .text-danger { color: var(--danger); }
+            .text-info { color: var(--info); }
+            .text-muted { color: var(--text-muted); }
+
+            /* Background Row Highlights - Reusable */
+            .bg-row-success {
+                background: rgba(16, 185, 129, 0.08);
+            }
+
+            .bg-row-success:hover {
+                background: rgba(16, 185, 129, 0.15);
+            }
+
+            .bg-row-warning {
+                background: rgba(245, 158, 11, 0.1);
+            }
+
+            .bg-row-warning:hover {
+                background: rgba(245, 158, 11, 0.2);
+            }
+
+            .bg-row-danger {
+                background: rgba(239, 68, 68, 0.1);
+            }
+
+            .bg-row-danger:hover {
+                background: rgba(239, 68, 68, 0.2);
+            }
+
+            /* Info Card - Reusable sidebar/info component */
+            .info-card {
+                background: var(--bg-elevated);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-lg);
+                padding: 20px;
+                transition: var(--transition);
+            }
+
+            .info-card:hover {
+                border-color: var(--border-strong);
+                box-shadow: var(--shadow-sm);
+            }
+
+            .info-card-title {
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-secondary);
+                margin-bottom: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .info-card-body {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            /* Action Link - styled link that looks like an interactive element */
+            .action-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 16px;
+                background: var(--bg-hover);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-md);
+                color: var(--text-primary);
+                text-decoration: none;
+                font-size: 14px;
+                font-weight: 500;
+                transition: var(--transition);
+                cursor: pointer;
+            }
+
+            .action-link:hover {
+                background: var(--bg-active);
+                border-color: var(--primary);
+                color: var(--primary);
+            }
+
+            .info-card.warning {
+                background: rgba(245, 158, 11, 0.1);
+                border: 1px solid rgba(245, 158, 11, 0.2);
+            }
+
+            /* Status Info - for displaying status messages */
+            .status-info {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 16px;
+                border-radius: var(--radius-md);
+                font-size: 14px;
+                font-weight: 500;
+            }
+
+            .status-info.success {
+                background: rgba(16, 185, 129, 0.1);
+                border: 1px solid rgba(16, 185, 129, 0.2);
+                color: var(--success);
+            }
+
+            .status-info.success::before {
+                content: '✓';
+                font-weight: 700;
+            }
+
+            .status-info.warning {
+                background: rgba(245, 158, 11, 0.1);
+                border: 1px solid rgba(245, 158, 11, 0.2);
+                color: var(--warning);
+            }
+
+            .status-info.danger {
+                background: rgba(239, 68, 68, 0.1);
+                border: 1px solid rgba(239, 68, 68, 0.2);
+                color: var(--danger);
+            }
+
+            /* Help text - small descriptive text */
+            .help-text {
+                font-size: 13px;
+                color: var(--text-muted);
+                line-height: 1.5;
+            }
+
+            /* Print Styles */
+            @media print {
+                .navbar, footer, .btn, .dropdown-menu {
+                    display: none !important;
+                }
+
+                body {
+                    background: white;
+                    color: black;
+                }
+
+                .container {
+                    padding: 0;
+                }
+            }
+        </style>
+
+        <!--  Twemoji  -->
+        <script src="/admin/static/twemoji/twemoji.min.js" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        <!-- Modern Navigation -->
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a href="#" class="navbar-brand">
+                    <div class="navbar-logo">M</div>
+                    <div class="navbar-title">{{hostname}}</div>
+                </a>
+
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown if-logged-in-admin">
+                        <a href="#" class="nav-link dropdown-toggle">System</a>
+                        <div class="dropdown-menu">
+                            <a href="#system_status" class="dropdown-item">Status Checks</a>
+                            <a href="#tls" class="dropdown-item">TLS Certificates</a>
+                            <a href="#system_backup" class="dropdown-item">Backup Status</a>
+                            <div class="dropdown-divider"></div>
+                            <div class="dropdown-header">Advanced</div>
+                            <a href="#custom_dns" class="dropdown-item">Custom DNS</a>
+                            <a href="#external_dns" class="dropdown-item">External DNS</a>
+                            <a href="#munin" class="dropdown-item">Monitoring</a>
+                        </div>
+                    </li>
+
+                    <li class="nav-item dropdown if-logged-in-admin">
+                        <a href="#" class="nav-link dropdown-toggle">Mail & Users</a>
+                        <div class="dropdown-menu">
+                            <a href="#mail-guide" class="dropdown-item">Instructions</a>
+                            <a href="#users" class="dropdown-item">Manage Users</a>
+                            <a href="#aliases" class="dropdown-item">Email Aliases</a>
+                            <div class="dropdown-divider"></div>
+                            <div class="dropdown-header">Account</div>
+                            <a href="#mfa" class="dropdown-item">Two-Factor Auth</a>
+                        </div>
+                    </li>
+
+                    <li class="nav-item if-logged-in">
+                        <a href="#sync_guide" class="nav-link">Sync</a>
+                    </li>
+
+                    <li class="nav-item if-logged-in-admin">
+                        <a href="#web" class="nav-link">Web</a>
+                    </li>
+
+                    <li class="nav-item if-logged-in">
+                        <a href="#" class="nav-link" id="logout-link">
+                            <span>Log out</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16 17 21 12 16 7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Content Container -->
+        <div class="container">
+            <!-- Panel placeholders - These would be replaced with your actual panel content -->
+            <div id="panel_welcome" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h1 class="panel-title">Welcome to Mail-in-a-Box</h1>
+        <p class="panel-subtitle">Your personal mail server control panel</p>
+    </div>
+
+    <div class="alert alert-info">
+        <div class="alert-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+        </div>
+        <div>
+            <strong>Getting Started:</strong> New to Mail-in-a-Box? Check out the
+            <a href="#mail-guide">Mail Instructions</a> to set up your email client, or visit
+            <a href="#system_status">System Status</a> to verify your server configuration.
+        </div>
+    </div>
+
+    <h2>Quick Access</h2>
+
+    <div class="cards-grid">
+        <div class="card welcome-card">
+            <div class="welcome-card-header">
+                <div class="welcome-card-icon">📧</div>
+                <div class="welcome-card-content">
+                    <h3 class="card-title">Email & Users</h3>
+                    <p class="card-description">Manage email accounts, passwords, and user permissions for your domains.</p>
+                </div>
+            </div>
+            <div class="welcome-card-actions">
+                <a href="#users" class="btn btn-sm btn-primary">Manage Users</a>
+                <a href="#aliases" class="btn btn-sm btn-secondary">Aliases</a>
+            </div>
+        </div>
+
+        <div class="card welcome-card">
+            <div class="welcome-card-header">
+                <div class="welcome-card-icon">⚙️</div>
+                <div class="welcome-card-content">
+                    <h3 class="card-title">System Status</h3>
+                    <p class="card-description">Monitor system health, check DNS configuration, and view security recommendations.</p>
+                </div>
+            </div>
+            <div class="welcome-card-actions">
+                <a href="#system_status" class="btn btn-sm btn-primary">View Status</a>
+                <a href="#munin" class="btn btn-sm btn-secondary">Monitoring</a>
+            </div>
+        </div>
+
+        <div class="card welcome-card">
+            <div class="welcome-card-header">
+                <div class="welcome-card-icon">🔒</div>
+                <div class="welcome-card-content">
+                    <h3 class="card-title">Security</h3>
+                    <p class="card-description">Configure two-factor authentication and manage TLS certificates.</p>
+                </div>
+            </div>
+            <div class="welcome-card-actions">
+                <a href="#mfa" class="btn btn-sm btn-primary">Two-Factor Auth</a>
+                <a href="#tls" class="btn btn-sm btn-secondary">TLS Certs</a>
+            </div>
+        </div>
+
+        <div class="card welcome-card">
+            <div class="welcome-card-header">
+                <div class="welcome-card-icon">🌐</div>
+                <div class="welcome-card-content">
+                    <h3 class="card-title">Web Hosting</h3>
+                    <p class="card-description">Host static websites and manage SSL certificates for your domains.</p>
+                </div>
+            </div>
+            <div class="welcome-card-actions">
+                <a href="#web" class="btn btn-sm btn-primary">Manage Sites</a>
+                <a href="#tls" class="btn btn-sm btn-secondary">SSL Status</a>
+            </div>
+        </div>
+
+        <div class="card welcome-card">
+            <div class="welcome-card-header">
+                <div class="welcome-card-icon">💾</div>
+                <div class="welcome-card-content">
+                    <h3 class="card-title">Backups</h3>
+                    <p class="card-description">Configure automatic backups and restore your mail server data when needed.</p>
+                </div>
+            </div>
+            <div class="welcome-card-actions">
+                <a href="#system_backup" class="btn btn-sm btn-primary">Backup Status</a>
+            </div>
+        </div>
+
+        <div class="card welcome-card">
+            <div class="welcome-card-header">
+                <div class="welcome-card-icon">🔧</div>
+                <div class="welcome-card-content">
+                    <h3 class="card-title">DNS Configuration</h3>
+                    <p class="card-description">Manage custom DNS records and configure external DNS providers.</p>
+                </div>
+            </div>
+            <div class="welcome-card-actions">
+                <a href="#custom_dns" class="btn btn-sm btn-primary">Custom DNS</a>
+                <a href="#external_dns" class="btn btn-sm btn-secondary">External DNS</a>
+            </div>
+        </div>
+    </div>
+
+    <h2>Setup Guides</h2>
+
+    <div class="cards-grid">
+        <div class="card welcome-guide-card">
+            <div class="welcome-guide-header">
+                <div class="welcome-guide-icon">📱</div>
+                <div>
+                    <h3 class="card-title">Mail Client Setup</h3>
+                    <p class="card-description">Configure your email client to connect to your server.</p>
+                </div>
+            </div>
+            <a href="#mail-guide" class="btn btn-default btn-sm">View Instructions</a>
+        </div>
+
+        <div class="card welcome-guide-card">
+            <div class="welcome-guide-header">
+                <div class="welcome-guide-icon">🔄</div>
+                <div>
+                    <h3 class="card-title">Contacts & Calendar Sync</h3>
+                    <p class="card-description">Set up CardDAV and CalDAV to sync across devices.</p>
+                </div>
+            </div>
+            <a href="#sync_guide" class="btn btn-default btn-sm">View Sync Guide</a>
+        </div>
+    </div>
+
+    <div class="info-card">
+        <div class="info-card-title">System Health</div>
+        <div class="info-card-body">
+            <p class="help-text">
+                Regularly check <a href="#system_status">System Status</a> to ensure services are running optimally.
+                Enable <a href="#system_backup">automatic backups</a> to protect your data.
+            </p>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Quick Access Cards - Compact List Style */
+    .welcome-card {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .welcome-card-header {
+        display: flex;
+        gap: 16px;
+        align-items: start;
+        flex: 1;
+    }
+
+    .welcome-card-icon {
+        font-size: 40px;
+        flex-shrink: 0;
+        line-height: 1;
+    }
+
+    .welcome-card-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .welcome-card-content .card-title {
+        margin-top: 0;
+        margin-bottom: 4px;
+    }
+
+    .welcome-card-content .card-description {
+        margin-bottom: 0;
+    }
+
+    .welcome-card-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .welcome-card-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    /* Setup Guide Cards */
+    .welcome-guide-card {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .welcome-guide-header {
+        display: flex;
+        gap: 16px;
+        align-items: start;
+        flex: 1;
+    }
+
+    .welcome-guide-icon {
+        font-size: 32px;
+        flex-shrink: 0;
+    }
+
+    .welcome-guide-card .card-title {
+        margin-top: 0;
+        margin-bottom: 4px;
+    }
+
+    .welcome-guide-card .card-description {
+        margin-bottom: 0;
+    }
+</style>
+            </div>
+
+            <!-- Other panels would go here -->
+            <div id="panel_system_status" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">System Status Checks</h2>
+    </div>
+
+    <div class="status-layout">
+        <div class="status-sidebar">
+            <div id="system-reboot-required" class="info-card" style="display: none;">
+                <div class="info-card-title">System Reboot</div>
+                <div class="info-card-body">
+                    <div id="reboot-needed" style="display: none;">
+                        <button type="button" id="reboot-box-btn" class="btn btn-danger w-100">Reboot Box</button>
+                        <p class="help-text">A system reboot is required to apply important updates.</p>
+                    </div>
+                    <div id="reboot-not-needed" style="display: none;" class="help-text">No reboot necessary</div>
+                </div>
+            </div>
+
+            <div id="system-privacy-setting" class="info-card" style="display: none;">
+                <div class="info-card-title">Privacy Settings</div>
+                <div class="info-card-body">
+                    <a href="#" id="privacy-toggle" class="action-link">
+                        <span id="privacy-toggle-text">Configure Version Check</span>
+                    </a>
+                    <p class="help-text" id="privacy-help-text">Enable automatic checking for new Mail-in-a-Box releases</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-main">
+            <div id="system-checks-summary" class="mb-3">
+                Summary: <span class="text-success" style="font-weight: 600;">23 ✓ OK, </span><span class="text-danger" style="font-weight: 600;">9 ✖ Error, </span><span class="text-warning" style="font-weight: 600;">3 ? Warning</span>
+            </div>
+
+            <div id="system-checks-container"><div class="status-section"><div class="status-section-header">System</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">All system services are running.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">The SSH server on this machine permits password-based login. A more secure
+                way to log in is using a public key. Add your SSH public key to $HOME/.ssh/authorized_keys, check
+                that you can log in without a password, set the option 'PasswordAuthentication no' in
+                /etc/ssh/sshd_config, and then restart the openssh via 'sudo service ssh restart'.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">There are 1 software packages that can be updated.</p><div class="extra"><div>duplicity (3.0.6.3-ppa202512051621~ubuntu22.04.1)</div></div><a class="showhide" href="#" style="display: inline;">show more</a></td></tr><tr class="bg-row-warning"><td class="status text-warning">?</td><td class="message text-warning"><p style="margin: 0px;">You are running version Mail-in-a-Box v73. Mail-in-a-Box version check disabled by privacy setting.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">System administrator address exists as a mail alias. [administrator@box.boomy.wtf ↦ contact@boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">The disk has 10.11 GB space remaining.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">System memory is 45% free.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Backups are enabled</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">System time is synchronized.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">No disk I/O errors detected in system logs.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div><div class="status-section"><div class="status-section-header">Network</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Firewall is active.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Outbound mail (SMTP port 25) is not blocked.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">IPv4 address is not blacklisted by zen.spamhaus.org.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">IPv4 address is not blacklisted in 3 additional RBL(s) checked (Barracuda, SpamCop, SORBS).</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div><div class="status-section"><div class="status-section-header">box.boomy.wtf</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">The DNSSEC 'DS' record for boomy.wtf is incorrect. See further details below.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-warning"><td class="status text-warning">?</td><td class="message text-warning"><p style="margin: 0px;">Nameserver glue records (ns1.box.boomy.wtf and ns2.box.boomy.wtf) should be configured at your domain name
+                registrar as having the IP address of this box (45.124.52.210). They currently report addresses of [Not Set]/[Not Set]. If you have set up External DNS, this may be OK.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain resolves to box's IP address. [box.boomy.wtf ↦ 45.124.52.210]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">This box's reverse DNS is currently [Not Set], but it should be box.boomy.wtf. Your ISP or cloud provider will have instructions
+                on setting up reverse DNS for this box.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-warning"><td class="status text-warning">?</td><td class="message text-warning"><p style="margin: 0px;">The DANE TLSA record for incoming mail is not set. This is optional.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Hostmaster contact address exists as a mail alias. [hostmaster@box.boomy.wtf ↦ administrator@box.boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain's email is directed to this domain. [box.boomy.wtf has no MX record, which is ok]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Postmaster contact address exists as a mail alias. [postmaster@box.boomy.wtf ↦ administrator@box.boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain is not blacklisted by dbl.spamhaus.org.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">TLS (SSL) certificate is signed &amp; valid. The certificate expires in 89 days on 2026-03-07.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div><div class="status-section"><div class="status-section-header">boomy.wtf</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">This domain's DNSSEC DS record is incorrect. The chain of trust is broken between the public DNS system
+                and this machine's DNS server. It may take several hours for public DNS to update after a change. If you did not recently
+                make a change, you must resolve this immediately (see below).</p><div class="extra"><div>Follow the instructions provided by your domain name registrar to set a DS record.
+                Registrars support different sorts of DS records. Use the first option that works:</div><div>Option 1:</div><div>----------</div><div>Key Tag: 51621</div><div>Key Flags: KSK / 257</div><div>Algorithm: 13 / ECDSAP256SHA256</div><div>Digest Type: 2 / SHA-256</div><div>Digest: 98251e510c5ea3d75af5d0d15a6e9fd7d4e48683dbdfd2dfd96062a554e935d4</div><div>Public Key: </div><div class="pre">VrmmbI9NxqsOmfR3GQdum2EgeKlBhmZM04WuO75l1kWq8QDBmggC/9HJzvNcdK6QoimZBTmexfiK9VYjUTXuKQ==</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	51621 13 2 98251e510c5ea3d75af5d0d15a6e9fd7d4e48683dbdfd2dfd96062a554e935d4</div><div>Option 2:</div><div>----------</div><div>Key Tag: 59426</div><div>Key Flags: KSK / 257</div><div>Algorithm: 8 / RSASHA256</div><div>Digest Type: 2 / SHA-256</div><div>Digest: c5721532515fbdf0b0f64edbf98916d57a2d092841af85b15473df584e12e3c2</div><div>Public Key: </div><div class="pre">AwEAAeAhU9yvoe0mWDSpxr+g/K4FNN2L+p/RM5Xr6CYHoBllbrhtfIb+QLzeFp7CDB2OtsIgV58mCWW3S9mf0ICNNF/iMfvFBXAyzd3IR8oE4lZQRVOt6jdvkVkIg/4Hdrlt97JR3az4C4I0SIIR8xLQDSumT2fKWv35k0zFB0CX1fEz</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	59426 8 2 c5721532515fbdf0b0f64edbf98916d57a2d092841af85b15473df584e12e3c2</div><div>Option 3:</div><div>----------</div><div>Key Tag: 51621</div><div>Key Flags: KSK / 257</div><div>Algorithm: 13 / ECDSAP256SHA256</div><div>Digest Type: 4 / SHA-384</div><div>Digest: 623b5428e850563b4b88aa87bf417ed06cfa473eae6d692a8732f862ff7ebdfa5de44fb052015fe4d5b294ea45246098</div><div>Public Key: </div><div class="pre">VrmmbI9NxqsOmfR3GQdum2EgeKlBhmZM04WuO75l1kWq8QDBmggC/9HJzvNcdK6QoimZBTmexfiK9VYjUTXuKQ==</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	51621 13 4 623b5428e850563b4b88aa87bf417ed06cfa473eae6d692a8732f862ff7ebdfa5de44fb052015fe4d5b294ea45246098</div><div>Option 4:</div><div>----------</div><div>Key Tag: 59426</div><div>Key Flags: KSK / 257</div><div>Algorithm: 8 / RSASHA256</div><div>Digest Type: 4 / SHA-384</div><div>Digest: 9a88995fc57f9817ed5d91d6132eb73402b06546d1e24e9e137e2b5c57c4edc44b0dce3c94f77c2b0339a32695f46b84</div><div>Public Key: </div><div class="pre">AwEAAeAhU9yvoe0mWDSpxr+g/K4FNN2L+p/RM5Xr6CYHoBllbrhtfIb+QLzeFp7CDB2OtsIgV58mCWW3S9mf0ICNNF/iMfvFBXAyzd3IR8oE4lZQRVOt6jdvkVkIg/4Hdrlt97JR3az4C4I0SIIR8xLQDSumT2fKWv35k0zFB0CX1fEz</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	59426 8 4 9a88995fc57f9817ed5d91d6132eb73402b06546d1e24e9e137e2b5c57c4edc44b0dce3c94f77c2b0339a32695f46b84</div><div>The DS record is currently set to:</div><div>Key Tag: 2371, Algorithm: 13, Digest Type: 2, Digest: 067166d4cdf8c2d30ca1b6cfdc7ac68067ce4ac8358254a645351053666647c6</div></div><a class="showhide" href="#" style="display: inline;">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">The nameservers set on this domain are incorrect. They are currently tori.ns.cloudflare.com; walt.ns.cloudflare.com. Use your domain name registrar's
+                control panel to set the nameservers to ns1.box.boomy.wtf; ns2.box.boomy.wtf.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain's email is directed to this domain. [boomy.wtf ↦ 10 box.boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">MTA-STS policy is missing: STSFetchResult.NONE</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain is not blacklisted by dbl.spamhaus.org.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">This domain should resolve to this box's IP address (A 45.124.52.210) if you would like the box to serve
+                webmail or a website on this domain. The domain currently resolves to 104.21.51.78; 172.67.177.98 in public DNS. It may take several hours for
+                public DNS to update after a change. This problem may result from other issues listed here.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">www.boomy.wtf: This domain should resolve to this box's IP address (A 45.124.52.210) if you would like the box to serve
+                webmail or a website on this domain. The domain currently resolves to 104.21.51.78; 172.67.177.98 in public DNS. It may take several hours for
+                public DNS to update after a change. This problem may result from other issues listed here.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autoconfig.boomy.wtf: Domain resolves to this box's IP address. [autoconfig.boomy.wtf ↦ 45.124.52.210]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autoconfig.boomy.wtf: TLS (SSL) certificate is signed &amp; valid. The certificate expires in 89 days on 2026-03-07.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autodiscover.boomy.wtf: Domain resolves to this box's IP address. [autodiscover.boomy.wtf ↦ 45.124.52.210]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autodiscover.boomy.wtf: TLS (SSL) certificate is signed &amp; valid. The certificate expires in 89 days on 2026-03-07.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div></div>
+        </div>
+    </div>
+
+    <style>
+        /* Two-column flexbox layout with sidebar on right */
+        .status-layout {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .status-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .status-sidebar {
+            flex: 0 0 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Mobile: Sidebar appears above main content */
+        @media (max-width: 968px) {
+            .status-layout {
+                flex-direction: column-reverse;
+            }
+
+            .status-sidebar {
+                flex: 1;
+            }
+        }
+
+        .status-section {
+            margin-bottom: 24px;
+        }
+
+        .status-section-header {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--border-strong);
+        }
+
+        .status-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .status-table td.status {
+            width: 40px;
+            font-weight: 600;
+            text-align: center;
+            padding: 16px 8px;
+        }
+
+        .status-table td.message {
+            padding: 16px 16px 16px 1em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .status-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-table div.extra {
+            display: none;
+            margin-top: 1em;
+            max-width: 50em;
+            word-wrap: break-word;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .status-table a.showhide {
+            display: none;
+            font-size: 85%;
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .status-table .pre {
+            margin: 16px 0;
+            font-family: 'JetBrains Mono', monospace;
+            white-space: pre-wrap;
+            background: var(--bg-surface);
+            padding: 12px;
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+        }
+    </style>
+
+    <script type="module" src="/admin/static/js/pages/system-status.js"></script>
+</div>
+            </div>
+
+            <div id="panel_system_backup" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">Backup Status</h2>
+    </div>
+
+    <div>
+        <p>The box makes an incremental backup each night. You can store the backup on any Amazon Web Services
+            S3-compatible service, or other options.</p>
+
+        <h3>Configuration</h3>
+
+        <form id="backup-config-form" role="form">
+            <div class="form-group">
+                <label for="backup-target-type" class="form-label">Backup to:</label>
+                <select class="form-control" id="backup-target-type">
+                    <option value="off">Nowhere (Disable Backups)</option>
+                    <option value="local">{{hostname}}</option>
+                    <option value="rsync">rsync</option>
+                    <option value="s3">S3 (Amazon or compatible)</option>
+                    <option value="b2">Backblaze B2</option>
+                </select>
+            </div>
+
+            <!-- LOCAL BACKUP -->
+            <div class="form-group backup-target-local">
+                <p>Backups are stored on this machine&rsquo;s own hard disk. You are responsible for periodically using
+                    SFTP (FTP over SSH) to copy the backup files from <tt class="backup-location"></tt> to a safe
+                    location. These files are encrypted, so they are safe to store anywhere.</p>
+                <p>Separately copy the encryption password from <tt class="backup-encpassword-file"></tt> to a safe and
+                    secure location. You will need this file to decrypt backup files.</p>
+            </div>
+
+            <!-- RSYNC BACKUP -->
+            <div class="form-group backup-target-rsync">
+                <p>Backups synced to a remote machine using rsync over SSH, with local copies in <tt
+                    class="backup-location"></tt>. These files are encrypted, so they are safe to store anywhere.</p>
+                <p>Separately copy the encryption password from <tt class="backup-encpassword-file"></tt> to a safe and
+                    secure location. You will need this file to decrypt backup files.</p>
+            </div>
+
+            <div class="form-group backup-target-rsync">
+                <label for="backup-target-rsync-host" class="form-label">Hostname</label>
+                <input type="text" placeholder="hostname.local" class="form-control" id="backup-target-rsync-host">
+                <div class="help-text">
+                    The hostname at your rsync provider, e.g. <tt>da2327.rsync.net</tt>. Optionally includes a colon and
+                    port number, e.g. <tt>u215843.your-storagebox.de:23</tt>.
+                </div>
+            </div>
+
+            <div class="form-group backup-target-rsync">
+                <label for="backup-target-rsync-path" class="form-label">Path</label>
+                <input type="text" placeholder="/backups/{{hostname}}" class="form-control"
+                       id="backup-target-rsync-path">
+            </div>
+
+            <div class="form-group backup-target-rsync">
+                <label for="backup-target-rsync-user" class="form-label">Username</label>
+                <input type="text" class="form-control" id="backup-target-rsync-user">
+            </div>
+
+            <div class="form-group backup-target-rsync">
+                <label for="ssh-pub-key" class="form-label">Public SSH Key</label>
+                <input type="text" class="form-control" id="ssh-pub-key" readonly>
+                <div class="help-text">
+                    Copy the Public SSH Key above, and paste it in <tt>~/.ssh/authorized_keys</tt> on the backup server.
+                </div>
+                <button type="button" id="copy-pub-key-btn" class="btn btn-sm">Copy</button>
+            </div>
+
+            <!-- S3 BACKUP -->
+            <div class="form-group backup-target-s3">
+                <p>Backups are stored in an S3-compatible bucket. You must have an account with AWS or other S3
+                    service.</p>
+                <p>You MUST manually copy the encryption password from <tt class="backup-encpassword-file"></tt> to a
+                    safe location.</p>
+            </div>
+
+            <div class="form-group backup-target-s3">
+                <label for="backup-target-s3-host-select" class="form-label">S3 Region</label>
+                <select class="form-control" id="backup-target-s3-host-select">
+                    {% for name, host in backup_s3_hosts %}
+                    <option value="{{host}}">{{name}}</option>
+                    {% endfor %}
+                    <option value="other">Other (non AWS)</option>
+                </select>
+            </div>
+
+            <div class="form-group backup-target-s3">
+                <label for="backup-target-s3-host" class="form-label">S3 Host / Endpoint</label>
+                <input type="text" placeholder="https://s3.backuphost.com" class="form-control"
+                       id="backup-target-s3-host">
+            </div>
+
+            <div class="form-group backup-target-s3">
+                <label for="backup-target-s3-region-name" class="form-label">S3 Region Name (if required)</label>
+                <input type="text" placeholder="region.name" class="form-control" id="backup-target-s3-region-name">
+            </div>
+
+            <div class="form-group backup-target-s3">
+                <label for="backup-target-s3-path" class="form-label">S3 Bucket &amp; Path</label>
+                <input type="text" placeholder="bucket-name/backup-directory" class="form-control"
+                       id="backup-target-s3-path">
+            </div>
+
+            <div class="form-group backup-target-s3">
+                <label for="backup-target-user" class="form-label">S3 Access Key</label>
+                <input type="text" class="form-control" id="backup-target-user">
+            </div>
+
+            <div class="form-group backup-target-s3">
+                <label for="backup-target-pass" class="form-label">S3 Secret Access Key</label>
+                <input type="text" class="form-control" id="backup-target-pass">
+            </div>
+
+            <!-- Backblaze B2 -->
+            <div class="form-group backup-target-b2">
+                <p>Backups are stored in a <a href="https://www.backblaze.com/" target="_blank" rel="noreferrer">Backblaze</a>
+                    B2 bucket. You must have a Backblaze account.</p>
+                <p>Manually copy the encryption password from <tt class="backup-encpassword-file"></tt> to a safe
+                    location.</p>
+            </div>
+
+            <div class="form-group backup-target-b2">
+                <label for="backup-target-b2-user" class="form-label">B2 Application KeyID</label>
+                <input type="text" class="form-control" id="backup-target-b2-user">
+            </div>
+
+            <div class="form-group backup-target-b2">
+                <label for="backup-target-b2-pass" class="form-label">B2 Application Key</label>
+                <input type="text" class="form-control" id="backup-target-b2-pass">
+            </div>
+
+            <div class="form-group backup-target-b2">
+                <label for="backup-target-b2-bucket" class="form-label">B2 Bucket</label>
+                <input type="text" class="form-control" id="backup-target-b2-bucket">
+            </div>
+
+            <!-- Common retention -->
+            <div class="form-group backup-target-local backup-target-rsync backup-target-s3 backup-target-b2">
+                <label for="min-age" class="form-label">Retention Days:</label>
+                <input type="number" class="form-control" id="min-age">
+                <div class="help-text">Minimum time backup data is kept. Incremental backups require previous backups to
+                    be preserved, so data may be kept longer. Full backups occur periodically.
+                </div>
+            </div>
+
+            <div class="form-group">
+                <button id="set-s3-backup-button" type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+
+        <h3>Available backups</h3>
+        <p>The backup location currently contains the backups listed below. Total size: <span
+            id="backup-total-size"></span>.</p>
+
+        <div class="table-container">
+            <table id="backup-status" class="table">
+                <thead>
+                    <tr>
+                        <th colspan="2">When</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Deleted in...</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    <style>
+        #backup-status th {
+            text-align: center;
+        }
+
+        #backup-status tr.full-backup td {
+            font-weight: bold;
+        }
+    </style>
+    <script type="module" src="/admin/static/js/pages/system-backup.js"></script>
+
+</div>
+            </div>
+
+            <div id="panel_external_dns" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">External DNS</h2>
+        <div class="panel-subtitle">Advanced Configuration</div>
+    </div>
+
+    <style>
+        #external_dns_settings .heading td {
+            font-weight: bold;
+            font-size: 120%;
+            padding-top: 1.5em;
+        }
+
+        #external_dns_settings .heading.first td {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        #external_dns_settings .values td {
+            border: 0;
+            padding-top: .75em;
+            padding-bottom: 0;
+        }
+
+        #external_dns_settings .value {
+            word-break: break-all;
+        }
+
+        #external_dns_settings .explanation td {
+            border: 0;
+            padding-top: .5em;
+            padding-bottom: .75em;
+            font-style: italic;
+            font-size: 95%;
+            color: #777;
+        }
+    </style>
+
+    <p class="text-warning">This is an advanced configuration page.</p>
+
+    <p>Although your box is configured to serve its own DNS, it is possible to host your DNS elsewhere &mdash; such as
+        in the DNS control panel provided by your domain name registrar or virtual cloud provider &mdash; by copying the
+        DNS zone information shown in the table below into your external DNS server&rsquo;s control panel.</p>
+
+    <p>If you do so, you are responsible for keeping your DNS entries up to date! If you previously enabled DNSSEC on
+        your domain name by setting a DS record at your registrar, you will likely have to turn it off before changing
+        nameservers.</p>
+
+
+    <p class="alert" role="alert">
+        <span class="glyphicon glyphicon-info-sign"></span>
+        You may encounter zone file errors when attempting to create a TXT record with a long string.
+        <a href="https://tools.ietf.org/html/rfc4408#section-3.1.3">RFC 4408</a> states a TXT record is allowed to
+        contain multiple strings, and this technique can be used to construct records that would exceed the 255-byte
+        maximum length.
+        You may need to adopt this technique when adding DomainKeys. Use a tool like <code>named-checkzone</code> to
+        validate your zone file.
+    </p>
+
+    <h3>Download zonefile</h3>
+    <p>You can download your zonefiles here or use the table of records below.</p>
+    <form id="download-zonefile-form" class="form-inline" role="form">
+        <div class="form-group">
+            <div class="form-group">
+                <label for="downloadZonefile" class="control-label sr-only">Zone</label>
+                <select id="downloadZonefile" class="form-control" style="width: auto"> </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Download</button>
+        </div>
+    </form>
+
+    <h3>Records</h3>
+
+    <table id="external_dns_settings" class="table">
+        <thead>
+            <tr>
+                <th>QName</th>
+                <th>Type</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script type="module" src="/admin/static/js/pages/external-dns.js"></script>
+
+</div>
+            </div>
+
+            <div id="panel_custom_dns" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">Custom DNS</h2>
+        <div class="panel-subtitle">Advanced Configuration</div>
+    </div>
+
+    <style>
+        #custom-dns-current td.long {
+            word-break: break-all;
+        }
+    </style>
+
+    <p class="text-warning">This is an advanced configuration page.</p>
+
+    <p>It is possible to set custom DNS records on domains hosted here.</p>
+
+    <h3>Set custom DNS records</h3>
+
+    <p>You can set additional DNS records, such as if you have a website running on another server, to add DKIM records
+        for external mail providers, or for various confirmation-of-ownership tests.</p>
+
+    <form id="customdns-form" role="form">
+        <div class="form-group">
+            <label for="customdnsQname" class="form-label">Name</label>
+            <table>
+                <tr>
+                    <td>
+                        <input type="text" class="form-control" id="customdnsQname" placeholder="subdomain">
+                    </td>
+                    <td style="padding: 0 1em; font-weight: bold;">.</td>
+                    <td>
+                        <select id="customdnsZone" class="form-control"> </select>
+                    </td>
+                </tr>
+            </table>
+            <div class="help-text text-info">Leave the left field blank to set a record on the chosen domain name, or enter a subdomain.</div>
+        </div>
+        <div class="form-group">
+            <label for="customdnsType" class="form-label">Type</label>
+            <select id="customdnsType" class="form-control">
+                    <option value="A"
+                            data-hint="Enter an IPv4 address (i.e. a dotted quad, such as 123.456.789.012).  The 'local' alias sets the record to this box's public IPv4 address.">
+                        A (IPv4 address)
+                    </option>
+                    <option value="AAAA"
+                            data-hint="Enter an IPv6 address.  The 'local' alias sets the record to this box's public IPv6 address.">
+                        AAAA (IPv6 address)
+                    </option>
+                    <option value="CAA"
+                            data-hint="Enter a CA that can issue certificates for this domain in the form of FLAG TAG VALUE. (0 issuewild &quot;letsencrypt.org&quot;)">
+                        CAA (Certificate Authority Authorization)
+                    </option>
+                    <option value="CNAME"
+                            data-hint="Enter another domain name followed by a period at the end (e.g. mypage.github.io.).">
+                        CNAME (DNS forwarding)
+                    </option>
+                    <option value="TXT" data-hint="Enter arbitrary text.">TXT (text record)</option>
+                    <option value="MX"
+                            data-hint="Enter record in the form of PRIORITY DOMAIN., including trailing period (e.g. 20 mx.example.com.).">
+                        MX (mail exchanger)
+                    </option>
+                    <option value="SRV"
+                            data-hint="Enter record in the form of PRIORITY WEIGHT PORT TARGET., including trailing period (e.g. 10 10 5060 sip.example.com.).">
+                        SRV (service record)
+                    </option>
+                    <option value="SSHFP" data-hint="Enter record in the form of ALGORITHM TYPE FINGERPRINT.">SSHFP (SSH
+                        fingerprint record)
+                    </option>
+                    <option value="NS" data-hint="Enter a hostname to which this subdomain should be delegated to">NS
+                        (DNS subdomain delegation)
+                    </option>
+                </select>
+        </div>
+        <div class="form-group">
+            <label for="customdnsValue" class="form-label">Value</label>
+            <input type="text" class="form-control" id="customdnsValue" placeholder="">
+            <div id="customdnsTypeHint" class="help-text text-info"></div>
+        </div>
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">Set Record</button>
+        </div>
+    </form>
+
+    <div class="text-right text-small">
+        sort by:
+        <a href="#" data-sort="qname">domain name</a>
+        |
+        <a href="#" data-sort="created">created</a>
+    </div>
+    <table id="custom-dns-current" class="table" style="display: none">
+        <thead>
+            <th>Domain Name</th>
+            <th>Record Type</th>
+            <th>Value</th>
+            <th></th>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="4">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Using a secondary nameserver</h3>
+
+    <p>If your TLD requires you to have two separate nameservers, you can either set up <a href="#external_dns">external
+        DNS</a> and ignore the DNS server on this box entirely, or use the DNS server on this box but add a secondary
+        (aka &ldquo;slave&rdquo;) nameserver.</p>
+    <p>If you choose to use a secondary nameserver, you must find a secondary nameserver service provider. Your domain
+        name registrar or virtual cloud provider may provide this service for you. Once you set up the secondary
+        nameserver service, enter the hostname (not the IP address) of <em>their</em> secondary nameserver in the box
+        below.</p>
+
+    <form id="secondarydns-form" role="form">
+        <div class="form-group">
+            <label for="secondarydnsHostname" class="form-label">Hostname</label>
+            <input type="text" class="form-control" id="secondarydnsHostname" placeholder="ns1.cloudprovider.com">
+        </div>
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+        <div class="form-group">
+            <p class="help-text">
+                Multiple secondary servers can be separated with commas or spaces (i.e., <code>ns2.hostingcompany.com
+                ns3.hostingcompany.com</code>).
+                To enable zone transfers to additional servers without listing them as secondary nameservers, prefix
+                a hostname, IP address, or subnet with <code>xfr:</code>, e.g. <code>xfr:10.20.30.40</code> or
+                <code>xfr:10.0.0.0/8</code>.
+            </p>
+            <p id="secondarydns-clear-instructions" style="display: none" class="help-text">
+                Clear the input field above and click Update to use this machine itself as secondary DNS, which is
+                the default/normal setup.
+            </p>
+        </div>
+    </form>
+
+
+    <h3>Custom DNS API</h3>
+
+    <p>Use your box&rsquo;s DNS API to set custom DNS records on domains hosted here. For instance, you can create your
+        own dynamic DNS service.</p>
+
+    <p>Usage:</p>
+
+    <pre>curl -X <b>VERB</b> [-d "<b>value</b>"] --user {email}:{password} https://{{hostname}}/admin/dns/custom[/<b>qname</b>[/<b>rtype</b>]]</pre>
+
+    <p>(Brackets denote an optional argument.)</p>
+
+    <h4>Verbs</h4>
+
+    <table class="table">
+        <thead>
+            <th>Verb</th>
+            <th>Usage</th>
+        </thead>
+        <tr>
+            <td>GET</td>
+            <td>Returns matching custom DNS records as a JSON array of objects. Each object has the keys
+                <code>qname</code>, <code>rtype</code>, and <code>value</code>. The optional <code>qname</code> and
+                <code>rtype</code> parameters in the request URL filter the records returned in the response. The
+                request body (<code>-d "..."</code>) must be omitted.
+            </td>
+        </tr>
+        <tr>
+            <td>PUT</td>
+            <td>Sets a custom DNS record replacing any existing records with the same <code>qname</code> and
+                <code>rtype</code>. Use PUT (instead of POST) when you only have one value for a <code>qname</code> and
+                <code>rtype</code>, such as typical <code>A</code> records (without round-robin).
+            </td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>Adds a new custom DNS record. Use POST when you have multiple <code>TXT</code> records or round-robin
+                <code>A</code> records. (PUT would delete previously added records.)
+            </td>
+        </tr>
+        <tr>
+            <td>DELETE</td>
+            <td>Deletes custom DNS records. If the request body (<code>-d "..."</code>) is empty or omitted, deletes all
+                records matching the <code>qname</code> and <code>rtype</code>. If the request body is present, deletes
+                only the record matching the <code>qname</code>, <code>rtype</code> and value.
+            </td>
+        </tr>
+    </table>
+
+    <h4>Parameters</h4>
+
+    <table class="table">
+        <thead>
+            <th>Parameter</th>
+            <th>Value</th>
+        </thead>
+        <tr>
+            <td>email</td>
+            <td>The email address of any administrative user here.</td>
+        </tr>
+        <tr>
+            <td>password</td>
+            <td>That user&rsquo;s password.</td>
+        </tr>
+        <tr>
+            <td>qname</td>
+            <td>The fully qualified domain name for the record you are trying to set. It must be one of the domain names
+                or a subdomain of one of the domain names hosted on this box. (Add mail users or aliases to add new
+                domains.)
+            </td>
+        </tr>
+        <tr>
+            <td>rtype</td>
+            <td>The resource type. Defaults to <code>A</code> if omitted. Possible values: <code>A</code> (an IPv4
+                address), <code>AAAA</code> (an IPv6 address), <code>TXT</code> (a text string), <code>CNAME</code> (an
+                alias, which is a fully qualified domain name &mdash; don&rsquo;t forget the final period),
+                <code>MX</code>, <code>SRV</code>, <code>SSHFP</code>, <code>CAA</code> or <code>NS</code>.
+            </td>
+        </tr>
+        <tr>
+            <td>value</td>
+            <td>For PUT, POST, and DELETE, the record&rsquo;s value. If the <code>rtype</code> is <code>A</code> or
+                <code>AAAA</code> and <code>value</code> is empty or omitted, the IPv4 or IPv6 address of the remote
+                host is used (be sure to use the <code>-4</code> or <code>-6</code> options to curl). This is handy for
+                dynamic DNS!
+            </td>
+        </tr>
+    </table>
+
+    <p>Strict <a href="http://tools.ietf.org/html/rfc4408">SPF</a> and <a
+            href="https://datatracker.ietf.org/doc/draft-kucherawy-dmarc-base/?include_text=1">DMARC</a> records will be
+        added to all custom domains unless you override them.</p>
+
+    <h4>Examples:</h4>
+
+    <p>Try these examples. For simplicity the examples omit the <code>--user me@mydomain.com:yourpassword</code> command
+        line argument which you must fill in with your email address and password.</p>
+
+    <pre># sets laptop.mydomain.com to point to the IP address of the machine you are executing curl on
+curl -X PUT https://{{hostname}}/admin/dns/custom/laptop.mydomain.com
+
+# deletes that record and all A records for that domain name
+curl -X DELETE https://{{hostname}}/admin/dns/custom/laptop.mydomain.com
+
+# sets a CNAME alias
+curl -X PUT -d "bar.mydomain.com." https://{{hostname}}/admin/dns/custom/foo.mydomain.com/cname
+
+# deletes that CNAME and all CNAME records for that domain name
+curl -X DELETE https://{{hostname}}/admin/dns/custom/foo.mydomain.com/cname
+
+# adds a TXT record using POST to preserve any previous TXT records
+curl -X POST -d "some text here" https://{{hostname}}/admin/dns/custom/foo.mydomain.com/txt
+
+# deletes that one TXT record while preserving other TXT records
+curl -X DELETE -d "some text here" https://{{hostname}}/admin/dns/custom/foo.mydomain.com/txt
+</pre>
+
+    <script type="module" src="/admin/static/js/pages/custom-dns.js"></script>
+
+</div>
+            </div>
+
+            <div id="panel_mfa" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">Two-Factor Authentication</h2>
+    </div>
+
+    <style>
+        .twofactor #totp-setup,
+        .twofactor #disable-2fa,
+        .twofactor #output-2fa {
+            display: none;
+        }
+
+        .twofactor.loaded .loading-indicator {
+            display: none;
+        }
+
+        .twofactor.disabled #disable-2fa,
+        .twofactor.enabled #totp-setup {
+            display: none;
+        }
+
+        .twofactor.disabled #totp-setup,
+        .twofactor.enabled #disable-2fa {
+            display: block;
+        }
+
+        .twofactor #totp-setup-qr img {
+            display: block;
+            width: 256px;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .twofactor #output-2fa.visible {
+            display: block;
+        }
+    </style>
+
+    <p>When two-factor authentication is enabled, you will be prompted to enter a six digit code from an
+        authenticator app (usually on your phone) when you log into this control panel.</p>
+
+    <div class="panel panel-danger">
+        <div class="panel-heading">
+            Enabling two-factor authentication does not protect access to your email
+        </div>
+        <div class="panel-body">
+            Enabling two-factor authentication on this page only limits access to this control panel. Remember that most
+            websites allow you to
+            reset your password by checking your email, so anyone with access to your email can typically take over
+            your other accounts. Additionally, if your email address or any alias that forwards to your email
+            address is a typical domain control validation address (e.g admin@, administrator@, postmaster@,
+            hostmaster@,
+            webmaster@, abuse@), extra care should be taken to protect the account. <strong>Always use a strong
+            password,
+            and ensure every administrator account for this control panel does the same.</strong>
+        </div>
+    </div>
+
+    <div class="twofactor">
+        <div class="loading-indicator">Loading...</div>
+
+        <form id="totp-setup">
+            <h3>Setup Instructions</h3>
+
+            <div class="form-group">
+                <p>1. Install <a href="https://freeotp.github.io/">FreeOTP</a> or <a
+                        href="https://www.pcworld.com/article/3225913/what-is-two-factor-authentication-and-which-2fa-apps-are-best.html">any
+                    other two-factor authentication app</a> that supports TOTP.</p>
+            </div>
+
+            <div class="form-group">
+                <p class="mb-0">2. Scan the QR code in the app or directly enter the secret into the
+                    app:</p>
+                <div id="totp-setup-qr"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="otp-label">3. Optionally, give your device a label so that you
+                    can remember what device you set it up on:</label>
+                <input type="text" id="totp-setup-label" class="form-control" placeholder="my phone"/>
+            </div>
+
+            <div class="form-group">
+                <label for="otp" style="font-weight: normal">4. Use the app to generate your first six-digit code and
+                    enter it here:</label>
+                <input type="text" id="totp-setup-token" class="form-control" placeholder="6-digit code"/>
+            </div>
+
+            <input type="hidden" id="totp-setup-secret"/>
+
+            <div class="form-group">
+                <p>When you click Enable Two-Factor Authentication, you will be logged out of the control panel and will
+                    have to log in
+                    again, now using your two-factor authentication app.</p>
+                <button id="totp-setup-submit" disabled type="submit" class="btn">Enable Two-Factor Authentication
+                </button>
+            </div>
+        </form>
+
+        <form id="disable-2fa">
+            <div class="form-group">
+                <p>Two-factor authentication is active for your account<span id="mfa-device-label"></span>.</p>
+                <p>You will have to log into the admin panel again after disabling two-factor authentication.</p>
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-danger">Disable Two-Factor Authentication</button>
+            </div>
+        </form>
+
+        <div id="output-2fa" class="panel panel-danger">
+            <div class="panel-body"></div>
+        </div>
+    </div>
+
+    <script type="module" src="/admin/static/js/pages/mfa.js"></script>
+
+</div>
+            </div>
+
+            <div id="panel_login" class="admin_panel">
+<div class="panel login-panel">
+    <div class="panel-heading text-center">
+        <h1 class="panel-title">{{hostname}}</h1>
+        <p class="panel-subtitle">Log in to your Mail-in-a-Box control panel</p>
+    </div>
+
+    {% if no_users_exist or no_admins_exist %}
+    <div class="alert alert-danger" style="display:block; margin-bottom: 24px;">
+        {% if no_users_exist %}
+        <p>There are no users on this system! To create an administrative user, log in via SSH and run:</p>
+        <pre>cd mailinabox
+sudo management/cli.py user add me@{{hostname}}
+sudo management/cli.py user make-admin me@{{hostname}}</pre>
+        {% else %}
+        <p>There are no administrative users on this system! To create an administrative user, log in via SSH and run:</p>
+        <pre>cd mailinabox
+sudo management/cli.py user make-admin me@{{hostname}}</pre>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <form id="loginForm" role="form" method="get">
+        <div class="form-group">
+            <label class="form-label" for="loginEmail">Email</label>
+            <input type="email" name="email" id="loginEmail" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="loginPassword">Password</label>
+            <input type="password" name="password" id="loginPassword" class="form-control" required>
+        </div>
+
+        <div class="form-group" id="loginOtp">
+            <label class="form-label" for="loginOtpInput">Two-Factor Code</label>
+            <input type="text" id="loginOtpInput" class="form-control" placeholder="6-digit code" autocomplete="off">
+            <div class="help-text">Enter the six-digit code generated by your two-factor authentication app.</div>
+        </div>
+
+        <div class="form-group login-remember">
+            <input type="checkbox" id="loginRemember">
+            <label for="loginRemember">Remember me</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+
+    <style>
+        .login-panel {
+            max-width: 500px;
+            margin: 40px auto;
+        }
+
+        #loginOtp { display: none; }
+
+        #loginForm.is-twofactor #loginOtp {
+            display: block;
+        }
+
+        .login-remember {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 16px 0;
+        }
+
+        .login-remember label {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        @media (max-width: 768px) {
+            .login-panel {
+                margin: 20px auto;
+            }
+        }
+    </style>
+
+    <script type="module" src="/admin/static/js/pages/login.js"></script>
+</div>
+            </div>
+
+            <div id="panel_mail-guide" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h1 class="panel-title">Checking and Sending Mail</h1>
+        <p class="panel-subtitle">Everything you need to access and manage your email</p>
+    </div>
+
+    <div class="cards-grid-horizontal">
+
+        <!-- Webmail Card -->
+        <div class="card">
+            <div class="card-icon">🌐</div>
+            <h3 class="card-title">Webmail</h3>
+            <p class="card-description">
+                Access your email from any web browser at:
+                <strong><a href="https://{{hostname}}/mail">https://{{hostname}}/mail</a></strong><br>
+                Your username is your full email address.
+            </p>
+        </div>
+
+        <!-- Mobile/Desktop Card -->
+        <div class="card">
+            <div class="card-icon">📱</div>
+            <h3 class="card-title">Mobile & Desktop Apps</h3>
+            <p class="card-description">
+                <strong>Automatic setup:</strong> iOS/macOS only – use
+                <a href="https://{{hostname}}/mailinabox.mobileconfig">this configuration link</a> to set up Mail, Contacts, and Calendar automatically.
+            </p>
+            <p class="card-description">
+                <strong>Manual setup:</strong> Use the following settings for IMAP/SMTP:
+            </p>
+            <table class="table">
+                <thead>
+                    <tr><th>Option</th><th>Value</th></tr>
+                </thead>
+                <tbody>
+                    <tr><th>Protocol/Method</th><td>IMAP</td></tr>
+                    <tr><th>Mail server</th><td>{{hostname}}</td></tr>
+                    <tr><th>IMAP Port</th><td>993</td></tr>
+                    <tr><th>IMAP Security</th><td>SSL or TLS</td></tr>
+                    <tr><th>SMTP Port</th><td>465</td></tr>
+                    <tr><th>SMTP Security</th><td>SSL or TLS</td></tr>
+                    <tr><th>Username</th><td>Your full email address</td></tr>
+                    <tr><th>Password</th><td>Your mail password</td></tr>
+                </tbody>
+            </table>
+            <p class="card-description">
+                POP protocol is optional: port 995 with SSL/TLS. IMAP is recommended.
+            </p>
+        </div>
+
+        <!-- Exchange/ActiveSync Card -->
+        <div class="card">
+            <div class="card-icon">🔄</div>
+            <h3 class="card-title">Exchange / ActiveSync</h3>
+            <p class="card-description">
+                Use on compatible iOS devices or Outlook 2007+ (Windows 7+). Setup may be buggy, so IMAP is preferred.
+            </p>
+            <table class="table">
+                <tr><th>Server</th><td>{{hostname}}</td></tr>
+                <tr><th>Options</th><td>Secure Connection</td></tr>
+            </table>
+            <p class="card-description">Your contacts and calendar sync automatically using this method.</p>
+        </div>
+
+        <!-- Mail Info Card -->
+        <div class="card">
+            <div class="card-icon">ℹ️</div>
+            <h3 class="card-title">Other Mail Information</h3>
+            <p class="card-description">
+                <strong>Greylisting:</strong> Reduces spam by delaying first-time emails (minimum 3 minutes).
+            </p>
+            <p class="card-description">
+                <strong>+tag addresses:</strong> All emails to you+anything@yourdomain.com are delivered to your inbox automatically.
+            </p>
+            <p class="card-description">
+                <strong>Send policy:</strong> Only this box can send mail on behalf of your domains to prevent spam issues.
+            </p>
+        </div>
+
+    </div>
+</div>
+            </div>
+
+            <div id="panel_users" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">Users</h2>
+    </div>
+
+    <style>
+        #user_table tr.account_inactive td.address {
+            color: var(--text-muted);
+            text-decoration: line-through;
+        }
+
+        #user_table .actions {
+            margin-top: 6px;
+            font-size: 14px;
+        }
+
+        #user_table .account_inactive .if_active,
+        #user_table .account_active .if_inactive,
+        #user_table .account_active.if_inactive {
+            display: none;
+        }
+    </style>
+
+    <h3>Add a mail user</h3>
+
+    <p>Add an email address to this system. This will create a new login username/password.</p>
+
+    <form id="adduser_form" class="form-inline" role="form">
+        <div class="form-group">
+            <label class="sr-only" for="adduserEmail">Email address</label>
+            <input type="email" class="form-control" id="adduserEmail" placeholder="Email Address">
+        </div>
+        <div class="form-group">
+            <label class="sr-only" for="adduserPassword">Password</label>
+            <input type="password" class="form-control" id="adduserPassword" placeholder="Password">
+        </div>
+        <div class="form-group">
+            <select class="form-control" id="adduserPrivs">
+                <option value="">Normal User</option>
+                <option value="admin">Administrator</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="sr-only" for="adduserQuota">Quota</label>
+            <input type="text" class="form-control" id="adduserQuota" placeholder="Quota" value="0">
+        </div>
+        <button type="submit" class="btn btn-primary">Add User</button>
+    </form>
+    <ul class="mt-2 text-small">
+        <li>Passwords must be at least eight characters consisting of English letters and numbers only. For best
+            results, <a href="#" id="generate-random-password">generate a random password</a>.
+        </li>
+        <li>Use <a href="#aliases">aliases</a> to create email addresses that forward to existing accounts.</li>
+        <li>Administrators get access to this control panel.</li>
+        <li>User accounts cannot contain any international (non-ASCII) characters, but <a href="#aliases">aliases</a>
+            can.
+        </li>
+        <li>Quotas may not contain any spaces, commas or decimal points. Suffixes of G (gigabytes) and M (megabytes) are
+            allowed. For unlimited storage enter 0 (zero)
+        </li>
+    </ul>
+
+    <h3>Existing mail users</h3>
+    <table id="user_table" class="table w-auto">
+        <thead>
+            <tr>
+                <th width="35%">Email Address</th>
+                <th class="row-center">Size</th>
+                <th class="row-center">Used</th>
+                <th class="row-center">Quota</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <div style="display: none">
+        <table>
+            <tr id="user-template">
+                <td class="address">
+                </td>
+                <td class="box-size row-center"></td>
+                <td class="percent row-center"></td>
+                <td class="quota row-center">
+                </td>
+                <td class="actions">
+        <span class="privs">
+        </span>
+
+                    <span class="if_active">
+          <a href="#" data-action="set-quota" class="setquota" title="Set Quota">
+              set quota
+          </a>
+          |
+        </span>
+
+                    <span class="if_active">
+          <a href="#" data-action="set-password" class="setpw" title="Set Password">
+            set password
+          </a>
+          |
+        </span>
+
+                    <span class="add-privs">
+        </span>
+
+                    <a href="#" data-action="remove-user" class="if_active" title="Archive Account">
+                        archive account
+                    </a>
+                </td>
+            </tr>
+            <tr id="user-extra-template" class="if_inactive">
+                <td colspan="3" style="border: 0; padding-top: 0">
+                    <div class="restore_info text-muted text-small">To restore account, create a new
+                        account with this email address. Or to permanently delete the mailbox, delete the directory
+                        <tt></tt> on the machine.
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <h3>Mail user API (advanced)</h3>
+
+    <p>Use your box&rsquo;s mail user API to add/change/remove users from the command-line or custom services you
+        build.</p>
+
+    <p>Usage:</p>
+
+    <pre>curl -X <b>VERB</b> [-d "<b>parameters</b>"] --user {email}:{password} https://{{hostname}}/admin/mail/users[<b>action</b>]</pre>
+
+    <p>Brackets denote an optional argument. Please note that the POST body <code>parameters</code> must be URL-encoded.
+    </p>
+
+    <p>The email and password given to the <code>--user</code> option must be an administrative user on this system.</p>
+
+    <h4 class="mb-0">Verbs</h4>
+
+    <table class="table mt-1">
+        <thead>
+            <th>Verb</th>
+            <th>Action</th>
+            <th></th>
+        </thead>
+        <tr>
+            <td>GET</td>
+            <td><i>(none)</i></td>
+            <td>Returns a list of existing mail users. Adding <code>?format=json</code> to the URL will give
+                JSON-encoded results.
+            </td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>/add</td>
+            <td>Adds a new mail user. Required POST-body parameters are <code>email</code> and <code>password</code>.
+                Optional parameters: <code>privilege=admin</code> and <code>quota</code></td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>/remove</td>
+            <td>Removes a mail user. Required POST-by parameter is <code>email</code>.</td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>/privileges/add</td>
+            <td>Used to make a mail user an admin. Required POST-body parameters are <code>email</code> and <code>privilege=admin</code>.
+            </td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>/privileges/remove</td>
+            <td>Used to remove the admin privilege from a mail user. Required POST-body parameter is <code>email</code>.
+            </td>
+        </tr>
+        <tr>
+            <td>GET</td>
+            <td>/quota</td>
+            <td>Get the quota for a mail user. Required POST-body parameters are <code>email</code> and will return JSON
+                result
+            </td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>/quota</td>
+            <td>Set the quota for a mail user. Required POST-body parameters are <code>email</code> and
+                <code>quota</code>.
+            </td>
+        </tr>
+    </table>
+
+    <h4>Examples:</h4>
+
+    <p>Try these examples. For simplicity the examples omit the <code>--user me@mydomain.com:yourpassword</code> command
+        line argument which you must fill in with your administrative email address and password.</p>
+
+    <pre># Gives a JSON-encoded list of all mail users
+curl -X GET https://{{hostname}}/admin/mail/users?format=json
+
+# Adds a new email user
+curl -X POST -d "email=new_user@mydomail.com" -d "password=s3curE_pa5Sw0rD" https://{{hostname}}/admin/mail/users/add
+
+# Removes a email user
+curl -X POST -d "email=new_user@mydomail.com" https://{{hostname}}/admin/mail/users/remove
+
+# Adds admin privilege to an email user
+curl -X POST -d "email=new_user@mydomail.com" -d "privilege=admin" https://{{hostname}}/admin/mail/users/privileges/add
+
+# Removes admin privilege from an email user
+curl -X POST -d "email=new_user@mydomail.com" https://{{hostname}}/admin/mail/users/privileges/remove
+</pre>
+
+    <script type="module" src="/admin/static/js/pages/users.js"></script>
+
+</div>            </div>
+
+            <div id="panel_aliases" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">Mail Aliases</h2>
+    </div>
+
+    <style>
+        #alias_table .actions > * {
+            padding-right: 3px;
+        }
+
+        #alias_table .alias-auto .actions > * {
+            display: none
+        }
+    </style>
+
+    <h3>Add a mail alias</h3>
+
+    <p>Aliases are email forwarders. An alias can forward email to a <a href="#users">mail user</a> or to any email
+        address.</p>
+
+    <p>To use an alias or any address besides your own login username in outbound mail, the sending user must be
+        included as a permitted sender for the alias.</p>
+
+    <form id="addalias-form" role="form">
+        <div class="form-group">
+            <div id="alias_type_buttons" class="btn-group btn-group-xs">
+                <button type="button" class="btn btn-default" data-mode="regular">Regular</button>
+                <button type="button" class="btn btn-default" data-mode="catchall">Catch-All</button>
+                <button type="button" class="btn btn-default" data-mode="domainalias">Domain Alias</button>
+            </div>
+            <div id="alias_mode_info" class="text-info help-text" style="display: none">
+                <span class="catchall hidden">A catch-all alias captures all otherwise unmatched email to a domain.</span>
+                <span class="domainalias hidden">A domain alias forwards all otherwise unmatched email from one domain to another domain, preserving the part before the @-sign.</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="addaliasAddress" class="form-label">Alias</label>
+            <input type="email" class="form-control" id="addaliasAddress">
+            <div class="help-text text-muted">
+                <span class="catchall domainalias">Enter just the part of an email address starting with the @-sign.</span>
+                You may use international (non-ASCII) characters for the domain part of the email address only.
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="addaliasForwardsTo" class="form-label">Forwards To</label>
+            <textarea class="form-control" rows="3" id="addaliasForwardsTo"></textarea>
+            <div class="help-text">
+                <span class="domainalias text-muted">Enter just the part of an email address starting with the @-sign.</span>
+                <span class="text-danger">Only forward mail to addresses handled by this Mail-in-a-Box, since mail forwarded by aliases to other domains may be rejected or filtered by the receiver. To forward mail to other domains, create a mail user and then log into webmail for the user and create a filter rule to forward mail.</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="addaliasSenders" class="form-label">Permitted Senders</label>
+            <div class="radio">
+                <label>
+                    <input id="addaliasForwardsToNotAdvanced" name="addaliasForwardsToDivToggle" type="radio" checked>
+                    Any mail user listed in the Forwards To box can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                </label>
+            </div>
+            <div class="radio">
+                <label>
+                    <input id="addaliasForwardsToAdvanced" name="addaliasForwardsToDivToggle" type="radio">
+                    I&rsquo;ll enter the mail users that can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                </label>
+            </div>
+            <div id="addaliasForwardsToDiv" style="display: none">
+                <textarea class="form-control" rows="3" id="addaliasSenders" placeholder="one user per line or separated by commas"></textarea>
+            </div>
+        </div>
+        <div class="form-group">
+            <button id="add-alias-button" type="submit" class="btn btn-primary">Add Alias</button>
+            <button id="alias-cancel" type="button" class="btn btn-default hidden">Cancel</button>
+        </div>
+    </form>
+
+    <h3>Existing mail aliases</h3>
+    <table id="alias_table" class="table">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Alias<br></th>
+                <th>Forwards To</th>
+                <th>Permitted Senders</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <p class="help-text">hostmaster@, postmaster@, admin@ and abuse@ email addresses are required on some domains.</p>
+
+    <div style="display: none">
+        <table>
+            <tr id="alias-template">
+                <td class="actions">
+                    <a href="#" data-action="edit" class="edit" title="Edit Alias">
+                        <span class="glyphicon glyphicon-pencil"></span>
+                    </a>
+                    <a href="#" data-action="remove" class="remove" title="Remove Alias">
+                        <span class="glyphicon glyphicon-trash"></span>
+                    </a>
+                </td>
+                <td class="address"></td>
+                <td class="forwardsTo"></td>
+                <td class="senders"></td>
+            </tr>
+        </table>
+    </div>
+
+    <h3>Mail aliases API (advanced)</h3>
+
+    <p>Use your box&rsquo;s mail aliases API to add and remove mail aliases from the command-line or custom services you
+        build.</p>
+
+    <p>Usage:</p>
+
+    <pre>curl -X <b>VERB</b> [-d "<b>parameters</b>"] --user {email}:{password} https://{{hostname}}/admin/mail/aliases[<b>action</b>]</pre>
+
+    <p>Brackets denote an optional argument. Please note that the POST body <code>parameters</code> must be URL-encoded.
+    </p>
+
+    <p>The email and password given to the <code>--user</code> option must be an administrative user on this system.</p>
+
+    <h4 class="mb-0">Verbs</h4>
+
+    <table class="table mt-1">
+        <thead>
+            <th>Verb</th>
+            <th>Action</th>
+            <th></th>
+        </thead>
+        <tr>
+            <td>GET</td>
+            <td><i>(none)</i></td>
+            <td>Returns a list of existing mail aliases. Adding <code>?format=json</code> to the URL will give
+                JSON-encoded results.
+            </td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>/add</td>
+            <td>Adds a new mail alias. Required POST-body parameters are <code>address</code> and
+                <code>forwards_to</code>.
+            </td>
+        </tr>
+        <tr>
+            <td>POST</td>
+            <td>/remove</td>
+            <td>Removes a mail alias. Required POST-body parameter is <code>address</code>.</td>
+        </tr>
+    </table>
+
+    <h4>Examples:</h4>
+
+    <p>Try these examples. For simplicity the examples omit the <code>--user me@mydomain.com:yourpassword</code> command
+        line argument which you must fill in with your email address and password.</p>
+
+    <pre># Gives a JSON-encoded list of all mail aliases
+curl -X GET https://{{hostname}}/admin/mail/aliases?format=json
+
+# Adds a new alias
+curl -X POST -d "address=new_alias@mydomail.com" -d "forwards_to=my_email@mydomain.com" https://{{hostname}}/admin/mail/aliases/add
+
+# Removes an alias
+curl -X POST -d "address=new_alias@mydomail.com" https://{{hostname}}/admin/mail/aliases/remove
+</pre>
+
+    <script type="module" src="/admin/static/js/pages/aliases.js"></script>
+
+</div>
+            </div>
+
+            <div id="panel_sync_guide" class="admin_panel">
+<div class="panel">
+	<div class="panel-heading">
+		<h2 class="panel-title">Contacts &amp; Calendar Synchronization</h2>
+	</div>
+
+	<p>This box can hold your contacts and calendar, just like it holds your email.</p>
+
+	<hr>
+
+	<div class="cards-grid">
+		<div>
+			<h4>In your browser</h4>
+
+			<p>You can edit your contacts and calendar from your web browser.</p>
+
+			<table class="table">
+			<thead><tr><th>For...</th> <th>Visit this URL</th></tr></thead>
+			<tr><th>Contacts</th> <td><a href="https://{{hostname}}/cloud/contacts">https://{{hostname}}/cloud/contacts</a></td></tr>
+			<tr><th>Calendar</th> <td><a href="https://{{hostname}}/cloud/calendar">https://{{hostname}}/cloud/calendar</a></td></tr>
+			</table>
+
+			<p>Log in settings are the same as with <a href="#mail-guide">mail</a>: your
+			complete email address and your mail password.</p>
+		</div>
+
+		<div>
+			<h4>On your mobile device</h4>
+
+			<p>If you set up your <a href="#mail-guide">mail</a> using Exchange/ActiveSync,
+			your contacts and calendar may already appear on your device.</p>
+			<p>Otherwise, the app below can synchronize your contacts and calendar to your Android phone.</p>
+
+			<table class="table">
+			<thead><tr><th>Google Play</th> <th>F-Droid</th></tr></thead>
+			<tr><td><a href="https://play.google.com/store/apps/details?id=at.bitfire.davdroid">DAVx⁵</a> (paid)</td> <td><a href="https://f-droid.org/packages/at.bitfire.davdroid/">DAVx⁵</a> (free)</td></tr>
+			</table>
+
+			<p>Use the following settings:</p>
+
+			<table class="table">
+			<tr><td>Account Type</td> <td>CardDAV or CalDAV</td></tr>
+			<tr><td>Server Name</td> <td>{{hostname}}</td></tr>
+			<tr><td>Use SSL</td> <td>Yes</td></tr>
+			<tr><td>Username</td> <td>Your complete email address.</td></tr>
+			<tr><td>Password</td> <td>Your mail password.</td></tr>
+			</table>
+		</div>
+	</div>
+</div>
+            </div>
+
+            <div id="panel_web" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">Static Web Hosting</h2>
+    </div>
+
+    <p>This machine is serving a simple, static website at <a href="https://{{hostname}}">https://{{hostname}}</a> and
+        at all domain names that you set up an email user or alias for.</p>
+
+    <h3>Uploading web files</h3>
+
+    <p>You can replace the default website with your own HTML pages and other static files. This control panel won&rsquo;t
+        help you design a website, but once you have <tt>.html</tt> files you can upload them following these
+        instructions:</p>
+
+    <ol>
+        <li>Ensure that any domains you are publishing a website for have no problems on the <a href="#system_status">Status
+            Checks</a> page.
+        </li>
+
+        <li>On your personal computer, install an SSH file transfer program such as <a
+                href="https://filezilla-project.org/">FileZilla</a> or <a href="https://man.openbsd.org/scp.1">scp</a>.
+        </li>
+
+        <li>Log in to this machine with the file transfer program. The server is <strong>{{hostname}}</strong>, the
+            protocol is SSH or SFTP, and use the <strong>SSH login credentials</strong> that you used when you
+            originally created this machine at your cloud host provider. This is <strong>not</strong> what you use to
+            log in either for email or this control panel. Your SSH credentials probably involves a private key file.
+        </li>
+
+        <li>Upload your <tt>.html</tt> or other files to the directory <tt>{{storage_root}}/www/default</tt> on this
+            machine. They will appear directly and immediately on the web.
+        </li>
+
+        <li>The websites set up on this machine are listed in the table below with where to put the files for each
+            website.
+        </li>
+
+        <table id="web_domains_existing" class="table">
+            <thead>
+                <tr>
+                    <th>Site</th>
+                    <th>Directory for Files</th>
+                    <th/>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+
+        <p>To add a domain to this table, create a dummy <a href="#users">mail user</a> or <a href="#aliases">alias</a>
+            on the domain first and see the <a href="https://mailinabox.email/guide.html#domain-name-configuration">setup
+                guide</a> for adding nameserver records to the new domain at your registrar (but <i>not</i> glue
+            records).</p>
+
+    </ol>
+
+    <script type="module" src="/admin/static/js/pages/web.js"></script>
+
+</div>
+            </div>
+
+            <div id="panel_tls" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">TLS (SSL) Certificates</h2>
+    </div>
+
+    <div class="row">
+
+        <p>A TLS (formerly called SSL) certificate is a cryptographic file that proves to anyone connecting to a web
+            address that the connection is secure between you and the owner of that address.</p>
+
+        <p>You need a TLS certificate for this box&rsquo;s hostname ({{hostname}}) and every other domain name and
+            subdomain that this box is hosting a website for (see the list below).</p>
+
+        <div id="ssl_provision">
+            <h3>Provision certificates</h3>
+
+            <div id="ssl_provision_p" style="display: none">
+                <button id="provision-tls-btn" class="btn btn-primary">Provision</button>
+                <p>A TLS certificate can be automatically provisioned from <a href="https://letsencrypt.org/"
+                                                                              target="_blank">Let&rsquo;s Encrypt</a>, a
+                    free TLS certificate provider, for:<br>
+                    <span class="text-primary"></span></p>
+            </div>
+
+            <div id="ssl_provision_result"></div>
+        </div>
+
+        <h3>Certificate status</h3>
+
+        <p>Certificates expire after a period of time. All certificates will be automatically
+            renewed through <a href="https://letsencrypt.org/" target="_blank">Let&rsquo;s Encrypt</a> 14 days prior to
+            expiration.</p>
+
+        <table id="ssl_domains" class="table" style="display: none">
+            <thead>
+                <tr>
+                    <th>Domain</th>
+                    <th>Certificate Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+
+
+        <h3 id="ssl_install_header">Install certificate</h3>
+
+        <p>If you don't want to use our automatic Let's Encrypt integration, you can give any other certificate provider
+            a try. You can generate the needed CSR below.</p>
+
+        <p>Which domain are you getting a certificate for?</p>
+
+        <p><select id="ssldomain" class="form-control"></select></p>
+
+        <p>(A multi-domain or wildcard certificate will be automatically applied to any domains it is valid for besides
+            the one you choose above.)</p>
+
+        <p>What country are you in? This is required by some TLS certificate providers. You may leave this blank if you
+            know your TLS certificate provider doesn't require it.</p>
+
+        <p><select id="sslcc" class="form-control">
+            <option value="">(Select)</option>
+            {% for code, name in csr_country_codes %}
+            <option value="{{code}}">{{name}}</option>
+            {% endfor %}
+        </select></p>
+
+        <div id="csr_info" style="display: none">
+            <p>You will need to provide the certificate provider this Certificate Signing Request (CSR):</p>
+
+            <pre id="ssl_csr"></pre>
+
+            <p><small>The CSR is safe to share. It can only be used in combination with a secret key stored on this
+                machine.</small></p>
+
+            <p>The certificate provider will then provide you with a TLS/SSL certificate. They may also provide you with
+                an intermediate chain. Paste each separately into the boxes below:</p>
+
+            <p>TLS/SSL certificate:</p>
+            <p><textarea id="ssl_paste_cert" class="form-control"
+                         placeholder="-----BEGIN CERTIFICATE-----&#xA;stuff here&#xA;-----END CERTIFICATE-----"></textarea>
+            </p>
+
+            <p>TLS/SSL intermediate chain (if provided):</p>
+            <p><textarea id="ssl_paste_chain" class="form-control"
+                         placeholder="-----BEGIN CERTIFICATE-----&#xA;stuff here&#xA;-----END CERTIFICATE-----&#xA;-----BEGIN CERTIFICATE-----&#xA;more stuff here&#xA;-----END CERTIFICATE-----"></textarea>
+            </p>
+
+            <p>After you paste in the information, click the install button.</p>
+
+            <button id="install-cert-btn" class="btn-primary">Install</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="/admin/static/js/pages/ssl.js"></script>
+            </div>
+
+            <div id="panel_munin" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h2 class="panel-title">Munin Monitoring</h2>
+    </div>
+
+    <style>
+    </style>
+
+    <p>Opening munin in a new tab... You may need to allow pop-ups for this site.</p>
+
+    <script type="module" src="/admin/static/js/pages/munin.js"></script>
+
+</div>
+            </div>
+
+            <div id="panel_404" class="admin_panel">
+<div class="panel">
+    <div class="panel-heading">
+        <h1 class="panel-title">404</h1>
+        <p class="panel-subtitle">Page Not Found</p>
+    </div>
+    <div>
+        <p>Sorry, the page you are looking for does not exist.</p>
+        <p>Please check the URL or return to the <a href="/admin">admin dashboard</a>.</p>
+    </div>
+</div>            </div>
+
+            <footer>
+                <p>Powered by <a href="https://mailinabox.email" target="_blank">Mail-in-a-Box</a> • Built with care for privacy and control</p>
+            </footer>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="ajax_loading_indicator">
+            <div class="loading-spinner"></div>
+        </div>
+
+        <!-- Modal Dialog -->
+        <dialog class="modal" id="global_modal">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h2 class="modal-title"></h2>
+                </div>
+                <div class="modal-body"></div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="modal-cancel-btn">Cancel</button>
+                    <button class="btn btn-primary" id="modal-confirm-btn">Confirm</button>
+                </div>
+            </div>
+        </dialog>
+
+        <!-- Application JavaScript Module -->
+        <script type="module">
+            // Import main app module
+            import('/admin/static/js/app.js').catch(err => {
+                console.warn('App module not found, running in preview mode', err);
+            });
+        </script>
+    </body>
+    <style>
+        .admin_panel, .info-card, #reboot-needed, #reboot-not-needed {
+            display: block !important;
+        }
+    </style>
+</html>

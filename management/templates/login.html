@@ -1,4 +1,4 @@
-<div class="panel" style="max-width: 500px; margin: 80px auto;">
+<div class="panel login-panel">
     <div class="panel-heading text-center">
         <h1 class="panel-title">{{hostname}}</h1>
         <p class="panel-subtitle">Log in to your Mail-in-a-Box control panel</p>
@@ -45,16 +45,15 @@ sudo management/cli.py user make-admin me@{{hostname}}</pre>
     </form>
 
     <style>
+        .login-panel {
+            max-width: 500px;
+            margin: 40px auto;
+        }
+
         #loginOtp { display: none; }
 
         #loginForm.is-twofactor #loginOtp {
             display: block;
-        }
-
-        .help-text {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 8px;
         }
 
         .login-remember {
@@ -69,83 +68,12 @@ sudo management/cli.py user make-admin me@{{hostname}}</pre>
             user-select: none;
         }
 
-        pre {
-            background: var(--bg-surface);
-            padding: 12px;
-            border-radius: var(--radius-md);
-            overflow-x: auto;
-            color: var(--text-primary);
+        @media (max-width: 768px) {
+            .login-panel {
+                margin: 20px auto;
+            }
         }
     </style>
 
-    <script type="module">
-        import { api } from '/admin/static/js/core/api.js';
-        import { getState, setState } from '/admin/static/js/core/state.js';
-        import { saveCredentials, clear } from '/admin/static/js/core/auth.js'
-        import { showPanel } from '/admin/static/js/core/router.js'
-
-        function do_login() {
-            const emailInput = document.getElementById('loginEmail');
-            const passwordInput = document.getElementById('loginPassword');
-            const otpInput = document.getElementById('loginOtpInput');
-            const rememberCheckbox = document.getElementById('loginRemember');
-
-            const email = emailInput.value.trim();
-            const password = passwordInput.value;
-            const otp = otpInput.value;
-
-            if (!email) { show_modal_error('Login Failed', 'Enter your email address.', () => emailInput.focus()); return false; }
-            if (!password) { show_modal_error('Login Failed', 'Enter your email password.', () => passwordInput.focus()); return false; }
-
-            setState({ credentials: { username: email, session_key: password, privileges: [] } });
-
-            api('/login','POST',{},(response)=>{
-                if (response.status !== 'ok') {
-                    if (response.status === 'missing-totp-token' || (response.status === 'invalid' && response.reason === 'invalid-totp-token')) {
-                        document.getElementById('loginForm').classList.add('is-twofactor');
-                        if (response.reason === 'invalid-totp-token') {
-                            show_modal_error('Login Failed', 'Incorrect two factor authentication token.');
-                        } else { setTimeout(() => otpInput.focus(), 100); }
-                    } else {
-                        document.getElementById('loginForm').classList.remove('is-twofactor');
-                        show_modal_error('Login Failed', response.reason);
-                        clear();
-                    }
-                } else if (!response.api_key) {
-                    show_modal_error('Login Failed', 'You are not an administrator on this system.');
-                    clear();
-                } else {
-                    const credentials = { username: response.email, session_key: response.api_key, privileges: response.privileges };
-                    emailInput.value = ''; passwordInput.value = ''; otpInput.value = '';
-                    document.getElementById('loginForm').classList.remove('is-twofactor');
-                    saveCredentials(credentials, rememberCheckbox.checked);
-                    setTimeout(() => {
-                        const state = getState();
-                        let targetPanel = window.location.hash ? window.location.hash.substring(1) : (!state.switchBackToPanel || state.switchBackToPanel === 'login') ? 'welcome' : state.switchBackToPanel;
-                        showPanel(targetPanel);
-                    }, 300);
-                }
-            }, undefined, { 'x-auth-token': otp });
-
-            return false;
-        }
-
-        function show_login() {
-            const form = document.getElementById('loginForm');
-            const emailInput = document.getElementById('loginEmail');
-            const passwordInput = document.getElementById('loginPassword');
-            const otpInput = document.getElementById('loginOtpInput');
-
-            form.classList.remove('is-twofactor');
-            otpInput.value = '';
-
-            if (!emailInput.value.trim()) { emailInput.focus(); }
-            else if (!passwordInput.value) { passwordInput.focus(); }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const loginForm = document.getElementById('loginForm');
-            if (loginForm) loginForm.addEventListener('submit', (e) => { e.preventDefault(); do_login(); });
-        });
-    </script>
+    <script type="module" src="/admin/static/js/pages/login.js"></script>
 </div>

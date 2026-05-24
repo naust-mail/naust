@@ -189,6 +189,46 @@ function aliasesRemove(elem) {
     });
 }
 
+const handleAddAliasSubmit = (e) => {
+    e.preventDefault();
+    doAddAlias();
+};
+
+const handleAliasCancel = (e) => {
+    e.preventDefault();
+    aliasesResetForm();
+};
+
+const handleNotAdvancedChange = () => {
+    const notAdvancedRadio = document.getElementById('addaliasForwardsToNotAdvanced');
+    const sendersDiv = document.getElementById('addaliasForwardsToDiv');
+    if (notAdvancedRadio.checked) {
+        sendersDiv.style.display = 'none';
+    }
+};
+
+const handleAdvancedChange = () => {
+    const advancedRadio = document.getElementById('addaliasForwardsToAdvanced');
+    const sendersDiv = document.getElementById('addaliasForwardsToDiv');
+    if (advancedRadio.checked) {
+        sendersDiv.style.display = 'block';
+    }
+};
+
+const handleAliasTableClick = (e) => {
+    const action = e.target.closest('a')?.dataset.action;
+    if (!action) return;
+
+    e.preventDefault();
+    const elem = e.target.closest('a');
+
+    if (action === 'edit') {
+        aliasesEdit(elem);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    if (action === 'remove') aliasesRemove(elem);
+};
+
 export function initAliases() {
     // Load aliases immediately
     showAliases();
@@ -196,57 +236,35 @@ export function initAliases() {
     // Form submission
     const addForm = document.getElementById('addalias-form');
     if (addForm) {
-        addForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            doAddAlias();
-        });
+        addForm.removeEventListener('submit', handleAddAliasSubmit);
+        addForm.addEventListener('submit', handleAddAliasSubmit);
     }
 
     // Cancel button
     const cancelBtn = document.getElementById('alias-cancel');
     if (cancelBtn) {
-        cancelBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            aliasesResetForm();
-        });
+        cancelBtn.removeEventListener('click', handleAliasCancel);
+        cancelBtn.addEventListener('click', handleAliasCancel);
     }
 
     // Radio button toggles for permitted senders
     const notAdvancedRadio = document.getElementById('addaliasForwardsToNotAdvanced');
     const advancedRadio = document.getElementById('addaliasForwardsToAdvanced');
-    const sendersDiv = document.getElementById('addaliasForwardsToDiv');
 
     if (notAdvancedRadio) {
-        notAdvancedRadio.addEventListener('change', () => {
-            if (notAdvancedRadio.checked) {
-                sendersDiv.style.display = 'none';
-            }
-        });
+        notAdvancedRadio.removeEventListener('change', handleNotAdvancedChange);
+        notAdvancedRadio.addEventListener('change', handleNotAdvancedChange);
     }
 
     if (advancedRadio) {
-        advancedRadio.addEventListener('change', () => {
-            if (advancedRadio.checked) {
-                sendersDiv.style.display = 'block';
-            }
-        });
+        advancedRadio.removeEventListener('change', handleAdvancedChange);
+        advancedRadio.addEventListener('change', handleAdvancedChange);
     }
 
     // Delegate edit/remove actions in table
     const aliasTable = document.getElementById('alias_table');
     if (aliasTable) {
-        aliasTable.addEventListener('click', (e) => {
-            const action = e.target.closest('a')?.dataset.action;
-            if (!action) return;
-
-            e.preventDefault();
-            const elem = e.target.closest('a');
-
-            if (action === 'edit') {
-                aliasesEdit(elem);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-            if (action === 'remove') aliasesRemove(elem);
-        });
+        aliasTable.removeEventListener('click', handleAliasTableClick);
+        aliasTable.addEventListener('click', handleAliasTableClick);
     }
 }

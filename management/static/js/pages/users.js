@@ -332,6 +332,28 @@ function generateRandomPassword() {
     return false;
 }
 
+const handleAddUserSubmit = (e) => {
+    e.preventDefault();
+    doAddUser();
+};
+
+const handleGeneratePassword = (e) => {
+    e.preventDefault();
+    generateRandomPassword();
+};
+
+const handleUserTableClick = (e) => {
+    const action = e.target.dataset.action;
+    if (!action) return;
+
+    e.preventDefault();
+    const elem = e.target;
+
+    if (action === 'set-password') usersSetPassword(elem);
+    if (action === 'set-quota') usersSetQuota(elem);
+    if (action === 'remove-user') usersRemove(elem);
+};
+
 export function initUserManagement() {
     // Load table immediately
     showUsers();
@@ -339,34 +361,21 @@ export function initUserManagement() {
     // Add user form submission
     const addForm = document.getElementById('adduser_form');
     if (addForm) {
-        addForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            doAddUser();
-        });
+        addForm.removeEventListener('submit', handleAddUserSubmit);
+        addForm.addEventListener('submit', handleAddUserSubmit);
     }
 
     // Generate random password link
     const generatePwLink = document.getElementById('generate-random-password');
     if (generatePwLink) {
-        generatePwLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            generateRandomPassword();
-        });
+        generatePwLink.removeEventListener('click', handleGeneratePassword);
+        generatePwLink.addEventListener('click', handleGeneratePassword);
     }
 
     // Delegate button clicks for password, quota, remove, etc.
     const table = document.getElementById('user_table');
     if (table) {
-        table.addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
-            if (!action) return;
-
-            e.preventDefault();
-            const elem = e.target;
-
-            if (action === 'set-password') usersSetPassword(elem);
-            if (action === 'set-quota') usersSetQuota(elem);
-            if (action === 'remove-user') usersRemove(elem);
-        });
+        table.removeEventListener('click', handleUserTableClick);
+        table.addEventListener('click', handleUserTableClick);
     }
 }

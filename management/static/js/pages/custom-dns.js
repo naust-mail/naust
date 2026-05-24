@@ -4,6 +4,29 @@ import { showModalError } from '../core/ui.js';
 let customDnsData = [];
 let customDnsDataSortOrder = 'qname';
 
+const handleCustomDnsSubmit = (e) => {
+    e.preventDefault();
+    doSetCustomDns();
+};
+
+const handleSecondaryDnsSubmit = (e) => {
+    e.preventDefault();
+    doSetSecondaryDns();
+};
+
+const handleSortClick = (e) => {
+    e.preventDefault();
+    customDnsDataSortOrder = e.target.dataset.sort;
+    showCurrentCustomDnsUpdateAfterSort();
+};
+
+const handleTableClick = (e) => {
+    if (e.target.classList.contains('delete-dns-record')) {
+        e.preventDefault();
+        deleteCustomDnsRecord(e.target);
+    }
+};
+
 export function initCustomDns() {
     // Load secondary nameserver
     api("/dns/secondary-nameserver", "GET", {}, (data) => {
@@ -29,45 +52,35 @@ export function initCustomDns() {
     // Type select change handler
     const typeSelect = document.getElementById('customdnsType');
     if (typeSelect) {
+        typeSelect.removeEventListener('change', showCustomdnsRtypeHint);
         typeSelect.addEventListener('change', showCustomdnsRtypeHint);
     }
 
     // Custom DNS form
     const customdnsForm = document.getElementById('customdns-form');
     if (customdnsForm) {
-        customdnsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            doSetCustomDns();
-        });
+        customdnsForm.removeEventListener('submit', handleCustomDnsSubmit);
+        customdnsForm.addEventListener('submit', handleCustomDnsSubmit);
     }
 
     // Secondary DNS form
     const secondarydnsForm = document.getElementById('secondarydns-form');
     if (secondarydnsForm) {
-        secondarydnsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            doSetSecondaryDns();
-        });
+        secondarydnsForm.removeEventListener('submit', handleSecondaryDnsSubmit);
+        secondarydnsForm.addEventListener('submit', handleSecondaryDnsSubmit);
     }
 
     // Sort links
     document.querySelectorAll('[data-sort]').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            customDnsDataSortOrder = e.target.dataset.sort;
-            showCurrentCustomDnsUpdateAfterSort();
-        });
+        link.removeEventListener('click', handleSortClick);
+        link.addEventListener('click', handleSortClick);
     });
 
     // Delete links delegation
     const table = document.getElementById('custom-dns-current');
     if (table) {
-        table.addEventListener('click', (e) => {
-            if (e.target.classList.contains('delete-dns-record')) {
-                e.preventDefault();
-                deleteCustomDnsRecord(e.target);
-            }
-        });
+        table.removeEventListener('click', handleTableClick);
+        table.addEventListener('click', handleTableClick);
     }
 }
 

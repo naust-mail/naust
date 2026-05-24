@@ -26,7 +26,9 @@ export const api = (url, method, data, callback, callback_error, headers, skipAu
   const options = {
     method: method,
     cache: 'no-cache',
-    headers: {}
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    }
   };
 
   Object.assign(options.headers, headers);
@@ -86,7 +88,7 @@ export const api = (url, method, data, callback, callback_error, headers, skipAu
 
       // Handle errors
       if (!response.ok) {
-        const error = result.message || result || 'Something went wrong, sorry.';
+        const error = result.reason || result.message || result || 'Something went wrong, sorry.';
         if (callback_error) {
           callback_error(error, response);
         } else {
@@ -97,7 +99,7 @@ export const api = (url, method, data, callback, callback_error, headers, skipAu
 
       // Check for API error status
       if (result && result.status === 'error') {
-        showModalError('Error', result.message);
+        showModalError('Error', result.reason || result.message || 'An error occurred');
         return;
       }
 

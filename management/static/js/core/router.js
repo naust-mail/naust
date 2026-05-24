@@ -13,6 +13,7 @@ import { initExternalDns } from "../pages/external-dns.js";
 import { initWeb } from "../pages/web.js";
 import { showMunin } from "../pages/munin.js";
 import { showMfa } from "../pages/mfa.js";
+import { showLogin } from "../pages/login.js";
 
 const pageControllers = {
     'system_status': () => {
@@ -44,6 +45,9 @@ const pageControllers = {
     },
     'mfa': () => {
         showMfa();
+    },
+    'login': () => {
+      showLogin();
     }
 };
 

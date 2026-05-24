@@ -204,6 +204,11 @@ function copyPubKeyToClipboard() {
     navigator.clipboard.writeText(sshKey);
 }
 
+const handleBackupSubmit = (e) => {
+    e.preventDefault();
+    setCustomBackup();
+};
+
 export function onBackupInit() {
     // Copy button setup
     const copyBtnDiv = document.getElementById('copy_pub_key_div');
@@ -212,6 +217,7 @@ export function onBackupInit() {
     } else {
         const copyBtn = document.getElementById('copy-pub-key-btn');
         if (copyBtn) {
+            copyBtn.removeEventListener('click', copyPubKeyToClipboard);
             copyBtn.addEventListener('click', copyPubKeyToClipboard);
         }
     }
@@ -219,16 +225,15 @@ export function onBackupInit() {
     // Backup target type change
     const targetTypeSelect = document.getElementById('backup-target-type');
     if (targetTypeSelect) {
+        targetTypeSelect.removeEventListener('change', toggleForm);
         targetTypeSelect.addEventListener('change', toggleForm);
     }
 
     // Form submission
     const backupForm = document.getElementById('backup-config-form');
     if (backupForm) {
-        backupForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            setCustomBackup();
-        });
+        backupForm.removeEventListener('submit', handleBackupSubmit);
+        backupForm.addEventListener('submit', handleBackupSubmit);
     }
 
     // Call API to initialize backup page

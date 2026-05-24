@@ -1,6 +1,10 @@
 Mail-in-a-Box
 =============
 
+<div align="center">
+    <img src=".github/dash.png" alt="Logo" width="600" >
+</div>
+
 By [@JoshData](https://github.com/JoshData) and [contributors](https://github.com/mail-in-a-box/mailinabox/graphs/contributors).
 
 Mail-in-a-Box helps individuals take back control of their email by defining a one-click, easy-to-deploy SMTP+everything else server: a mail server in a box.
@@ -79,7 +83,7 @@ This is a challenge faced by everyone who runs their own mail server, with or wi
 Contributing and Development
 ----------------------------
 
-Mail-in-a-Box is an open source project. Your contributions and pull requests are welcome. See [CONTRIBUTING](CONTRIBUTING.md) to get started. 
+Mail-in-a-Box is an open source project. Your contributions and pull requests are welcome. See [CONTRIBUTING](CONTRIBUTING.md) to get started.
 
 
 The Acknowledgements
@@ -89,6 +93,7 @@ This project was inspired in part by the ["NSA-proof your email in 2 hours"](htt
 
 Mail-in-a-Box is similar to [iRedMail](http://www.iredmail.org/) and [Modoboa](https://github.com/tonioo/modoboa).
 
+The new rework of the Mail-in-a-Box control panel makes use of [twemoji](https://github.com/jdecked/twemoji) - this feature is optional, and can be disabled by deleting the relevant files in `./management/static/twemoji`. Twemoji is licensed under the [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
 
 The History
 -----------

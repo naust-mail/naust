@@ -1,6 +1,5 @@
 import { api } from '../core/api.js';
 import { showModalError } from '../core/ui.js';
-import { escapeHtml } from '/admin/static/js/utils/dom.js';
 
 export function show_tls(keepProvisioningShown = false) {
     api("/ssl/status", "GET", {}, (res) => {
@@ -178,6 +177,24 @@ function provisionTlsCert() {
     });
 }
 
+const handleProvisionClick = (e) => {
+    e.preventDefault();
+    provisionTlsCert();
+};
+
+const handleInstallCertClick = (e) => {
+    e.preventDefault();
+    installCert();
+};
+
+const handleSslTableClick = (e) => {
+    const action = e.target.dataset.action;
+    if (action === 'install-cert') {
+        e.preventDefault();
+        sslInstall(e.target);
+    }
+};
+
 // Initialize event listeners
 export function initSsl() {
     // Load SSL status
@@ -186,41 +203,34 @@ export function initSsl() {
     // Provision button
     const provisionBtn = document.getElementById('provision-tls-btn');
     if (provisionBtn) {
-        provisionBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            provisionTlsCert();
-        });
+        provisionBtn.removeEventListener('click', handleProvisionClick);
+        provisionBtn.addEventListener('click', handleProvisionClick);
     }
 
     // Domain and country selects
     const ssldomainSelect = document.getElementById('ssldomain');
     if (ssldomainSelect) {
+        ssldomainSelect.removeEventListener('change', showCsr);
         ssldomainSelect.addEventListener('change', showCsr);
     }
 
     const sslccSelect = document.getElementById('sslcc');
     if (sslccSelect) {
+        sslccSelect.removeEventListener('change', showCsr);
         sslccSelect.addEventListener('change', showCsr);
     }
 
     // Install cert button
     const installBtn = document.getElementById('install-cert-btn');
     if (installBtn) {
-        installBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            installCert();
-        });
+        installBtn.removeEventListener('click', handleInstallCertClick);
+        installBtn.addEventListener('click', handleInstallCertClick);
     }
 
     // Delegate cert install links in table
     const sslDomainsTable = document.getElementById('ssl_domains');
     if (sslDomainsTable) {
-        sslDomainsTable.addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
-            if (action === 'install-cert') {
-                e.preventDefault();
-                sslInstall(e.target);
-            }
-        });
+        sslDomainsTable.removeEventListener('click', handleSslTableClick);
+        sslDomainsTable.addEventListener('click', handleSslTableClick);
     }
 }

@@ -7,11 +7,15 @@ import { state, subscribe } from './core/state.js';
 import { loadStoredCredentials, logout } from './core/auth.js';
 import { showPanel, initRouter } from './core/router.js';
 import { updateMenuVisibility, showModalConfirm } from './core/ui.js';
+import { initNavigation } from './core/navigation.js';
 
 /**
  * Initialize the application
  */
 const init = async () => {
+  // Initialize navigation
+  initNavigation();
+
   // Setup logout button
   const logoutLink = document.getElementById('logout-link');
   if (logoutLink) {
