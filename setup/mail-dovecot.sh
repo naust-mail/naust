@@ -162,8 +162,7 @@ service lmtp {
   }
 }
 
-# Enable imap-login on localhost to allow the user_external plugin
-# for Nextcloud to do imap authentication. (See #1577)
+# Enable imap-login on localhost for webmail (oxi.email) IMAP authentication.
 service imap-login {
   inet_listener imap {
     address = 127.0.0.1

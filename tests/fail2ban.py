@@ -10,11 +10,11 @@ import sys, os, time
 
 # parse command line
 
-if len(sys.argv) != 4:
-	print('Usage: tests/fail2ban.py "ssh user@hostname" hostname owncloud_user')
+if len(sys.argv) != 3:
+	print('Usage: tests/fail2ban.py "ssh user@hostname" hostname')
 	sys.exit(1)
 
-ssh_command, hostname, owncloud_user = sys.argv[1:4]
+ssh_command, hostname = sys.argv[1:3]
 
 # define some test types
 
@@ -112,6 +112,26 @@ def managesieve_test():
 		pass
 	finally:
 		M.logout() # shuts down connection, has nothing to do with login()
+
+def filebrowser_test():
+	import requests
+	try:
+		r = requests.post(
+			"https://" + hostname + "/files/api/login",
+			json={"username": "fakeuser", "password": "fakepassword"},
+			headers={'User-Agent': 'Mail-in-a-Box fail2ban tester'},
+			timeout=8,
+			verify=False)
+	except requests.exceptions.ConnectTimeout:
+		raise IsBlocked
+	except requests.exceptions.ConnectionError as e:
+		if "Connection refused" in str(e):
+			raise IsBlocked
+		raise
+	if r.status_code != 403:
+		r.raise_for_status()
+		msg = f"Got unexpected status code {r.status_code}."
+		raise OSError(msg)
 
 def http_test(url, expected_status, postdata=None, qsargs=None, auth=None):
 	import urllib.parse
@@ -216,10 +236,44 @@ def run_test(testfunc, args, count, within_seconds, parallel):
 	print("not blocked!")
 	return False
 
+def check_removed_endpoints():
+	"""Verify that removed services return 404 and are not accidentally accessible."""
+	import requests
+
+	removed = [
+		"/cloud/",
+		"/cloud/remote.php/webdav",
+		"/.well-known/caldav",
+		"/.well-known/carddav",
+	]
+
+	print("Checking removed endpoints return 404...")
+	ok = True
+	for path in removed:
+		url = "https://" + hostname + path
+		try:
+			r = requests.get(url, timeout=8, verify=False,
+				headers={'User-Agent': 'Mail-in-a-Box fail2ban tester'},
+				allow_redirects=True)
+			if r.status_code == 404:
+				print(f"  {path} -> 404 [OK]")
+			else:
+				print(f"  {path} -> {r.status_code} [UNEXPECTED - should be 404]")
+				ok = False
+		except Exception as e:
+			print(f"  {path} -> connection error: {e}")
+			ok = False
+	return ok
+
 ######################################################################
 
 if __name__ == "__main__":
 	# run tests
+
+	# Verify removed services are gone before testing fail2ban jails
+	if not check_removed_endpoints():
+		print("WARNING: Some removed endpoints are still responding - check nginx config.")
+		print()
 
 	# SMTP bans at 10 even though we say 20 in the config because we get
 	# doubled-up warnings in the logs, we'll let that be for now
@@ -240,8 +294,8 @@ if __name__ == "__main__":
 	# Munin via the Mail-in-a-Box control panel
 	run_test(http_test, ["/admin/munin/", 401], 20, 30, 1)
 
-	# ownCloud
-	run_test(http_test, ["/cloud/remote.php/webdav", 401, None, None, [owncloud_user, "aa"]], 20, 120, 1)
+	# FileBrowser
+	run_test(filebrowser_test, [], 20, 30, 1)
 
 	# restart fail2ban so that this client machine is no longer blocked
 	restart_fail2ban_service(final=True)

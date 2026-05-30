@@ -57,8 +57,7 @@ tools/editconf.py /etc/php/"$PHP_VER"/fpm/php.ini -c ';' \
 tools/editconf.py /etc/php/"$PHP_VER"/fpm/pool.d/www.conf -c ';' \
 	env[PATH]=/usr/local/bin:/usr/bin:/bin \
 
-# Configure php-fpm based on the amount of memory the machine has
-# This is based on the nextcloud manual for performance tuning: https://docs.nextcloud.com/server/17/admin_manual/installation/server_tuning.html
+# Configure php-fpm based on the amount of memory the machine has.
 # Some synchronisation issues can occur when many people access the site at once.
 # The pm=ondemand setting is used for memory constrained machines < 2GB, this is copied over from PR: 1216
 TOTAL_PHYSICAL_MEM=$(head -n 1 /proc/meminfo | awk '{print $2}' || /bin/true)

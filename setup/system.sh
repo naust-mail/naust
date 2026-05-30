@@ -110,8 +110,7 @@ hide_output add-apt-repository -y universe
 # Install the duplicity PPA.
 hide_output add-apt-repository -y ppa:duplicity-team/duplicity-release-git
 
-# Stock PHP is now 8.1, but we're transitioning through 8.0 because
-# of Nextcloud.
+# Stock PHP is 8.1+, but Z-Push requires 8.0, so we pin it via the ondrej PPA.
 hide_output add-apt-repository --y ppa:ondrej/php
 
 # ### Update Packages
@@ -163,7 +162,7 @@ fi
 # ### Set the system timezone
 #
 # Some systems are missing /etc/timezone, which we cat into the configs for
-# Z-Push and ownCloud, so we need to set it to something. Daily cron tasks
+# Z-Push, so we need to set it to something. Daily cron tasks
 # like the system backup are run at a time tied to the system timezone, so
 # letting the user choose will help us identify the right time to do those
 # things (i.e. late at night in whatever timezone the user actually lives
@@ -200,7 +199,6 @@ fi
 # * TLS private key (see `ssl.sh`, which calls `openssl genrsa`)
 # * DNSSEC signing keys (see `dns.sh`)
 # * our management server's API key (via Python's os.urandom method)
-# * Roundcube's SECRET_KEY (`webmail.sh`)
 #
 # Why /dev/urandom? It's the same as /dev/random, except that it doesn't wait
 # for a constant new stream of entropy. In practice, we only need a little
@@ -379,10 +377,10 @@ cat conf/fail2ban/jails.conf \
 cp -f conf/fail2ban/filter.d/* /etc/fail2ban/filter.d/
 
 # On first installation, the log files that the jails look at don't all exist.
-# e.g., The roundcube error log isn't normally created until someone logs into
-# Roundcube for the first time. This causes fail2ban to fail to start. Later
-# scripts will ensure the files exist and then fail2ban is given another
-# restart at the very end of setup.
+# e.g., The FileBrowser log isn't created until FileBrowser starts for the
+# first time. This causes fail2ban to fail to start. Later scripts will ensure
+# the files exist and then fail2ban is given another restart at the very end of
+# setup.
 restart_service fail2ban
 
 systemctl enable fail2ban
