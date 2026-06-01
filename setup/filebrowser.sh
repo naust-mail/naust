@@ -11,7 +11,7 @@ echo "Installing FileBrowser..."
 # To get the hash: run this script once with a wrong hash; the correct sha1
 # is printed in the error. Or: sha1sum linux-amd64-filebrowser.tar.gz
 FB_VERSION=v2.63.11
-FB_HASH=f85c3c33d044b3e5c2be8c4ca96a64e9c9e45ef7
+FB_HASH=4bc72dad029d531d153b58bd63a3dabf74c0b395
 
 # Skip download if the installed version already matches.
 needs_update=0
