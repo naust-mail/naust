@@ -109,9 +109,24 @@ User=www-data
 Group=www-data
 Restart=on-failure
 RestartSec=5
+WorkingDirectory=/usr/local/share/oxi-email
+
+# Sandboxing
 NoNewPrivileges=true
 PrivateTmp=true
-WorkingDirectory=/usr/local/share/oxi-email
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$STORAGE_ROOT/oxi /etc/oxi
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
 
 [Install]
 WantedBy=multi-user.target

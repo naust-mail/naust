@@ -50,11 +50,14 @@ import sys, json, imaplib, ssl, socket
 
 socket.setdefaulttimeout(5)
 
-data = json.load(sys.stdin)
-username = data.get('username', '')
-password = data.get('password', '')
-
 try:
+    data = json.load(sys.stdin)
+    username = data.get('username', '')
+    password = data.get('password', '')
+
+    if not username or not password:
+        sys.exit(1)
+
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
@@ -67,7 +70,7 @@ except imaplib.IMAP4.error:
     # Bad credentials.
     sys.exit(1)
 except Exception:
-    # Dovecot unreachable or other connection error - distinct from bad creds.
+    # Dovecot unreachable, malformed input, or other connection error.
     sys.exit(2)
 EOF
 chmod 755 /usr/local/lib/filebrowser-auth.py
@@ -107,6 +110,23 @@ Restart=on-failure
 RestartSec=5
 StandardOutput=append:/var/log/filebrowser.log
 StandardError=append:/var/log/filebrowser.log
+
+# Sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$STORAGE_ROOT/files $STORAGE_ROOT/filebrowser /var/log/filebrowser.log
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
 
 [Install]
 WantedBy=multi-user.target

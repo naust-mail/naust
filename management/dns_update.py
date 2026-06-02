@@ -137,7 +137,7 @@ def build_zones(env):
 	from mailconfig import get_mail_domains
 	from web_update import get_web_domains
 	mail_domains = set(get_mail_domains(env))
-	mail_user_domains = set(get_mail_domains(env, users_only=True)) # i.e. will log in for mail, Nextcloud
+	mail_user_domains = set(get_mail_domains(env, users_only=True)) # i.e. will log in for mail
 	web_domains = set(get_web_domains(env))
 	auto_domains = web_domains - set(get_web_domains(env, include_auto=False))
 	domains |= auto_domains # www redirects not included in the initial list, see above

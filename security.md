@@ -68,7 +68,7 @@ If DNSSEC is enabled at the box's domain name's registrar, the SSHFP record that
 
 `fail2ban` provides some protection from brute-force login attacks (repeated logins that guess account passwords) by blocking offending IP addresses at the network level.
 
-The following services are protected: SSH, IMAP (dovecot), SMTP submission (postfix), webmail (roundcube), Nextcloud/CalDAV/CardDAV (over HTTP), and the Mail-in-a-Box control panel (over HTTP).
+The following services are protected: SSH, IMAP (dovecot), SMTP submission (postfix), webmail (oxi.email, via nginx access log), file manager (FileBrowser, via nginx access log), and the Mail-in-a-Box control panel (over HTTP).
 
 Some other services running on the box may be missing fail2ban filters.
 

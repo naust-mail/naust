@@ -1093,10 +1093,6 @@
                         </div>
                     </li>
 
-                    <li class="nav-item if-logged-in">
-                        <a href="#sync_guide" class="nav-link">Sync</a>
-                    </li>
-
                     <li class="nav-item if-logged-in-admin">
                         <a href="#web" class="nav-link">Web</a>
                     </li>
@@ -1241,16 +1237,6 @@
             <a href="#mail-guide" class="btn btn-default btn-sm">View Instructions</a>
         </div>
 
-        <div class="card welcome-guide-card">
-            <div class="welcome-guide-header">
-                <div class="welcome-guide-icon">🔄</div>
-                <div>
-                    <h3 class="card-title">Contacts & Calendar Sync</h3>
-                    <p class="card-description">Set up CardDAV and CalDAV to sync across devices.</p>
-                </div>
-            </div>
-            <a href="#sync_guide" class="btn btn-default btn-sm">View Sync Guide</a>
-        </div>
     </div>
 
     <div class="info-card">
@@ -1357,7 +1343,7 @@
                         <button type="button" id="reboot-box-btn" class="btn btn-danger w-100">Reboot Box</button>
                         <p class="help-text">A system reboot is required to apply important updates.</p>
                     </div>
-                    <div id="reboot-not-needed" style="display: none;" class="help-text">No reboot necessary</div>
+                    <div class="help-text" id="reboot-not-needed" style="display: none;">No reboot necessary</div>
                 </div>
             </div>
 
@@ -1373,24 +1359,9 @@
         </div>
 
         <div class="status-main">
-            <div id="system-checks-summary" class="mb-3">
-                Summary: <span class="text-success" style="font-weight: 600;">23 ✓ OK, </span><span class="text-danger" style="font-weight: 600;">9 ✖ Error, </span><span class="text-warning" style="font-weight: 600;">3 ? Warning</span>
-            </div>
+            <div id="system-checks-summary" class="mb-3"></div>
 
-            <div id="system-checks-container"><div class="status-section"><div class="status-section-header">System</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">All system services are running.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">The SSH server on this machine permits password-based login. A more secure
-                way to log in is using a public key. Add your SSH public key to $HOME/.ssh/authorized_keys, check
-                that you can log in without a password, set the option 'PasswordAuthentication no' in
-                /etc/ssh/sshd_config, and then restart the openssh via 'sudo service ssh restart'.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">There are 1 software packages that can be updated.</p><div class="extra"><div>duplicity (3.0.6.3-ppa202512051621~ubuntu22.04.1)</div></div><a class="showhide" href="#" style="display: inline;">show more</a></td></tr><tr class="bg-row-warning"><td class="status text-warning">?</td><td class="message text-warning"><p style="margin: 0px;">You are running version Mail-in-a-Box v73. Mail-in-a-Box version check disabled by privacy setting.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">System administrator address exists as a mail alias. [administrator@box.boomy.wtf ↦ contact@boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">The disk has 10.11 GB space remaining.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">System memory is 45% free.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Backups are enabled</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">System time is synchronized.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">No disk I/O errors detected in system logs.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div><div class="status-section"><div class="status-section-header">Network</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Firewall is active.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Outbound mail (SMTP port 25) is not blocked.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">IPv4 address is not blacklisted by zen.spamhaus.org.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">IPv4 address is not blacklisted in 3 additional RBL(s) checked (Barracuda, SpamCop, SORBS).</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div><div class="status-section"><div class="status-section-header">box.boomy.wtf</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">The DNSSEC 'DS' record for boomy.wtf is incorrect. See further details below.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-warning"><td class="status text-warning">?</td><td class="message text-warning"><p style="margin: 0px;">Nameserver glue records (ns1.box.boomy.wtf and ns2.box.boomy.wtf) should be configured at your domain name
-                registrar as having the IP address of this box (45.124.52.210). They currently report addresses of [Not Set]/[Not Set]. If you have set up External DNS, this may be OK.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain resolves to box's IP address. [box.boomy.wtf ↦ 45.124.52.210]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">This box's reverse DNS is currently [Not Set], but it should be box.boomy.wtf. Your ISP or cloud provider will have instructions
-                on setting up reverse DNS for this box.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-warning"><td class="status text-warning">?</td><td class="message text-warning"><p style="margin: 0px;">The DANE TLSA record for incoming mail is not set. This is optional.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Hostmaster contact address exists as a mail alias. [hostmaster@box.boomy.wtf ↦ administrator@box.boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain's email is directed to this domain. [box.boomy.wtf has no MX record, which is ok]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Postmaster contact address exists as a mail alias. [postmaster@box.boomy.wtf ↦ administrator@box.boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain is not blacklisted by dbl.spamhaus.org.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">TLS (SSL) certificate is signed &amp; valid. The certificate expires in 89 days on 2026-03-07.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div><div class="status-section"><div class="status-section-header">boomy.wtf</div><div class="table-container"><table class="status-table"><tbody><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">This domain's DNSSEC DS record is incorrect. The chain of trust is broken between the public DNS system
-                and this machine's DNS server. It may take several hours for public DNS to update after a change. If you did not recently
-                make a change, you must resolve this immediately (see below).</p><div class="extra"><div>Follow the instructions provided by your domain name registrar to set a DS record.
-                Registrars support different sorts of DS records. Use the first option that works:</div><div>Option 1:</div><div>----------</div><div>Key Tag: 51621</div><div>Key Flags: KSK / 257</div><div>Algorithm: 13 / ECDSAP256SHA256</div><div>Digest Type: 2 / SHA-256</div><div>Digest: 98251e510c5ea3d75af5d0d15a6e9fd7d4e48683dbdfd2dfd96062a554e935d4</div><div>Public Key: </div><div class="pre">VrmmbI9NxqsOmfR3GQdum2EgeKlBhmZM04WuO75l1kWq8QDBmggC/9HJzvNcdK6QoimZBTmexfiK9VYjUTXuKQ==</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	51621 13 2 98251e510c5ea3d75af5d0d15a6e9fd7d4e48683dbdfd2dfd96062a554e935d4</div><div>Option 2:</div><div>----------</div><div>Key Tag: 59426</div><div>Key Flags: KSK / 257</div><div>Algorithm: 8 / RSASHA256</div><div>Digest Type: 2 / SHA-256</div><div>Digest: c5721532515fbdf0b0f64edbf98916d57a2d092841af85b15473df584e12e3c2</div><div>Public Key: </div><div class="pre">AwEAAeAhU9yvoe0mWDSpxr+g/K4FNN2L+p/RM5Xr6CYHoBllbrhtfIb+QLzeFp7CDB2OtsIgV58mCWW3S9mf0ICNNF/iMfvFBXAyzd3IR8oE4lZQRVOt6jdvkVkIg/4Hdrlt97JR3az4C4I0SIIR8xLQDSumT2fKWv35k0zFB0CX1fEz</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	59426 8 2 c5721532515fbdf0b0f64edbf98916d57a2d092841af85b15473df584e12e3c2</div><div>Option 3:</div><div>----------</div><div>Key Tag: 51621</div><div>Key Flags: KSK / 257</div><div>Algorithm: 13 / ECDSAP256SHA256</div><div>Digest Type: 4 / SHA-384</div><div>Digest: 623b5428e850563b4b88aa87bf417ed06cfa473eae6d692a8732f862ff7ebdfa5de44fb052015fe4d5b294ea45246098</div><div>Public Key: </div><div class="pre">VrmmbI9NxqsOmfR3GQdum2EgeKlBhmZM04WuO75l1kWq8QDBmggC/9HJzvNcdK6QoimZBTmexfiK9VYjUTXuKQ==</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	51621 13 4 623b5428e850563b4b88aa87bf417ed06cfa473eae6d692a8732f862ff7ebdfa5de44fb052015fe4d5b294ea45246098</div><div>Option 4:</div><div>----------</div><div>Key Tag: 59426</div><div>Key Flags: KSK / 257</div><div>Algorithm: 8 / RSASHA256</div><div>Digest Type: 4 / SHA-384</div><div>Digest: 9a88995fc57f9817ed5d91d6132eb73402b06546d1e24e9e137e2b5c57c4edc44b0dce3c94f77c2b0339a32695f46b84</div><div>Public Key: </div><div class="pre">AwEAAeAhU9yvoe0mWDSpxr+g/K4FNN2L+p/RM5Xr6CYHoBllbrhtfIb+QLzeFp7CDB2OtsIgV58mCWW3S9mf0ICNNF/iMfvFBXAyzd3IR8oE4lZQRVOt6jdvkVkIg/4Hdrlt97JR3az4C4I0SIIR8xLQDSumT2fKWv35k0zFB0CX1fEz</div><div>Bulk/Record Format:</div><div class="pre">boomy.wtf.	3600	IN	DS	59426 8 4 9a88995fc57f9817ed5d91d6132eb73402b06546d1e24e9e137e2b5c57c4edc44b0dce3c94f77c2b0339a32695f46b84</div><div>The DS record is currently set to:</div><div>Key Tag: 2371, Algorithm: 13, Digest Type: 2, Digest: 067166d4cdf8c2d30ca1b6cfdc7ac68067ce4ac8358254a645351053666647c6</div></div><a class="showhide" href="#" style="display: inline;">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">The nameservers set on this domain are incorrect. They are currently tori.ns.cloudflare.com; walt.ns.cloudflare.com. Use your domain name registrar's
-                control panel to set the nameservers to ns1.box.boomy.wtf; ns2.box.boomy.wtf.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain's email is directed to this domain. [boomy.wtf ↦ 10 box.boomy.wtf]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">MTA-STS policy is missing: STSFetchResult.NONE</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">Domain is not blacklisted by dbl.spamhaus.org.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">This domain should resolve to this box's IP address (A 45.124.52.210) if you would like the box to serve
-                webmail or a website on this domain. The domain currently resolves to 104.21.51.78; 172.67.177.98 in public DNS. It may take several hours for
-                public DNS to update after a change. This problem may result from other issues listed here.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-danger"><td class="status text-danger">✖</td><td class="message text-danger"><p style="margin: 0px;">www.boomy.wtf: This domain should resolve to this box's IP address (A 45.124.52.210) if you would like the box to serve
-                webmail or a website on this domain. The domain currently resolves to 104.21.51.78; 172.67.177.98 in public DNS. It may take several hours for
-                public DNS to update after a change. This problem may result from other issues listed here.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autoconfig.boomy.wtf: Domain resolves to this box's IP address. [autoconfig.boomy.wtf ↦ 45.124.52.210]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autoconfig.boomy.wtf: TLS (SSL) certificate is signed &amp; valid. The certificate expires in 89 days on 2026-03-07.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autodiscover.boomy.wtf: Domain resolves to this box's IP address. [autodiscover.boomy.wtf ↦ 45.124.52.210]</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr><tr class="bg-row-success"><td class="status text-success">✓</td><td class="message text-success"><p style="margin: 0px;">autodiscover.boomy.wtf: TLS (SSL) certificate is signed &amp; valid. The certificate expires in 89 days on 2026-03-07.</p><div class="extra"></div><a class="showhide" href="#">show more</a></td></tr></tbody></table></div></div></div>
+            <div id="system-checks-container"></div>
         </div>
     </div>
 
@@ -1651,10 +1622,10 @@
             <table id="backup-status" class="table">
                 <thead>
                     <tr>
-                        <th colspan="2">When</th>
-                        <th>Type</th>
-                        <th>Size</th>
-                        <th>Deleted in...</th>
+                        <th scope="col" colspan="2">When</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Size</th>
+                        <th scope="col">Deleted in...</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -1752,9 +1723,9 @@
     <table id="external_dns_settings" class="table">
         <thead>
             <tr>
-                <th>QName</th>
-                <th>Type</th>
-                <th>Value</th>
+                <th scope="col">QName</th>
+                <th scope="col">Type</th>
+                <th scope="col">Value</th>
             </tr>
         </thead>
         <tbody>
@@ -1858,10 +1829,10 @@
     </div>
     <table id="custom-dns-current" class="table" style="display: none">
         <thead>
-            <th>Domain Name</th>
-            <th>Record Type</th>
-            <th>Value</th>
-            <th></th>
+            <th scope="col">Domain Name</th>
+            <th scope="col">Record Type</th>
+            <th scope="col">Value</th>
+            <th scope="col" aria-label="Actions"></th>
         </thead>
         <tbody>
             <tr>
@@ -1918,10 +1889,10 @@
     <h4>Verbs</h4>
 
     <table class="table">
-        <thead>
-            <th>Verb</th>
-            <th>Usage</th>
-        </thead>
+        <thead><tr>
+            <th scope="col">Verb</th>
+            <th scope="col">Usage</th>
+        </tr></thead>
         <tr>
             <td>GET</td>
             <td>Returns matching custom DNS records as a JSON array of objects. Each object has the keys
@@ -1955,10 +1926,10 @@
     <h4>Parameters</h4>
 
     <table class="table">
-        <thead>
-            <th>Parameter</th>
-            <th>Value</th>
-        </thead>
+        <thead><tr>
+            <th scope="col">Parameter</th>
+            <th scope="col">Value</th>
+        </tr></thead>
         <tr>
             <td>email</td>
             <td>The email address of any administrative user here.</td>
@@ -2103,13 +2074,13 @@ curl -X DELETE -d "some text here" https://{{hostname}}/admin/dns/custom/foo.myd
             </div>
 
             <div class="form-group">
-                <label for="otp-label">3. Optionally, give your device a label so that you
+                <label for="totp-setup-label">3. Optionally, give your device a label so that you
                     can remember what device you set it up on:</label>
                 <input type="text" id="totp-setup-label" class="form-control" placeholder="my phone"/>
             </div>
 
             <div class="form-group">
-                <label for="otp" style="font-weight: normal">4. Use the app to generate your first six-digit code and
+                <label for="totp-setup-token" style="font-weight: normal">4. Use the app to generate your first six-digit code and
                     enter it here:</label>
                 <input type="text" id="totp-setup-token" class="form-control" placeholder="6-digit code"/>
             </div>
@@ -2253,24 +2224,24 @@ sudo management/cli.py user make-admin me@{{hostname}}</pre>
             <h3 class="card-title">Mobile & Desktop Apps</h3>
             <p class="card-description">
                 <strong>Automatic setup:</strong> iOS/macOS only – use
-                <a href="https://{{hostname}}/mailinabox.mobileconfig">this configuration link</a> to set up Mail, Contacts, and Calendar automatically.
+                <a href="https://{{hostname}}/mailinabox.mobileconfig">this configuration link</a> to set up Mail automatically.
             </p>
             <p class="card-description">
                 <strong>Manual setup:</strong> Use the following settings for IMAP/SMTP:
             </p>
             <table class="table">
                 <thead>
-                    <tr><th>Option</th><th>Value</th></tr>
+                    <tr><th scope="col">Option</th><th scope="col">Value</th></tr>
                 </thead>
                 <tbody>
-                    <tr><th>Protocol/Method</th><td>IMAP</td></tr>
-                    <tr><th>Mail server</th><td>{{hostname}}</td></tr>
-                    <tr><th>IMAP Port</th><td>993</td></tr>
-                    <tr><th>IMAP Security</th><td>SSL or TLS</td></tr>
-                    <tr><th>SMTP Port</th><td>465</td></tr>
-                    <tr><th>SMTP Security</th><td>SSL or TLS</td></tr>
-                    <tr><th>Username</th><td>Your full email address</td></tr>
-                    <tr><th>Password</th><td>Your mail password</td></tr>
+                    <tr><th scope="row">Protocol/Method</th><td>IMAP</td></tr>
+                    <tr><th scope="row">Mail server</th><td>{{hostname}}</td></tr>
+                    <tr><th scope="row">IMAP Port</th><td>993</td></tr>
+                    <tr><th scope="row">IMAP Security</th><td>SSL or TLS</td></tr>
+                    <tr><th scope="row">SMTP Port</th><td>465</td></tr>
+                    <tr><th scope="row">SMTP Security</th><td>SSL or TLS</td></tr>
+                    <tr><th scope="row">Username</th><td>Your full email address</td></tr>
+                    <tr><th scope="row">Password</th><td>Your mail password</td></tr>
                 </tbody>
             </table>
             <p class="card-description">
@@ -2286,10 +2257,10 @@ sudo management/cli.py user make-admin me@{{hostname}}</pre>
                 Use on compatible iOS devices or Outlook 2007+ (Windows 7+). Setup may be buggy, so IMAP is preferred.
             </p>
             <table class="table">
-                <tr><th>Server</th><td>{{hostname}}</td></tr>
-                <tr><th>Options</th><td>Secure Connection</td></tr>
+                <tr><th scope="row">Server</th><td>{{hostname}}</td></tr>
+                <tr><th scope="row">Options</th><td>Secure Connection</td></tr>
             </table>
-            <p class="card-description">Your contacts and calendar sync automatically using this method.</p>
+            <p class="card-description">Push email sync is supported on compatible devices.</p>
         </div>
 
         <!-- Mail Info Card -->
@@ -2378,11 +2349,11 @@ sudo management/cli.py user make-admin me@{{hostname}}</pre>
     <table id="user_table" class="table w-auto">
         <thead>
             <tr>
-                <th width="35%">Email Address</th>
-                <th class="row-center">Size</th>
-                <th class="row-center">Used</th>
-                <th class="row-center">Quota</th>
-                <th>Actions</th>
+                <th scope="col" width="35%">Email Address</th>
+                <th scope="col" class="row-center">Size</th>
+                <th scope="col" class="row-center">Used</th>
+                <th scope="col" class="row-center">Quota</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -2452,11 +2423,11 @@ sudo management/cli.py user make-admin me@{{hostname}}</pre>
     <h4 class="mb-0">Verbs</h4>
 
     <table class="table mt-1">
-        <thead>
-            <th>Verb</th>
-            <th>Action</th>
-            <th></th>
-        </thead>
+        <thead><tr>
+            <th scope="col">Verb</th>
+            <th scope="col">Action</th>
+            <th scope="col"></th>
+        </tr></thead>
         <tr>
             <td>GET</td>
             <td><i>(none)</i></td>
@@ -2581,22 +2552,24 @@ curl -X POST -d "email=new_user@mydomail.com" https://{{hostname}}/admin/mail/us
             </div>
         </div>
         <div class="form-group">
-            <label for="addaliasSenders" class="form-label">Permitted Senders</label>
-            <div class="radio">
-                <label>
-                    <input id="addaliasForwardsToNotAdvanced" name="addaliasForwardsToDivToggle" type="radio" checked>
-                    Any mail user listed in the Forwards To box can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
-                </label>
-            </div>
-            <div class="radio">
-                <label>
-                    <input id="addaliasForwardsToAdvanced" name="addaliasForwardsToDivToggle" type="radio">
-                    I&rsquo;ll enter the mail users that can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
-                </label>
-            </div>
-            <div id="addaliasForwardsToDiv" style="display: none">
-                <textarea class="form-control" rows="3" id="addaliasSenders" placeholder="one user per line or separated by commas"></textarea>
-            </div>
+            <fieldset>
+                <legend><label for="addaliasSenders" class="form-label">Permitted Senders</label></legend>
+                <div class="radio">
+                    <label for="addaliasForwardsToNotAdvanced">
+                        <input id="addaliasForwardsToNotAdvanced" name="addaliasForwardsToDivToggle" type="radio" checked>
+                        Any mail user listed in the Forwards To box can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                    </label>
+                </div>
+                <div class="radio">
+                    <label for="addaliasForwardsToAdvanced">
+                        <input id="addaliasForwardsToAdvanced" name="addaliasForwardsToDivToggle" type="radio">
+                        I&rsquo;ll enter the mail users that can send mail claiming to be from <span class="regularalias">the alias address</span><span class="catchall domainalias">any address on the alias domain</span>.
+                    </label>
+                </div>
+                <div id="addaliasForwardsToDiv" style="display: none">
+                    <textarea class="form-control" rows="3" id="addaliasSenders" placeholder="one user per line or separated by commas"></textarea>
+                </div>
+            </fieldset>
         </div>
         <div class="form-group">
             <button id="add-alias-button" type="submit" class="btn btn-primary">Add Alias</button>
@@ -2608,10 +2581,10 @@ curl -X POST -d "email=new_user@mydomail.com" https://{{hostname}}/admin/mail/us
     <table id="alias_table" class="table">
         <thead>
             <tr>
-                <th></th>
-                <th>Alias<br></th>
-                <th>Forwards To</th>
-                <th>Permitted Senders</th>
+                <th scope="col" aria-label="Actions"></th>
+                <th scope="col">Alias<br></th>
+                <th scope="col">Forwards To</th>
+                <th scope="col">Permitted Senders</th>
             </tr>
         </thead>
         <tbody>
@@ -2655,11 +2628,11 @@ curl -X POST -d "email=new_user@mydomail.com" https://{{hostname}}/admin/mail/us
     <h4 class="mb-0">Verbs</h4>
 
     <table class="table mt-1">
-        <thead>
-            <th>Verb</th>
-            <th>Action</th>
-            <th></th>
-        </thead>
+        <thead><tr>
+            <th scope="col">Verb</th>
+            <th scope="col">Action</th>
+            <th scope="col"></th>
+        </tr></thead>
         <tr>
             <td>GET</td>
             <td><i>(none)</i></td>
@@ -2698,58 +2671,6 @@ curl -X POST -d "address=new_alias@mydomail.com" https://{{hostname}}/admin/mail
 
     <script type="module" src="/admin/static/js/pages/aliases.js"></script>
 
-</div>
-            </div>
-
-            <div id="panel_sync_guide" class="admin_panel">
-<div class="panel">
-	<div class="panel-heading">
-		<h2 class="panel-title">Contacts &amp; Calendar Synchronization</h2>
-	</div>
-
-	<p>This box can hold your contacts and calendar, just like it holds your email.</p>
-
-	<hr>
-
-	<div class="cards-grid">
-		<div>
-			<h4>In your browser</h4>
-
-			<p>You can edit your contacts and calendar from your web browser.</p>
-
-			<table class="table">
-			<thead><tr><th>For...</th> <th>Visit this URL</th></tr></thead>
-			<tr><th>Contacts</th> <td><a href="https://{{hostname}}/cloud/contacts">https://{{hostname}}/cloud/contacts</a></td></tr>
-			<tr><th>Calendar</th> <td><a href="https://{{hostname}}/cloud/calendar">https://{{hostname}}/cloud/calendar</a></td></tr>
-			</table>
-
-			<p>Log in settings are the same as with <a href="#mail-guide">mail</a>: your
-			complete email address and your mail password.</p>
-		</div>
-
-		<div>
-			<h4>On your mobile device</h4>
-
-			<p>If you set up your <a href="#mail-guide">mail</a> using Exchange/ActiveSync,
-			your contacts and calendar may already appear on your device.</p>
-			<p>Otherwise, the app below can synchronize your contacts and calendar to your Android phone.</p>
-
-			<table class="table">
-			<thead><tr><th>Google Play</th> <th>F-Droid</th></tr></thead>
-			<tr><td><a href="https://play.google.com/store/apps/details?id=at.bitfire.davdroid">DAVx⁵</a> (paid)</td> <td><a href="https://f-droid.org/packages/at.bitfire.davdroid/">DAVx⁵</a> (free)</td></tr>
-			</table>
-
-			<p>Use the following settings:</p>
-
-			<table class="table">
-			<tr><td>Account Type</td> <td>CardDAV or CalDAV</td></tr>
-			<tr><td>Server Name</td> <td>{{hostname}}</td></tr>
-			<tr><td>Use SSL</td> <td>Yes</td></tr>
-			<tr><td>Username</td> <td>Your complete email address.</td></tr>
-			<tr><td>Password</td> <td>Your mail password.</td></tr>
-			</table>
-		</div>
-	</div>
 </div>
             </div>
 
@@ -2794,9 +2715,9 @@ curl -X POST -d "address=new_alias@mydomail.com" https://{{hostname}}/admin/mail
         <table id="web_domains_existing" class="table">
             <thead>
                 <tr>
-                    <th>Site</th>
-                    <th>Directory for Files</th>
-                    <th/>
+                    <th scope="col">Site</th>
+                    <th scope="col">Directory for Files</th>
+                    <th scope="col" aria-label="Actions"/>
                 </tr>
             </thead>
             <tbody>
@@ -2852,9 +2773,9 @@ curl -X POST -d "address=new_alias@mydomail.com" https://{{hostname}}/admin/mail
         <table id="ssl_domains" class="table" style="display: none">
             <thead>
                 <tr>
-                    <th>Domain</th>
-                    <th>Certificate Status</th>
-                    <th>Actions</th>
+                    <th scope="col">Domain</th>
+                    <th scope="col">Certificate Status</th>
+                    <th scope="col">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -2975,9 +2896,4 @@ curl -X POST -d "address=new_alias@mydomail.com" https://{{hostname}}/admin/mail
             });
         </script>
     </body>
-    <style>
-        .admin_panel, .info-card, #reboot-needed, #reboot-not-needed {
-            display: block !important;
-        }
-    </style>
 </html>

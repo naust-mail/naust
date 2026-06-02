@@ -39,7 +39,7 @@ Alternatively, you can also ssh into the VM using:
 Once inside the VM, you can re-run individual parts of the setup like in this example:
 
     vm$ cd /vagrant
-    vm$ sudo setup/owncloud.sh # replace with script you'd like to re-run
+    vm$ sudo setup/webmail.sh # replace with script you'd like to re-run
 
 ### Tests
 
