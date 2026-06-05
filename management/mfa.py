@@ -137,14 +137,29 @@ def validate_auth_mfa(email, request, env):
 				hints.add("invalid-totp-token")
 				continue
 
-			# Check the token.
+			# Check the token. valid_window=0 accepts only the current 30s step.
+			# Allowing adjacent steps would create a replay gap across step boundaries.
 			totp = pyotp.TOTP(mfa_mode["secret"])
-			if not totp.verify(token, valid_window=1):
+			if not totp.verify(token, valid_window=0):
 				hints.add("invalid-totp-token")
 				continue
 
-			# On success, record the current time-step to prevent replay.
-			set_mru_token(email, mfa_mode['id'], str(current_step), env)
+			# Atomically consume this step. The UPDATE only succeeds when the stored
+			# step is strictly less than current_step, so two concurrent requests with
+			# the same token both verify but only one wins (rowcount > 0).
+			conn, c = open_database(env, with_connection=True)
+			user_id = get_user_id(email, c)
+			c.execute(
+				"""UPDATE mfa SET mru_token=? WHERE id=? AND user_id=?
+				   AND (mru_token IS NULL OR CAST(mru_token AS INTEGER) < ?)""",
+				(str(current_step), mfa_mode['id'], user_id, current_step)
+			)
+			conn.commit()
+			if c.rowcount == 0:
+				# Another concurrent request already consumed this step.
+				hints.add("invalid-totp-token")
+				continue
+
 			return (True, [])
 
 	# On a failed login, indicate failure and any hints for what the user can do instead.

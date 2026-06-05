@@ -399,8 +399,10 @@ def get_mail_quota(email, env):
 
 
 def set_mail_quota(email, quota, env):
-	# validate that password is acceptable
-	quota = validate_quota(quota)
+	try:
+		quota = validate_quota(quota)
+	except ValueError as e:
+		return (str(e), 400)
 
 	# update the database
 	conn, c = open_database(env, with_connection=True)

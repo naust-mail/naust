@@ -81,8 +81,9 @@ class AuthService:
 			sessionid = password
 			session = self.login_sessions[sessionid]
 			if logout:
-				# Clear the session.
+				# Clear the session and return immediately - no privilege lookup needed.
 				del self.login_sessions[sessionid]
+				return (username, [])
 			else:
 				# Re-up the session so that it does not expire.
 				self.login_sessions[sessionid] = session
@@ -138,7 +139,7 @@ class AuthService:
 				"-t", pw_hash,
 				], input=(pw + "\n").encode())
 			doveadm_ok = True
-		except:
+		except Exception:
 			pass
 
 		if not doveadm_ok or not user_exists:
