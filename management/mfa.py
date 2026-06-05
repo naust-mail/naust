@@ -1,5 +1,6 @@
 import base64
 import io
+import json as _json
 import os
 import pyotp
 import qrcode
@@ -102,6 +103,106 @@ def provision_totp(email, env):
 		"qr_code_base64": png_b64
 	}
 
+###################################
+# WebAuthn / Passkeys
+
+def _get_fido2_server(env):
+	from fido2.server import Fido2Server
+	from fido2.webauthn import PublicKeyCredentialRpEntity
+	# rpId is fixed to PRIMARY_HOSTNAME. Moving the admin panel to a different
+	# hostname will invalidate all registered passkeys. Users must re-register.
+	rp = PublicKeyCredentialRpEntity(id=env["PRIMARY_HOSTNAME"], name="Mail-in-a-Box")
+	return Fido2Server(rp)
+
+def _options_to_dict(options):
+	# Convert fido2 CredentialCreationOptions / CredentialRequestOptions to a plain
+	# Python dict safe for json.dumps. The double-pass guarantees no fido2 types leak.
+	return _json.loads(_json.dumps(dict(options)))
+
+def get_webauthn_credentials(email, env):
+	"""Return stored AttestedCredentialData objects for a user."""
+	from fido2.webauthn import AttestedCredentialData
+	conn, c = open_database(env, with_connection=True)
+	c.execute('SELECT public_key FROM webauthn_credentials WHERE user_id=?', (get_user_id(email, c),))
+	rows = c.fetchall()
+	conn.close()
+	return [AttestedCredentialData(row[0]) for row in rows]
+
+def get_public_webauthn_credentials(email, env):
+	"""Return name/id/last_used for each passkey without key material."""
+	conn, c = open_database(env, with_connection=True)
+	c.execute('SELECT id, name, last_used FROM webauthn_credentials WHERE user_id=?', (get_user_id(email, c),))
+	rows = c.fetchall()
+	conn.close()
+	return [{"id": r[0], "name": r[1], "last_used": r[2]} for r in rows]
+
+def webauthn_register_begin(email, env):
+	"""Begin passkey registration. Returns (options_dict, state); caller stores state."""
+	from fido2.webauthn import PublicKeyCredentialUserEntity
+	server = _get_fido2_server(env)
+	conn, c = open_database(env, with_connection=True)
+	user_id = get_user_id(email, c)
+	conn.close()
+	user = PublicKeyCredentialUserEntity(
+		id=user_id.to_bytes(8, 'big'),
+		name=email,
+		display_name=email,
+	)
+	existing = get_webauthn_credentials(email, env)
+	options, state = server.register_begin(
+		user,
+		credentials=existing,
+		resident_key_requirement='required',
+		user_verification='required',
+	)
+	return _options_to_dict(options), state
+
+def webauthn_register_complete(email, state, client_response, name, env):
+	"""Complete passkey registration and store the new credential."""
+	from fido2.webauthn import RegistrationResponse
+	server = _get_fido2_server(env)
+	response = RegistrationResponse.from_dict(client_response)
+	auth_data = server.register_complete(state, response)
+	cred = auth_data.credential_data
+	conn, c = open_database(env, with_connection=True)
+	c.execute(
+		'INSERT INTO webauthn_credentials (user_id, credential_id, public_key, sign_count, aaguid, name) VALUES (?, ?, ?, ?, ?, ?)',
+		(get_user_id(email, c), bytes(cred.credential_id), bytes(cred), 0, str(cred.aaguid), name),
+	)
+	conn.commit()
+	conn.close()
+
+def webauthn_authenticate_begin(email, env):
+	"""Begin passkey authentication. Returns (options_dict, state); caller stores state."""
+	server = _get_fido2_server(env)
+	credentials = get_webauthn_credentials(email, env)
+	if not credentials:
+		raise ValueError("No passkeys registered for this account.")
+	options, state = server.authenticate_begin(
+		credentials,
+		user_verification='required',
+	)
+	return _options_to_dict(options), state
+
+def webauthn_authenticate_complete(email, state, client_response, env):
+	"""Verify passkey assertion and update sign_count/last_used. Raises on failure."""
+	from fido2.webauthn import AuthenticationResponse
+	server = _get_fido2_server(env)
+	credentials = get_webauthn_credentials(email, env)
+	response = AuthenticationResponse.from_dict(client_response)
+	result = server.authenticate_complete(state, credentials, response)
+	new_sign_count = response.response.authenticator_data.counter
+	credential_id_used = bytes(result.credential_id)
+	conn, c = open_database(env, with_connection=True)
+	c.execute(
+		'UPDATE webauthn_credentials SET sign_count=?, last_used=datetime("now") WHERE user_id=? AND credential_id=?',
+		(new_sign_count, get_user_id(email, c), credential_id_used),
+	)
+	conn.commit()
+	conn.close()
+
+###################################
+
 def validate_auth_mfa(email, request, env):
 	# Validates that a login request satisfies any MFA modes
 	# that have been enabled for the user's account. Returns
@@ -137,6 +238,13 @@ def validate_auth_mfa(email, request, env):
 				continue
 
 			return (True, [])
+
+		elif mfa_mode["type"] == "webauthn":
+			# Password login cannot satisfy a WebAuthn requirement.
+			# Passkey users must authenticate via /mfa/webauthn/authenticate/begin+complete.
+			# continue (not return) so that a TOTP entry later in the list can still succeed.
+			hints.add("missing-webauthn-assertion")
+			continue
 
 	# On a failed login, indicate failure and any hints for what the user can do instead.
 	return (False, list(hints))

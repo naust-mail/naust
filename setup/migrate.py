@@ -195,6 +195,22 @@ def migration_15(env):
 	db = os.path.join(env["STORAGE_ROOT"], 'mail/users.sqlite')
 	shell("check_call", ["sqlite3", db, "ALTER TABLE users ADD COLUMN quota TEXT NOT NULL DEFAULT '0';"])
 
+def migration_16(env):
+	# Add the "webauthn_credentials" table for passkey / WebAuthn support.
+	db = os.path.join(env["STORAGE_ROOT"], 'mail/users.sqlite')
+	shell("check_call", ["sqlite3", db, """CREATE TABLE webauthn_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    credential_id BLOB NOT NULL UNIQUE,
+    public_key BLOB NOT NULL,
+    sign_count INTEGER NOT NULL DEFAULT 0,
+    aaguid TEXT,
+    name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);"""])
+
 
 ###########################################################
 

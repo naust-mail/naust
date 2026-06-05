@@ -29,6 +29,11 @@ class AuthService:
 		self.login_sessions  = ExpiringDict(max_len=1024, max_age_seconds=duration)
 		self.cookie_sessions = ExpiringDict(max_len=1024, max_age_seconds=60 * 30)  # 30 min, mirrors daemon.py
 
+		# In-process challenge store for WebAuthn registration and authentication flows.
+		# The Flask daemon is assumed to run as a single process (no workers); if the
+		# deployment model ever changes, this must be replaced with a shared store.
+		self.webauthn_challenges = ExpiringDict(max_len=512, max_age_seconds=300)
+
 	def _session_store(self, session_type):
 		if session_type == 'cookie':
 			return self.cookie_sessions

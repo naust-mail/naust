@@ -10,12 +10,12 @@
 # DEBUG=1 management/daemon.py
 # service mailinabox start # when done debugging, start it up again
 
-import os, os.path, re, json, time
+import os, os.path, re, json, time, secrets
 import multiprocessing.pool
 
 from functools import wraps
 
-from flask import Flask, request, render_template, Response, send_from_directory, make_response
+from flask import Flask, request, render_template, Response, send_from_directory, make_response, abort
 
 import auth, utils
 from mailconfig import get_mail_users, get_mail_users_ex, get_admins, add_mail_user, set_mail_password, remove_mail_user
@@ -23,6 +23,8 @@ from mailconfig import get_mail_user_privileges, add_remove_mail_user_privilege
 from mailconfig import get_mail_aliases, get_mail_aliases_ex, get_mail_domains, add_mail_alias, remove_mail_alias
 from mailconfig import get_mail_quota, set_mail_quota
 from mfa import get_public_mfa_state, provision_totp, validate_totp_secret, enable_mfa, disable_mfa
+from mfa import get_public_webauthn_credentials, webauthn_register_begin, webauthn_register_complete
+from mfa import webauthn_authenticate_begin, webauthn_authenticate_complete
 import contextlib
 
 env = utils.load_environment()
@@ -61,6 +63,16 @@ def validate_csrf():
 		if xhr_header != 'XMLHttpRequest':
 			return False
 	return True
+
+@app.before_request
+def check_origin():
+	if request.method in ('GET', 'HEAD', 'OPTIONS'):
+		return
+	origin = request.headers.get('Origin', '')
+	# Requests with no Origin header are allowed (curl, server-to-server, local API calls).
+	# Only reject requests that explicitly send a mismatched Origin header.
+	if origin and origin != f'https://{env["PRIMARY_HOSTNAME"]}':
+		abort(403)
 
 
 # Decorator to protect views that require a user with 'admin' privileges.
@@ -308,6 +320,31 @@ def login():
 
 	# Return.
 	return json_response(resp)
+
+@app.route('/auth/methods')
+def auth_methods():
+	# Returns the available login paths for an email address.
+	# Unknown emails return the password path to avoid account enumeration.
+	email_raw = request.args.get('email', '')
+	try:
+		email = validate_email(email_raw)
+		mfa_state = get_public_mfa_state(email, env)
+		webauthn_creds = get_public_webauthn_credentials(email, env)
+	except ValueError:
+		return json_response({"paths": ["password"]})
+
+	has_totp = any(m["type"] == "totp" for m in mfa_state)
+	has_webauthn = len(webauthn_creds) > 0
+
+	paths = []
+	if has_webauthn:
+		paths.append("passkey")
+	if has_totp:
+		paths.append("password+totp")
+	if not has_webauthn:
+		paths.append("password")
+
+	return json_response({"paths": paths})
 
 @app.route('/logout', methods=["POST"])
 def logout():
@@ -721,6 +758,68 @@ def totp_post_disable():
 		return "OK"
 	# error
 	return ("Invalid user or MFA id.", 400)
+
+@app.route('/mfa/webauthn/register/begin', methods=['POST'])
+@authorized_personnel_only
+def webauthn_register_begin_route():
+	try:
+		options, state = webauthn_register_begin(request.user_email, env)
+	except ValueError as e:
+		return (sanitize_error_message(str(e)), 400)
+	nonce = secrets.token_hex(32)
+	auth_service.webauthn_challenges[nonce] = {"state": state, "email": request.user_email, "type": "register"}
+	return json_response({"options": options, "nonce": nonce})
+
+@app.route('/mfa/webauthn/register/complete', methods=['POST'])
+@authorized_personnel_only
+def webauthn_register_complete_route():
+	nonce = request.form.get('nonce', '')
+	name = request.form.get('name', 'My Passkey')
+	credential_json = request.form.get('credential', '')
+	challenge = auth_service.webauthn_challenges.get(nonce)
+	if not challenge or challenge.get("type") != "register":
+		return ("Invalid or expired challenge.", 400)
+	del auth_service.webauthn_challenges[nonce]
+	try:
+		client_response = json.loads(credential_json)
+		webauthn_register_complete(challenge["email"], challenge["state"], client_response, name, env)
+	except Exception as e:
+		return (sanitize_error_message(str(e)), 400)
+	return json_response({"status": "ok"})
+
+@app.route('/mfa/webauthn/authenticate/begin', methods=['POST'])
+def webauthn_auth_begin():
+	email_raw = request.form.get('email', '')
+	try:
+		email = validate_email(email_raw)
+		options, state = webauthn_authenticate_begin(email, env)
+	except ValueError as e:
+		return (sanitize_error_message(str(e)), 400)
+	nonce = secrets.token_hex(32)
+	auth_service.webauthn_challenges[nonce] = {"state": state, "email": email, "type": "authenticate"}
+	return json_response({"options": options, "nonce": nonce})
+
+@app.route('/mfa/webauthn/authenticate/complete', methods=['POST'])
+def webauthn_auth_complete():
+	nonce = request.form.get('nonce', '')
+	credential_json = request.form.get('credential', '')
+	challenge = auth_service.webauthn_challenges.get(nonce)
+	if not challenge or challenge.get("type") != "authenticate":
+		return ("Invalid or expired challenge.", 400)
+	del auth_service.webauthn_challenges[nonce]
+	email = challenge["email"]
+	try:
+		client_response = json.loads(credential_json)
+		webauthn_authenticate_complete(email, challenge["state"], client_response, env)
+	except Exception as e:
+		log_failed_login(request)
+		return json_response({"status": "invalid", "reason": sanitize_error_message(str(e))})
+	privs = get_mail_user_privileges(email, env)
+	if isinstance(privs, tuple):
+		return json_response({"status": "invalid", "reason": "Account error."})
+	session_key = auth_service.create_session_key(email, env, session_type='login')
+	app.logger.info("New passkey login session created for %s", email)
+	return json_response({"status": "ok", "session_key": session_key, "privileges": privs})
 
 # WEB
 
