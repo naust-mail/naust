@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  [type='checkbox'],
+  [type='radio'] {
+    accent-color: #111827;
+  }
+  .dark [type='checkbox'],
+  .dark [type='radio'] {
+    accent-color: #fff;
+  }
+}

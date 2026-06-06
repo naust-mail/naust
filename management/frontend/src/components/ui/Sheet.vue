@@ -30,7 +30,7 @@ defineProps<{ title?: string }>()
     >
       <div
         v-if="open"
-        class="fixed inset-y-0 right-0 z-50 flex flex-col w-full sm:w-[480px] lg:w-[560px] bg-white dark:bg-gray-900 shadow-3xl"
+        class="fixed inset-y-0 right-0 z-50 flex flex-col w-full sm:w-[480px] lg:w-[560px] bg-white dark:bg-gray-850 shadow-3xl rounded-l-2xl"
       >
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
           <h2 class="text-base font-semibold">{{ title }}</h2>

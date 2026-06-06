@@ -22,6 +22,11 @@ export default {
       transitionProperty: {
         width: 'width',
       },
+      transitionDuration: {
+        fast: '150ms',
+        base: '200ms',
+        slow: '250ms',
+      },
       fontFamily: {
         sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'ui-sans-serif', 'system-ui'],
       },
