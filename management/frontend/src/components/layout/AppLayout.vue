@@ -15,7 +15,7 @@ const ui = useUiStore()
     <div
       :class="[
         'transition-[margin] duration-300 md:min-h-screen',
-        ui.sidebarCollapsed ? 'md:ml-16' : 'md:ml-[260px]',
+        ui.sidebarCollapsed ? 'md:ml-14' : 'md:ml-[260px]',
       ]"
     >
       <!-- Mobile top bar -->

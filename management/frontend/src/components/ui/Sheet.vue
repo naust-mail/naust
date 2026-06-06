@@ -35,7 +35,7 @@ defineProps<{ title?: string }>()
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
           <h2 class="text-base font-semibold">{{ title }}</h2>
           <button
-            class="rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 size-8 flex items-center justify-center transition"
+            class="rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 size-8 flex items-center justify-center transition"
             @click="open = false"
           >
             <X class="size-4" />

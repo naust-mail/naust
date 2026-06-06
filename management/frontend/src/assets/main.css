@@ -2,10 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 120ms ease-in both;
+}
+
 @layer base {
+  body {
+    background: #fff;
+  }
+  .dark body {
+    background: #171717;
+    color: #ebebeb;
+  }
   [type='checkbox'],
   [type='radio'] {
-    accent-color: #111827;
+    accent-color: #000;
   }
   .dark [type='checkbox'],
   .dark [type='radio'] {
