@@ -136,28 +136,65 @@ type SslStatus = {
 
 /** One backup entry in the backup history list. */
 type BackupEntry = {
+  /** ISO 8601 timestamp. */
   date: string
-  label: string
-  size: number
+  /** Human-readable date with timezone (e.g. "2026-06-05 14:23:47 AEST"). */
+  date_str: string
+  /** Human-readable age (e.g. "3 days, 2 hours"). */
+  date_delta: string
+  /** True for a full backup, false for an incremental. */
   full: boolean
+  /** Size in bytes. */
+  size: number
+  /** Number of archive volumes. */
+  volumes: number
+  /** Human-readable time until deletion (absent if unknown). */
+  deleted_in?: string
 }
 
-/** Response from GET /admin/system/backup/status. */
+/**
+ * Response from GET /admin/system/backup/status.
+ * Returns {} when backups are off, {"error": ...} on failure,
+ * or {"backups": [...], "unmatched_file_size": N} when enabled.
+ */
 type BackupStatus = {
-  target: string
-  target_type: string
-  min_age_days: number
-  backups: BackupEntry[] | null
-  error: string | null
+  backups?: BackupEntry[]
+  unmatched_file_size?: number
+  error?: string
 }
 
-/** Response from GET /admin/system/backup/config. */
+/**
+ * Response from GET /admin/system/backup/config (for_ui=True).
+ * target_user and target_pass are omitted by the backend for security.
+ */
 type BackupConfig = {
+  /** Full target URL (e.g. "file://...", "rsync://...", "s3://...", "b2://...") or "off". */
   target: string
-  target_user: string
-  target_pass: string
-  min_age: string
-  enc_pw_file?: string
+  /** Minimum backup age in days before deletion is allowed. */
+  min_age_in_days: number
+  /** Local path where encrypted backup files are stored. */
+  file_target_directory: string
+  /** Path to the encryption key file. */
+  enc_pw_file: string
+  /** SSH public key used for rsync access (present if key exists on disk). */
+  ssh_pub_key?: string
+}
+
+// ---------------------------------------------------------------------------
+// SSL provision — POST /admin/ssl/provision
+// ---------------------------------------------------------------------------
+
+/** Result for a single domain group in a TLS provision run. */
+type SslProvisionRequest = {
+  domains: string[]
+  result: 'installed' | 'error' | 'skipped'
+  message?: string
+  log: string[]
+}
+
+/** Response from POST /admin/ssl/provision. */
+type SslProvisionResult = {
+  requests: SslProvisionRequest[]
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +240,7 @@ export type {
   MailUser, MailUserDomain, MailAlias, MailAliasDomain,
   DnsRecord, ExternalDnsEntry,
   StatusCheckItem,
-  SslDomainStatus, SslStatus,
+  SslDomainStatus, SslStatus, SslProvisionRequest, SslProvisionResult,
   BackupEntry, BackupStatus, BackupConfig,
   MfaEntry, TotpProvision, MfaStatus,
   WebDomain,

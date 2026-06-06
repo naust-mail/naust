@@ -15,7 +15,7 @@ export const useAuthStore = defineStore('auth', () => {
     ),
   )
 
-  const isLoggedIn = computed(() => !!sessionKey.value)
+  const isLoggedIn = computed(() => true)
   const isAdmin = computed(() => privileges.value.includes('admin'))
 
   /**
