@@ -18,7 +18,7 @@ class AuthService:
 	def __init__(self):
 		self.auth_realm = DEFAULT_AUTH_REALM
 		self.key_path = DEFAULT_KEY_PATH
-		self.max_session_duration = timedelta(days=2)
+		self.max_session_duration = timedelta(hours=1)
 
 		self.init_system_api_key()
 
@@ -181,6 +181,24 @@ class AuthService:
 			"type": session_type,
 		}
 		return token
+
+	def get_session_by_key_only(self, session_key, env):
+		"""Look up a login session by key alone - used for HttpOnly cookie auth
+		where the email address is not available upfront.
+		Re-inserts the session on a valid lookup so the idle timeout slides
+		with activity rather than expiring from login time."""
+		if not session_key or session_key not in self.login_sessions:
+			return None
+		session = self.login_sessions[session_key]
+		email = session.get("email")
+		if not email:
+			return None
+		# Re-validate via get_session to check password_token integrity.
+		validated = self.get_session(email, session_key, "login", env)
+		if validated:
+			# Slide the expiry window on each authenticated request.
+			self.login_sessions[session_key] = validated
+		return validated
 
 	def get_session(self, user_email, session_key, session_type, env):
 		store = self._session_store(session_type)

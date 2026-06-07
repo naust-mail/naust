@@ -2,12 +2,6 @@ import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 
 export function useApi() {
-  function authHeader(): string {
-    const auth = useAuthStore()
-    if (!auth.sessionKey || !auth.email) return ''
-    return 'Basic ' + btoa(`${auth.email}:${auth.sessionKey}`)
-  }
-
   async function request(
     method: string,
     url: string,
@@ -18,15 +12,13 @@ export function useApi() {
       'X-Requested-With': 'XMLHttpRequest',
       ...extraHeaders,
     }
-    const auth = authHeader()
-    if (auth) headers['Authorization'] = auth
 
-    const init: RequestInit = { method, headers }
+    const init: RequestInit = { method, headers, credentials: 'same-origin' }
     if (body) {
       if (typeof body === 'string') {
         // Raw text body — used by DNS endpoints that read request.stream directly
         init.body = body
-        ;(headers as Record<string, string>)['Content-Type'] = 'text/plain; charset=ascii'
+        headers['Content-Type'] = 'text/plain; charset=ascii'
       } else if (body instanceof FormData) {
         init.body = body
       } else {

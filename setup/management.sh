@@ -111,5 +111,21 @@ cat > /etc/cron.d/mailinabox-nightly << EOF;
 $minute 1 * * *	root	(cd $PWD && management/daily_tasks.sh)
 EOF
 
+# Build the Vue admin frontend.
+# Node.js is only needed at build time - install it, build, then remove it.
+NODE_MAJOR=24
+echo "Installing Node.js $NODE_MAJOR LTS (build-time only)..."
+curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | hide_output bash -
+hide_output apt-get install -y nodejs
+
+echo "Building admin frontend..."
+(cd "$PWD/management/frontend" && hide_output npm ci --prefer-offline && hide_output npm run build)
+
+echo "Removing Node.js..."
+hide_output npm cache clean --force
+hide_output apt-get remove --purge -y nodejs
+hide_output apt-get autoremove -y
+rm -f /etc/apt/sources.list.d/nodesource.list
+
 # Start the management server.
 restart_service mailinabox

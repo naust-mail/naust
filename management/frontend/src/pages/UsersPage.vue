@@ -233,7 +233,7 @@ onMounted(load)
               :placeholder="editingUser ? 'Leave blank to keep current' : ''"
               autocomplete="off"
             />
-            <Button variant="secondary" size="sm" type="button" @click="fPassword = generatePassword()">
+            <Button variant="primary" size="sm" type="button" @click="fPassword = generatePassword()">
               Generate
             </Button>
           </div>

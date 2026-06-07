@@ -16,11 +16,18 @@ import Sheet from '@/components/ui/Sheet.vue'
 import Textarea from '@/components/ui/Textarea.vue'
 import StatusIcon from '@/components/shared/StatusIcon.vue'
 import { useApi } from '@/composables/useApi'
-import { useConfigStore } from '@/stores/config'
 import type { SslDomainStatus, SslStatus, SslProvisionResult } from '@/types'
 
 const api = useApi()
-const config = useConfigStore()
+
+// Country codes are only needed when the install-cert sheet opens.
+// Dynamic import keeps them out of the initial bundle.
+const countryCodes = ref<[string, string][]>([])
+async function ensureCountryCodes(): Promise<void> {
+  if (countryCodes.value.length) return
+  const mod = await import('@/data/countryCodes')
+  countryCodes.value = mod.CSR_COUNTRY_CODES
+}
 
 const loading = ref(true)
 const domains = ref<SslDomainStatus[]>([])
@@ -80,9 +87,10 @@ async function provision(): Promise<void> {
   }
 }
 
-function openInstall(domain?: string): void {
+async function openInstall(domain?: string): Promise<void> {
+  await ensureCountryCodes()
   selectedDomain.value = domain ?? (domains.value[0]?.domain ?? '')
-  selectedCc.value = config.csrCountryCodes[0]?.[0] ?? ''
+  selectedCc.value = countryCodes.value[0]?.[0] ?? ''
   csr.value = ''
   pastedCert.value = ''
   pastedChain.value = ''
@@ -258,7 +266,7 @@ onMounted(load)
           <label for="installCc" class="block text-sm font-medium mb-1.5">Country code (for CSR)</label>
           <Select id="installCc" v-model="selectedCc">
             <option
-              v-for="[code, name] in config.csrCountryCodes"
+              v-for="[code, name] in countryCodes"
               :key="code"
               :value="code"
             >{{ code }} - {{ name }}</option>

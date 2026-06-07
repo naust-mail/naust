@@ -135,13 +135,6 @@ me = __file__
 with contextlib.suppress(OSError):
 	me = os.readlink(__file__)
 
-# for generating CSRs we need a list of country codes
-csr_country_codes = []
-with open(os.path.join(os.path.dirname(me), "csr_country_codes.tsv"), encoding="utf-8") as f:
-	for line in f:
-		if line.strip() == "" or line.startswith("#"): continue
-		code, name = line.strip().split("\t")[0:2]
-		csr_country_codes.append((code, name))
 
 template_dir = os.path.abspath(os.path.join(os.path.dirname(me), "templates"))
 static_dir = os.path.abspath(os.path.join(os.path.dirname(me), "static"))
@@ -178,21 +171,29 @@ def check_origin():
 def authorized_personnel_only(viewfunc):
 	@wraps(viewfunc)
 	def newview(*args, **kwargs):
-		# Authenticate the passed credentials, which is either the API key or a username:password pair
-		# and an optional X-Auth-Token token.
 		error = None
 		privs = []
+		email = None
 
-		try:
-			email, privs = auth_service.authenticate(request, env)
-		except ValueError as e:
-			# Write a line in the log recording the failed login, unless no authorization header
-			# was given which can happen on an initial request before a 403 response.
-			if "Authorization" in request.headers:
+		if 'Authorization' in request.headers:
+			# HTTP Basic Auth - for API clients and backward compatibility.
+			try:
+				email, privs = auth_service.authenticate(request, env)
+			except ValueError as e:
 				log_failed_login(request)
-
-			# Authentication failed.
-			error = str(e)
+				error = str(e)
+		else:
+			# No Authorization header - try the HttpOnly admin session cookie.
+			cookie_key = request.cookies.get('admin_session', '')
+			session = auth_service.get_session_by_key_only(cookie_key, env) if cookie_key else None
+			if session:
+				email = session['email']
+				privs = get_mail_user_privileges(email, env)
+				if isinstance(privs, tuple):
+					error = "Account error."
+					privs = []
+			else:
+				error = "No authentication provided."
 
 		# Authorized to access an API view?
 		if "admin" in privs:
@@ -355,30 +356,8 @@ def validate_hostname(hostname):
 
 ###################################
 
-# Control Panel (unauthenticated views)
-
-@app.route('/')
-def index():
-	# Render the control panel. This route does not require user authentication
-	# so it must be safe!
-
-	no_users_exist = (len(get_mail_users(env)) == 0)
-	no_admins_exist = (len(get_admins(env)) == 0)
-
-	import boto3.s3
-	backup_s3_hosts = [(r, f"s3.{r}.amazonaws.com") for r in boto3.session.Session().get_available_regions('s3')]
-
-
-	return render_template('index.html',
-		hostname=env['PRIMARY_HOSTNAME'],
-		storage_root=env['STORAGE_ROOT'],
-
-		no_users_exist=no_users_exist,
-		no_admins_exist=no_admins_exist,
-
-		backup_s3_hosts=backup_s3_hosts,
-		csr_country_codes=csr_country_codes,
-	)
+# Static file serving for legacy assets (fonts, twemoji, old js/css).
+# The Vue SPA's own assets are under /static/app/ and served by the catch-all below.
 
 @app.route('/static/<path:filename>')
 def static_files(filename):
@@ -407,18 +386,24 @@ def login():
 			"reason": str(e),
 		})
 
-	# Return a new session for the user.
-	resp = {
+	# Create a session and deliver it as an HttpOnly cookie so the key is
+	# never accessible to JavaScript.
+	session_key = auth_service.create_session_key(email, env, session_type='login')
+	app.logger.info("New login session created for %s", email)
+
+	response = make_response(json_response({
 		"status": "ok",
 		"email": email,
 		"privileges": privs,
-		"api_key": auth_service.create_session_key(email, env, session_type='login'),
-	}
-
-	app.logger.info("New login session created for %s", email)
-
-	# Return.
-	return json_response(resp)
+	}))
+	response.set_cookie(
+		'admin_session',
+		session_key,
+		httponly=True,
+		secure=not app.debug,
+		samesite='Strict',
+	)
+	return response
 
 @app.route('/auth/methods')
 def auth_methods():
@@ -447,13 +432,25 @@ def auth_methods():
 
 @app.route('/logout', methods=["POST"])
 def logout():
-	try:
-		email, _ = auth_service.authenticate(request, env, logout=True)
-		app.logger.info("%s logged out", email)
-	except ValueError:
-		pass
-	finally:
-		return json_response({ "status": "ok" })
+	if not validate_csrf():
+		return Response("Forbidden\n", status=403, mimetype='text/plain')
+
+	if 'Authorization' in request.headers:
+		try:
+			email, _ = auth_service.authenticate(request, env, logout=True)
+			app.logger.info("%s logged out", email)
+		except ValueError:
+			pass
+	else:
+		cookie_key = request.cookies.get('admin_session', '')
+		if cookie_key and cookie_key in auth_service.login_sessions:
+			session = auth_service.login_sessions[cookie_key]
+			app.logger.info("%s logged out (cookie)", session.get('email', 'unknown'))
+			del auth_service.login_sessions[cookie_key]
+
+	response = make_response(json_response({"status": "ok"}))
+	response.delete_cookie('admin_session', httponly=True, secure=not app.debug, samesite='Strict')
+	return response
 
 
 @app.route('/whoami')
@@ -918,7 +915,15 @@ def webauthn_auth_complete():
 		return json_response({"status": "invalid", "reason": "Account error."})
 	session_key = auth_service.create_session_key(email, env, session_type='login')
 	app.logger.info("New passkey login session created for %s", email)
-	return json_response({"status": "ok", "session_key": session_key, "privileges": privs})
+	response = make_response(json_response({"status": "ok", "email": email, "privileges": privs}))
+	response.set_cookie(
+		'admin_session',
+		session_key,
+		httponly=True,
+		secure=not app.debug,
+		samesite='Strict',
+	)
+	return response
 
 # WEB
 
@@ -1182,6 +1187,73 @@ def log_failed_login(request):
 	# We need to add a timestamp to the log message, otherwise /dev/log will eat the "duplicate"
 	# message.
 	app.logger.warning("Mail-in-a-Box Management Daemon: Failed login attempt from ip %s - timestamp %s", ip, time.time())
+
+
+# ---------------------------------------------------------------------------
+# SPA catch-all - serves the Vue admin panel for any path that does not
+# match an explicit API route above. Flask's routing is specificity-based,
+# so /login, /mail/*, /mfa/*, /static/*, /munin/* etc. all resolve first.
+# This is only reached for SPA navigation paths like /users, /system-status.
+# ---------------------------------------------------------------------------
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def spa_fallback(path):
+	spa_index = os.path.join(static_dir, 'app', 'index.html')
+	if not os.path.exists(spa_index):
+		return (
+			"Admin panel not built. Run: cd management/frontend && npm ci && npm run build",
+			503,
+		)
+
+	# Check the HttpOnly admin session cookie to determine how much to inject.
+	cookie_key = request.cookies.get('admin_session', '')
+	session = auth_service.get_session_by_key_only(cookie_key, env) if cookie_key else None
+
+	if session:
+		email = session['email']
+		privs = get_mail_user_privileges(email, env)
+		if isinstance(privs, tuple):
+			privs = []
+
+		import boto3.s3
+		backup_s3_hosts = [(r, f"s3.{r}.amazonaws.com") for r in boto3.session.Session().get_available_regions('s3')]
+
+		init_data = {
+			"hostname": env['PRIMARY_HOSTNAME'],
+			"authenticated": True,
+			"email": email,
+			"privileges": privs,
+			"noUsersExist": len(get_mail_users(env)) == 0,
+			"noAdminsExist": len(get_admins(env)) == 0,
+			"backupS3Hosts": backup_s3_hosts,
+		}
+	else:
+		init_data = {
+			"hostname": env['PRIMARY_HOSTNAME'],
+			"authenticated": False,
+		}
+
+	with open(spa_index, encoding='utf-8') as f:
+		html = f.read()
+
+	# Escape HTML-special chars so a value containing </script> can never break
+	# out of the script tag. This produces valid JSON (unicode escapes are legal).
+	config_json = (
+		json.dumps(init_data)
+		.replace('&', '\\u0026')
+		.replace('<', '\\u003c')
+		.replace('>', '\\u003e')
+	)
+	html = html.replace(
+		'<script type="application/json" id="__INIT__"></script>',
+		f'<script type="application/json" id="__INIT__">{config_json}</script>',
+		1,
+	)
+	response = make_response(html)
+	response.headers['Cache-Control'] = 'no-store'
+	response.headers['Vary'] = 'Cookie'
+	return response
 
 
 # APP

@@ -1,12 +1,23 @@
 import type { Component } from 'vue'
 
-/** Bootstrap data injected by Flask into the __INIT__ script tag on page load. */
+/**
+ * Bootstrap data injected by Flask into the __INIT__ script tag on page load.
+ * Auth-sensitive fields are only present when the admin_session cookie is valid.
+ * hostname is always present (it is already public knowledge).
+ */
 type InitData = {
   hostname: string
-  noUsersExist: boolean
-  noAdminsExist: boolean
-  backupS3Hosts: [string, string][]
-  csrCountryCodes: [string, string][]
+  authenticated: boolean
+  /** Present when authenticated. */
+  email?: string
+  /** Present when authenticated. */
+  privileges?: string[]
+  /** Present when authenticated. */
+  noUsersExist?: boolean
+  /** Present when authenticated. */
+  noAdminsExist?: boolean
+  /** Present when authenticated. */
+  backupS3Hosts?: [string, string][]
 }
 
 /** JSON response from POST /admin/login. */
@@ -16,8 +27,6 @@ type LoginApiResponse = {
   email?: string
   /** User privilege list, e.g. ["admin"] (present on ok). */
   privileges?: string[]
-  /** Session key used as Basic Auth password for subsequent requests (present on ok). */
-  api_key?: string
   /** Human-readable failure reason (present on invalid / missing-totp-token). */
   reason?: string
 }

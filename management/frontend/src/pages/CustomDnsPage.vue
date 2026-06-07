@@ -154,7 +154,8 @@ onMounted(async () => {
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <label for="fZone" class="block text-sm font-medium mb-1.5">Zone</label>
-          <Select id="fZone" v-model="fZone">
+          <Select id="fZone" v-model="fZone" aria-placeholder="Select a zone">
+            <option v-if="zones.length === 0" selected disabled value="none">No zones available</option>
             <option v-for="z in zones" :key="z" :value="z">{{ z }}</option>
           </Select>
         </div>

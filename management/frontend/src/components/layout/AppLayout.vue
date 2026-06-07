@@ -30,7 +30,9 @@ const ui = useUiStore()
       </div>
 
       <div class="p-6">
-        <slot />
+        <div class="mx-auto w-full max-w-5xl">
+          <slot />
+        </div>
       </div>
     </div>
   </div>

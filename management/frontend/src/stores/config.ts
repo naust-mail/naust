@@ -10,7 +10,6 @@ export const useConfigStore = defineStore('config', () => {
   const noUsersExist = ref(init.noUsersExist ?? false)
   const noAdminsExist = ref(init.noAdminsExist ?? false)
   const backupS3Hosts = ref<[string, string][]>(init.backupS3Hosts ?? [])
-  const csrCountryCodes = ref<[string, string][]>(init.csrCountryCodes ?? [])
 
-  return { hostname, noUsersExist, noAdminsExist, backupS3Hosts, csrCountryCodes }
+  return { hostname, noUsersExist, noAdminsExist, backupS3Hosts }
 })
