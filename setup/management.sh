@@ -14,12 +14,7 @@ echo "Installing Mail-in-a-Box system management daemon..."
 #
 # certbot installs EFF's certbot which we use to
 # provision free TLS certificates.
-apt_install duplicity python3-pip virtualenv certbot rsync
-
-# b2sdk is used for backblaze backups.
-# boto3 is used for amazon aws backups.
-# Both are installed outside the pipenv, so they can be used by duplicity
-hide_output pip3 install --upgrade b2sdk boto3
+apt_install_cached "management" duplicity python3-pip virtualenv certbot rsync
 
 # Create a virtualenv for the installation of Python 3 packages
 # used by the management daemon.
@@ -36,18 +31,28 @@ if [ ! -d $venv ]; then
 	hide_output virtualenv -ppython3 $venv
 fi
 
-# Upgrade pip because the Ubuntu-packaged version is out of date.
-hide_output $venv/bin/pip install --upgrade pip
+# Skip pip installs if this script hasn't changed - the package list lives inline here.
+_pip_hash=$(hash_files "$PWD/setup/management.sh")
+if needs_build "management-pip" "$_pip_hash"; then
+	# b2sdk is used for backblaze backups.
+	# boto3 is used for amazon aws backups.
+	# Both are installed outside the pipenv, so they can be used by duplicity
+	hide_output pip3 install --upgrade b2sdk boto3
 
-# Install other Python 3 packages used by the management daemon.
-# The first line is the packages that Josh maintains himself!
-# NOTE: email_validator is repeated in setup/questions.sh, so please keep the versions synced.
-hide_output $venv/bin/pip install --upgrade \
-	rtyaml "email_validator>=1.0.0" "exclusiveprocess" \
-	flask dnspython python-dateutil expiringdict gunicorn \
-	qrcode[pil] pyotp "fido2>=1.0" \
-	"idna>=2.0.0" "cryptography==37.0.2" psutil postfix-mta-sts-resolver \
-	b2sdk boto3
+	# Upgrade pip because the Ubuntu-packaged version is out of date.
+	hide_output $venv/bin/pip install --upgrade pip
+
+	# Install other Python 3 packages used by the management daemon.
+	# The first line is the packages that Josh maintains himself!
+	# NOTE: email_validator is repeated in setup/questions.sh, so please keep the versions synced.
+	hide_output $venv/bin/pip install --upgrade \
+		rtyaml "email_validator>=1.0.0" "exclusiveprocess" \
+		flask dnspython python-dateutil expiringdict gunicorn \
+		qrcode[pil] pyotp "fido2>=1.0" \
+		"idna>=2.0.0" "cryptography==37.0.2" psutil postfix-mta-sts-resolver \
+		b2sdk boto3
+	mark_built "management-pip" "$_pip_hash"
+fi
 
 # CONFIGURATION
 
@@ -95,19 +100,25 @@ $minute 1 * * *	root	(cd $PWD && management/daily_tasks.sh)
 EOF
 
 # Build the Vue admin frontend.
+# Skip if no source file under management/frontend/ has changed since the last build.
 # Node.js is only needed at build time - install it, build, then remove it.
-NODE_MAJOR=24
-echo "Installing Node.js $NODE_MAJOR LTS (build-time only)..."
-curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | hide_output bash -
-hide_output apt-get install -y nodejs
+_fe_hash=$(hash_files "$PWD/management/frontend")
+if needs_build "management-frontend" "$_fe_hash"; then
+	NODE_MAJOR=24
+	echo "Installing Node.js $NODE_MAJOR LTS (build-time only)..."
+	curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | hide_output bash -
+	hide_output apt-get install -y nodejs
 
-echo "Building admin frontend..."
-(cd "$PWD/management/frontend" && hide_output npm ci --prefer-offline && hide_output npm run build)
+	echo "Building admin frontend..."
+	(cd "$PWD/management/frontend" && hide_output npm ci --prefer-offline && hide_output npm run build)
 
-echo "Removing Node.js..."
-hide_output apt-get remove --purge -y nodejs
-hide_output apt-get autoremove -y
-rm -f /etc/apt/sources.list.d/nodesource.list
+	echo "Removing Node.js..."
+	hide_output apt-get remove --purge -y nodejs
+	hide_output apt-get autoremove -y
+	rm -f /etc/apt/sources.list.d/nodesource.list
+
+	mark_built "management-frontend" "$_fe_hash"
+fi
 
 # Start the management server.
 restart_service mailinabox

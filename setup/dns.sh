@@ -72,7 +72,7 @@ EOF
 # * ldnsutils: Helper utilities for signing DNSSEC zones.
 # * openssh-client: Provides ssh-keyscan which we use to create SSHFP records.
 echo "Installing nsd (DNS server)..."
-apt_install nsd ldnsutils openssh-client
+apt_install_cached "dns" nsd ldnsutils openssh-client
 
 # Create DNSSEC signing keys.
 

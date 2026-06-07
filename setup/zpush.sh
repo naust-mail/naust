@@ -16,7 +16,7 @@ source /etc/mailinabox.conf # load global vars
 # Prereqs.
 
 echo "Installing Z-Push (Exchange/ActiveSync server)..."
-apt_install \
+apt_install_cached "zpush" \
        php"${PHP_VER}"-soap php"${PHP_VER}"-imap libawl-php php"$PHP_VER"-xml php"${PHP_VER}"-intl
 
 phpenmod -v "$PHP_VER" imap

@@ -12,7 +12,7 @@ export RUSTUP_HOME=/opt/rustup
 export CARGO_HOME=/opt/cargo
 if [ ! -x /opt/cargo/bin/cargo ]; then
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-		| sh -s -- -y --profile minimal --no-modify-path
+		| hide_output sh -s -- -y --profile minimal --no-modify-path
 fi
 export PATH="/opt/cargo/bin:$PATH"
 cat > /etc/profile.d/cargo.sh << 'PROFILE'
@@ -21,64 +21,90 @@ export CARGO_HOME=/opt/cargo
 export PATH="$CARGO_HOME/bin:$PATH"
 PROFILE
 
-# Install Bun with BUN_INSTALL=/usr/local so the binary lands at /usr/local/bin/bun.
+# Install Bun so the binary lands at /usr/local/bin/bun.
+# BUN_INSTALL must be exported (not inline) so the piped bash subshell inherits it.
 if [ ! -x /usr/local/bin/bun ]; then
-	BUN_INSTALL=/usr/local curl -fsSL https://bun.sh/install | bash
+	export BUN_INSTALL=/usr/local
+	curl -fsSL https://bun.sh/install | hide_output bash
 fi
+# Ensure bun is on PATH for the rest of this script regardless of install path.
+export PATH="/usr/local/bin:${BUN_INSTALL:-/usr/local}/bin:$HOME/.bun/bin:$PATH"
 
-apt_install libssl-dev libsqlite3-dev ca-certificates
+apt_install_cached "webmail" libssl-dev libsqlite3-dev ca-certificates
 
 # Pin to a known-good commit (update this hash when upgrading).
 OXI_COMMIT=f210ec5863dad8d8f9ab432272a749fe79a65f74
 OXI_DIR=/usr/local/src/oxi
 
 if [ ! -d "$OXI_DIR/.git" ]; then
-	git clone https://github.com/c0h1b4/oxi.git "$OXI_DIR"
+	hide_output git clone https://github.com/c0h1b4/oxi.git "$OXI_DIR"
 fi
-# Use --all to ensure the pinned commit is reachable even if it was not on the
-# default fetch refspec (e.g. after a force-push or branch rename).
-git -C "$OXI_DIR" fetch --all
-git -C "$OXI_DIR" checkout "$OXI_COMMIT"
-
-# Apply MIAB-specific patches (custom server lockdown, etc.).
-# Reset any previously applied patch first so git apply is idempotent.
-OXI_PATCH="$PWD/management/oxi/1_miab_oxi_auth_patch.patch"
-if [ -f "$OXI_PATCH" ]; then
-	git -C "$OXI_DIR" apply --reverse --check "$OXI_PATCH" 2>/dev/null && \
-		git -C "$OXI_DIR" apply --reverse "$OXI_PATCH"
-	git -C "$OXI_DIR" apply "$OXI_PATCH"
+# Fetch only if the pinned commit is not already present locally (e.g. first
+# clone, or after a force-push on the upstream remote).
+if ! git -C "$OXI_DIR" cat-file -e "${OXI_COMMIT}^{commit}" 2>/dev/null; then
+	git -C "$OXI_DIR" fetch --all -q
 fi
+git -C "$OXI_DIR" checkout -q "$OXI_COMMIT"
 
-# Skip the build if the installed binary was already built from this commit + patch.
-OXI_PATCH_HASH=$(sha256sum "$OXI_PATCH" 2>/dev/null | cut -d' ' -f1)
-OXI_BUILD_STAMP=/usr/local/share/oxi-email/built-commit
-if [ ! -f "$OXI_BUILD_STAMP" ] || [ "$(cat "$OXI_BUILD_STAMP")" != "$OXI_COMMIT:$OXI_PATCH_HASH" ]; then
+# Apply MIAB-specific patches. Patches are applied in order; reversed in
+# reverse order first so the operation is idempotent across re-runs.
+OXI_PATCH1="$PWD/management/oxi/1_miab_oxi_auth_patch.patch"
+OXI_PATCH2="$PWD/management/oxi/2_miab_oxi_ui_patch.patch"
+for _p in "$OXI_PATCH2" "$OXI_PATCH1"; do
+	[ -f "$_p" ] || continue
+	git -C "$OXI_DIR" apply --reverse --check "$_p" 2>/dev/null && \
+		git -C "$OXI_DIR" apply --reverse "$_p"
+done
+for _p in "$OXI_PATCH1" "$OXI_PATCH2"; do
+	[ -f "$_p" ] && git -C "$OXI_DIR" apply "$_p"
+done
 
-	# Build frontend and backend in a subshell so the cd calls do not change
-	# the working directory for the rest of start.sh (which sources this script).
+# Frontend and backend use separate stamps so a patch-only change does not
+# force a frontend rebuild, and a failed mid-build can resume from where it
+# left off on the next run. Each stamp is written only after its deploy step
+# succeeds, so a partial failure leaves the stamp invalid for retry.
+
+# Frontend stamp: commit + lockfile hash + UI patch hash.
+_fe_want="$OXI_COMMIT:$(hash_files "$OXI_DIR/frontend/bun.lock" "$OXI_PATCH2")"
+
+# Backend stamp: commit + backend patch hash.
+_be_want="$OXI_COMMIT:$(hash_files "$OXI_PATCH1")"
+
+OXI_STATIC_DIR=/usr/local/share/oxi-email/static
+mkdir -p "$OXI_STATIC_DIR"
+
+if needs_build "oxi-frontend" "$_fe_want"; then
+	echo "Building oxi.email frontend..."
 	(
-		# Build frontend. /mail is oxi's own Next.js route - no basePath needed.
 		cd "$OXI_DIR/frontend"
-		bun install --frozen-lockfile
-		bun run build
+		hide_output bun install --frozen-lockfile
 
-		# Build Rust backend.
-		cd "$OXI_DIR/backend"
-		cargo build --release
+		# Cap Node heap at 60% of RAM. Floor: 256 MB. Ceiling: 4096 MB.
+		# Disable Next.js telemetry - server build, not a dev environment.
+		_total_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+		_node_mem=$(( _total_kb * 60 / 100 / 1024 ))
+		[ "$_node_mem" -lt 256 ]  && _node_mem=256
+		[ "$_node_mem" -gt 4096 ] && _node_mem=4096
+
+		NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS="--max-old-space-size=${_node_mem}" \
+			hide_output bun x next build
 	)
+	hide_output rsync -a --delete "$OXI_DIR/frontend/out/" "$OXI_STATIC_DIR/"
+	chown -R root:root "$OXI_STATIC_DIR"
+	chmod -R 755 "$OXI_STATIC_DIR"
+	mark_built "oxi-frontend" "$_fe_want"
+fi
 
-	# Install binary and static files.
-	cp "$OXI_DIR/backend/target/release/oxi-email-server" /usr/local/bin/oxi-email-server
+if needs_build "oxi-backend" "$_be_want"; then
+	echo "Building oxi.email backend (this will take a few minutes on first run)..."
+	(
+		cd "$OXI_DIR/backend"
+		hide_output cargo build --release
+	)
+	cp --remove-destination "$OXI_DIR/backend/target/release/oxi-email-server" /usr/local/bin/oxi-email-server
 	chmod 755 /usr/local/bin/oxi-email-server
 	chown root:root /usr/local/bin/oxi-email-server
-
-	mkdir -p /usr/local/share/oxi-email
-	rsync -a --delete "$OXI_DIR/frontend/out/" /usr/local/share/oxi-email/static/
-	chown -R root:root /usr/local/share/oxi-email
-	chmod -R 755 /usr/local/share/oxi-email
-
-	# Record the built commit so re-runs skip the build when nothing changed.
-	echo "$OXI_COMMIT:$OXI_PATCH_HASH" > "$OXI_BUILD_STAMP"
+	mark_built "oxi-backend" "$_be_want"
 fi
 
 # Data directory for per-user SQLite + search indexes - www-data needs write.
@@ -127,7 +153,6 @@ NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
-ProtectHome=true
 ReadWritePaths=$STORAGE_ROOT/oxi
 ProtectKernelTunables=true
 ProtectKernelModules=true

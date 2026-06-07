@@ -59,6 +59,19 @@ function apt_install {
 	apt_get_quiet install "$@"
 }
 
+function apt_install_cached {
+	# Like apt_install but skips if this exact package list was already installed.
+	# First argument is a step name for the stamp; remaining arguments are packages.
+	local step="$1"
+	shift
+	local pkg_hash
+	pkg_hash=$(printf '%s\n' "$@" | sha256sum | cut -d' ' -f1)
+	if needs_build "apt-$step" "$pkg_hash"; then
+		apt_install "$@"
+		mark_built "apt-$step" "$pkg_hash"
+	fi
+}
+
 function get_default_hostname {
 	# Guess the machine's hostname. It should be a fully qualified
 	# domain name suitable for DNS. None of these calls may provide
@@ -222,4 +235,45 @@ function git_clone {
 	(cd $TMPPATH; git checkout -q "$TREEISH";) || exit 1
 	mv $TMPPATH/"$SUBDIR" "$TARGETPATH"
 	rm -rf $TMPPATH
+}
+
+## Incremental build helpers ##
+
+# Central directory where per-step build stamps are stored.
+MIAB_STAMP_DIR=/usr/local/lib/mailinabox/stamps
+
+function hash_files {
+	# Produces a single sha256 hex string over all given files/directories.
+	# Directories are walked recursively with paths sorted. Build artifact
+	# directories (node_modules, .next, dist, out, target) are excluded.
+	local item
+	{
+		for item in "$@"; do
+			if [ -d "$item" ]; then
+				find "$item" \
+					-not -path "*/node_modules/*" \
+					-not -path "*/.next/*" \
+					-not -path "*/dist/*" \
+					-not -path "*/out/*" \
+					-not -path "*/target/*" \
+					-type f | sort | xargs -r sha256sum 2>/dev/null
+			elif [ -f "$item" ]; then
+				sha256sum "$item" 2>/dev/null || true
+			fi
+		done
+	} | sha256sum | cut -d' ' -f1
+}
+
+function needs_build {
+	# Returns 0 (true) if step $1 has not been completed with hash $2.
+	# Set MIAB_FORCE=1 to bypass all stamp checks and force every step to re-run.
+	[ "${MIAB_FORCE:-0}" = "1" ] && return 0
+	local stamp="$MIAB_STAMP_DIR/$1"
+	[ ! -f "$stamp" ] || [ "$(cat "$stamp")" != "$2" ]
+}
+
+function mark_built {
+	# Records hash $2 as the completed state for step $1.
+	mkdir -p "$MIAB_STAMP_DIR"
+	printf '%s' "$2" > "$MIAB_STAMP_DIR/$1"
 }

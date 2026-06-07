@@ -24,7 +24,7 @@ source /etc/mailinabox.conf # load global vars
 # not by Ubuntu.
 
 echo "Installing Dovecot (IMAP server)..."
-apt_install \
+apt_install_cached "dovecot" \
 	dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-sqlite sqlite3 \
 	dovecot-sieve dovecot-managesieved
 
