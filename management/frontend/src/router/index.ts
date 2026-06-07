@@ -9,18 +9,18 @@ const router = createRouter({
     { path: '/login', component: () => import('@/pages/LoginPage.vue'), meta: { public: true } },
     { path: '/', redirect: '/welcome' },
     { path: '/welcome', component: () => import('@/pages/WelcomePage.vue') },
-    { path: '/users', component: () => import('@/pages/UsersPage.vue') },
-    { path: '/aliases', component: () => import('@/pages/AliasesPage.vue') },
-    { path: '/system-status', component: () => import('@/pages/SystemStatusPage.vue') },
-    { path: '/system-backup', component: () => import('@/pages/SystemBackupPage.vue') },
-    { path: '/ssl', component: () => import('@/pages/SslPage.vue') },
-    { path: '/custom-dns', component: () => import('@/pages/CustomDnsPage.vue') },
-    { path: '/external-dns', component: () => import('@/pages/ExternalDnsPage.vue') },
     { path: '/mfa', component: () => import('@/pages/MfaPage.vue') },
-    { path: '/web', component: () => import('@/pages/WebPage.vue') },
-    { path: '/mail-guide', component: () => import('@/pages/MailGuidePage.vue') },
-    { path: '/sync-guide', component: () => import('@/pages/SyncGuidePage.vue') },
-    { path: '/munin', component: () => import('@/pages/MuninPage.vue') },
+    { path: '/users', component: () => import('@/pages/UsersPage.vue'), meta: { adminOnly: true } },
+    { path: '/aliases', component: () => import('@/pages/AliasesPage.vue'), meta: { adminOnly: true } },
+    { path: '/system-status', component: () => import('@/pages/SystemStatusPage.vue'), meta: { adminOnly: true } },
+    { path: '/system-backup', component: () => import('@/pages/SystemBackupPage.vue'), meta: { adminOnly: true } },
+    { path: '/ssl', component: () => import('@/pages/SslPage.vue'), meta: { adminOnly: true } },
+    { path: '/custom-dns', component: () => import('@/pages/CustomDnsPage.vue'), meta: { adminOnly: true } },
+    { path: '/external-dns', component: () => import('@/pages/ExternalDnsPage.vue'), meta: { adminOnly: true } },
+    { path: '/web', component: () => import('@/pages/WebPage.vue'), meta: { adminOnly: true } },
+    { path: '/mail-guide', component: () => import('@/pages/MailGuidePage.vue'), meta: { adminOnly: true } },
+    { path: '/sync-guide', component: () => import('@/pages/SyncGuidePage.vue'), meta: { adminOnly: true } },
+    { path: '/munin', component: () => import('@/pages/MuninPage.vue'), meta: { adminOnly: true } },
     { path: '/:pathMatch(.*)*', component: () => import('@/pages/NotFoundPage.vue'), meta: { public: true } },
   ],
 })
@@ -53,6 +53,9 @@ router.beforeEach((to) => {
   }
   if (!to.meta.public && !auth.isLoggedIn) {
     return '/login'
+  }
+  if (to.meta.adminOnly && !auth.isAdmin) {
+    return '/welcome'
   }
 })
 

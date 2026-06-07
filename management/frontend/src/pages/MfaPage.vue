@@ -124,7 +124,7 @@ async function addPasskey(): Promise<void> {
     if (!beginRes.ok) { toast.error(await beginRes.text()); return }
     const { options, nonce } = await beginRes.json()
 
-    const credential = await startRegistration({ optionsJSON: options })
+    const credential = await startRegistration({ optionsJSON: options.publicKey })
 
     const completeRes = await api.post('/admin/mfa/webauthn/register/complete', {
       nonce,

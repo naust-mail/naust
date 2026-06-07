@@ -96,7 +96,7 @@ async function submitPasskey(): Promise<void> {
     if (!beginRes.ok) throw new Error('begin failed')
     const { options, nonce } = await beginRes.json()
 
-    const credential = await startAuthentication({ optionsJSON: options })
+    const credential = await startAuthentication({ optionsJSON: options.publicKey })
 
     const completeFd = new FormData()
     completeFd.append('nonce', nonce)

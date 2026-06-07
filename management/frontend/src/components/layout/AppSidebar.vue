@@ -23,41 +23,42 @@ const navGroups: NavGroup[] = [
   {
     label: 'Mail',
     items: [
-      { label: 'Users', path: '/users', icon: Users },
-      { label: 'Aliases', path: '/aliases', icon: AtSign },
-    ],
-  },
-  {
-    label: 'DNS',
-    items: [
-      { label: 'Custom DNS', path: '/custom-dns', icon: Globe },
-      { label: 'External DNS', path: '/external-dns', icon: ExternalLink },
+      { label: 'Users', path: '/users', icon: Users, adminOnly: true },
+      { label: 'Aliases', path: '/aliases', icon: AtSign, adminOnly: true },
     ],
   },
   {
     label: 'System',
     items: [
-      { label: 'Status', path: '/system-status', icon: Activity },
-      { label: 'Backup', path: '/system-backup', icon: Database },
-      { label: 'TLS', path: '/ssl', icon: Shield },
+      { label: 'Status', path: '/system-status', icon: Activity, adminOnly: true },
+      { label: 'Backup', path: '/system-backup', icon: Database, adminOnly: true },
+      { label: 'TLS', path: '/ssl', icon: Shield, adminOnly: true },
+      { label: 'Custom DNS', path: '/custom-dns', icon: Globe, adminOnly: true },
+      { label: 'External DNS', path: '/external-dns', icon: ExternalLink, adminOnly: true },
     ],
   },
   {
     label: 'Settings',
     items: [
       { label: 'Two-Factor Auth', path: '/mfa', icon: Lock },
-      { label: 'Web', path: '/web', icon: Layout },
+      { label: 'Web', path: '/web', icon: Layout, adminOnly: true },
     ],
   },
   {
     label: 'Guides',
     items: [
-      { label: 'Mail', path: '/mail-guide', icon: BookOpen },
-      { label: 'Sync', path: '/sync-guide', icon: RefreshCw },
-      { label: 'Munin', path: '/munin', icon: BarChart2 },
+      { label: 'Mail', path: '/mail-guide', icon: BookOpen, adminOnly: true },
+      { label: 'Sync', path: '/sync-guide', icon: RefreshCw, adminOnly: true },
+      { label: 'Munin', path: '/munin', icon: BarChart2, adminOnly: true },
     ],
   },
 ]
+
+const visibleNavGroups = computed(() =>
+  navGroups
+    .map(g => ({ ...g, items: g.items.filter(i => !i.adminOnly || auth.isAdmin) }))
+    .filter(g => g.items.length > 0)
+)
 
 const collapsed = computed(() => props.forceExpanded ? false : ui.sidebarCollapsed)
 
@@ -111,7 +112,7 @@ async function handleLogout(): Promise<void> {
 
     <!-- Nav -->
     <nav class="flex-1 overflow-y-auto space-y-4">
-      <div v-for="group in navGroups" :key="group.label">
+      <div v-for="group in visibleNavGroups" :key="group.label">
         <!-- Divider replaces section label in collapsed mode -->
         <div v-if="collapsed" class="border-t border-gray-100 dark:border-gray-850/30 mx-1 mb-1" />
         <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 px-2.5 overflow-hidden transition-[max-height,opacity] duration-300"

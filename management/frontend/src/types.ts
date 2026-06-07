@@ -41,6 +41,8 @@ type NavItem = {
   label: string
   path: string
   icon: Component
+  /** If true, only rendered for admin users. */
+  adminOnly?: boolean
 }
 
 /** A labeled group of navigation links in the sidebar. */
