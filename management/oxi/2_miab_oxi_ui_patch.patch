@@ -1,0 +1,369 @@
+Mail-in-a-Box patch: frontend - remove custom server configuration from login
+=============================================================================
+
+Companion frontend patch to 1_miab_oxi_auth_patch.patch.
+
+On a MIAB box, oxi connects to the box's own Dovecot and Postfix instances.
+The server addresses and TLS settings are fixed in /etc/oxi/config.env and
+should not be overridden per-login. This patch removes the server
+configuration UI from the login page and add-account modal so users only
+see and submit email and password.
+
+Without this patch, the login form still renders the server config fields
+and submits imap_tls/smtp_tls in the payload by default, which the backend
+(patch 1) rejects.
+
+diff --git a/frontend/src/app/page.tsx b/frontend/src/app/page.tsx
+index 702227e..c4ad369 100644
+--- a/frontend/src/app/page.tsx
++++ b/frontend/src/app/page.tsx
+@@ -21,15 +21,6 @@ function getCookie(name: string): string | null {
+   return match ? match[2] : null;
+ }
+ 
+-interface ServerConfig {
+-  imapHost: string;
+-  imapPort: string;
+-  imapTls: boolean;
+-  smtpHost: string;
+-  smtpPort: string;
+-  smtpTls: boolean;
+-}
+-
+ export default function Home() {
+   const router = useRouter();
+   const setAccounts = useAuthStore((s) => s.setAccounts);
+@@ -40,15 +31,6 @@ export default function Home() {
+   const [error, setError] = useState<string | null>(null);
+   const [remember, setRemember] = useState(false);
+   const [loading, setLoading] = useState(false);
+-  const [showServerConfig, setShowServerConfig] = useState(false);
+-  const [serverConfig, setServerConfig] = useState<ServerConfig>({
+-    imapHost: "",
+-    imapPort: "993",
+-    imapTls: true,
+-    smtpHost: "",
+-    smtpPort: "587",
+-    smtpTls: true,
+-  });
+ 
+   useEffect(() => {
+     let cancelled = false;
+@@ -81,29 +63,12 @@ export default function Home() {
+       email,
+       password,
+       remember,
+-      imap_tls: serverConfig.imapTls,
+-      smtp_tls: serverConfig.smtpTls,
+     };
+ 
+     if (browserId) {
+       payload.browser_id = browserId;
+     }
+ 
+-    if (serverConfig.imapHost) {
+-      payload.imap_host = serverConfig.imapHost;
+-    }
+-    if (serverConfig.imapPort) {
+-      const port = parseInt(serverConfig.imapPort, 10);
+-      if (!isNaN(port)) payload.imap_port = port;
+-    }
+-    if (serverConfig.smtpHost) {
+-      payload.smtp_host = serverConfig.smtpHost;
+-    }
+-    if (serverConfig.smtpPort) {
+-      const port = parseInt(serverConfig.smtpPort, 10);
+-      if (!isNaN(port)) payload.smtp_port = port;
+-    }
+-
+     try {
+       const response = await apiPost<{
+         account: { id: string; email: string; imapHost: string; smtpHost: string };
+@@ -196,100 +161,6 @@ export default function Home() {
+                 <span className="text-sm text-muted-foreground">Keep me logged in</span>
+               </label>
+ 
+-              <button
+-                type="button"
+-                onClick={() => setShowServerConfig(!showServerConfig)}
+-                className="text-left text-sm text-muted-foreground hover:text-foreground transition-colors"
+-              >
+-                {showServerConfig ? "▼" : "▶"} Server configuration (optional)
+-              </button>
+-
+-              {showServerConfig && (
+-                <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+-                    IMAP Settings
+-                  </div>
+-                  <div className="grid grid-cols-2 gap-2">
+-                    <div className="flex flex-col gap-1">
+-                      <Label htmlFor="imapHost" className="text-xs">Host</Label>
+-                      <Input
+-                        id="imapHost"
+-                        type="text"
+-                        placeholder="imap.example.com"
+-                        disabled={loading}
+-                        value={serverConfig.imapHost}
+-                        onChange={(e) => setServerConfig({ ...serverConfig, imapHost: e.target.value })}
+-                        className="h-8 text-sm"
+-                      />
+-                    </div>
+-                    <div className="flex flex-col gap-1">
+-                      <Label htmlFor="imapPort" className="text-xs">Port</Label>
+-                      <Input
+-                        id="imapPort"
+-                        type="number"
+-                        placeholder="993"
+-                        disabled={loading}
+-                        value={serverConfig.imapPort}
+-                        onChange={(e) => setServerConfig({ ...serverConfig, imapPort: e.target.value })}
+-                        className="h-8 text-sm"
+-                      />
+-                    </div>
+-                  </div>
+-                  <label htmlFor="imapTls" className="flex items-center gap-2 cursor-pointer select-none">
+-                    <input
+-                      id="imapTls"
+-                      type="checkbox"
+-                      checked={serverConfig.imapTls}
+-                      onChange={(e) => setServerConfig({ ...serverConfig, imapTls: e.target.checked })}
+-                      disabled={loading}
+-                      className="size-3 rounded border-muted-foreground/40 accent-primary"
+-                    />
+-                    <span className="text-xs text-muted-foreground">Use TLS</span>
+-                  </label>
+-
+-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mt-1">
+-                    SMTP Settings
+-                  </div>
+-                  <div className="grid grid-cols-2 gap-2">
+-                    <div className="flex flex-col gap-1">
+-                      <Label htmlFor="smtpHost" className="text-xs">Host</Label>
+-                      <Input
+-                        id="smtpHost"
+-                        type="text"
+-                        placeholder="smtp.example.com"
+-                        disabled={loading}
+-                        value={serverConfig.smtpHost}
+-                        onChange={(e) => setServerConfig({ ...serverConfig, smtpHost: e.target.value })}
+-                        className="h-8 text-sm"
+-                      />
+-                    </div>
+-                    <div className="flex flex-col gap-1">
+-                      <Label htmlFor="smtpPort" className="text-xs">Port</Label>
+-                      <Input
+-                        id="smtpPort"
+-                        type="number"
+-                        placeholder="587"
+-                        disabled={loading}
+-                        value={serverConfig.smtpPort}
+-                        onChange={(e) => setServerConfig({ ...serverConfig, smtpPort: e.target.value })}
+-                        className="h-8 text-sm"
+-                      />
+-                    </div>
+-                  </div>
+-                  <label htmlFor="smtpTls" className="flex items-center gap-2 cursor-pointer select-none">
+-                    <input
+-                      id="smtpTls"
+-                      type="checkbox"
+-                      checked={serverConfig.smtpTls}
+-                      onChange={(e) => setServerConfig({ ...serverConfig, smtpTls: e.target.checked })}
+-                      disabled={loading}
+-                      className="size-3 rounded border-muted-foreground/40 accent-primary"
+-                    />
+-                    <span className="text-xs text-muted-foreground">Use TLS</span>
+-                  </label>
+-                </div>
+-              )}
+-
+               <Button
+                 type="submit"
+                 className="mt-2 w-full"
+diff --git a/frontend/src/components/accounts/AddAccountModal.tsx b/frontend/src/components/accounts/AddAccountModal.tsx
+index 4aa9b37..629a5de 100644
+--- a/frontend/src/components/accounts/AddAccountModal.tsx
++++ b/frontend/src/components/accounts/AddAccountModal.tsx
+@@ -21,15 +21,6 @@ function getCookie(name: string): string | null {
+   return match ? match[2] : null;
+ }
+ 
+-interface ServerConfig {
+-  imapHost: string;
+-  imapPort: string;
+-  imapTls: boolean;
+-  smtpHost: string;
+-  smtpPort: string;
+-  smtpTls: boolean;
+-}
+-
+ interface AddAccountModalProps {
+   open: boolean;
+   onClose: () => void;
+@@ -44,19 +35,9 @@ export function AddAccountModal({ open, onClose }: AddAccountModalProps) {
+   const [error, setError] = useState<string | null>(null);
+   const [remember, setRemember] = useState(false);
+   const [loading, setLoading] = useState(false);
+-  const [showServerConfig, setShowServerConfig] = useState(false);
+   const effectiveAnimationMode = useUiStore((s: UiState) => s.effectiveAnimationMode);
+   const overlayMotionProps = useMemo(() => createFadeSlideVariants(effectiveAnimationMode, "y"), [effectiveAnimationMode]);
+   const contentMotionProps = useMemo(() => createScaleFadeVariants(effectiveAnimationMode), [effectiveAnimationMode]);
+-  const [serverConfig, setServerConfig] = useState<ServerConfig>({
+-    imapHost: "",
+-    imapPort: "993",
+-    imapTls: true,
+-    smtpHost: "",
+-    smtpPort: "587",
+-    smtpTls: true,
+-  });
+-
+   const emailInputRef = useRef<HTMLInputElement>(null);
+ 
+   useEffect(() => {
+@@ -65,15 +46,6 @@ export function AddAccountModal({ open, onClose }: AddAccountModalProps) {
+       setPassword("");
+       setError(null);
+       setRemember(false);
+-      setShowServerConfig(false);
+-      setServerConfig({
+-        imapHost: "",
+-        imapPort: "993",
+-        imapTls: true,
+-        smtpHost: "",
+-        smtpPort: "587",
+-        smtpTls: true,
+-      });
+       const timer = setTimeout(() => emailInputRef.current?.focus(), 50);
+       return () => clearTimeout(timer);
+     }
+@@ -90,29 +62,12 @@ export function AddAccountModal({ open, onClose }: AddAccountModalProps) {
+       email,
+       password,
+       remember,
+-      imap_tls: serverConfig.imapTls,
+-      smtp_tls: serverConfig.smtpTls,
+     };
+ 
+     if (browserId) {
+       payload.browser_id = browserId;
+     }
+ 
+-    if (serverConfig.imapHost) {
+-      payload.imap_host = serverConfig.imapHost;
+-    }
+-    if (serverConfig.imapPort) {
+-      const port = parseInt(serverConfig.imapPort, 10);
+-      if (!isNaN(port)) payload.imap_port = port;
+-    }
+-    if (serverConfig.smtpHost) {
+-      payload.smtp_host = serverConfig.smtpHost;
+-    }
+-    if (serverConfig.smtpPort) {
+-      const port = parseInt(serverConfig.smtpPort, 10);
+-      if (!isNaN(port)) payload.smtp_port = port;
+-    }
+-
+     try {
+       const response = await apiPost<{
+         account: { id: string; email: string; imapHost: string; smtpHost: string };
+@@ -220,100 +175,6 @@ export function AddAccountModal({ open, onClose }: AddAccountModalProps) {
+               <span className="text-sm text-muted-foreground">Keep me logged in</span>
+             </label>
+ 
+-            <button
+-              type="button"
+-              onClick={() => setShowServerConfig(!showServerConfig)}
+-              className="text-left text-sm text-muted-foreground hover:text-foreground transition-colors"
+-            >
+-              {showServerConfig ? "▼" : "▶"} Server configuration (optional)
+-            </button>
+-
+-            {showServerConfig && (
+-              <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+-                  IMAP Settings
+-                </div>
+-                <div className="grid grid-cols-2 gap-2">
+-                  <div className="flex flex-col gap-1">
+-                    <Label htmlFor="add-imapHost" className="text-xs">Host</Label>
+-                    <Input
+-                      id="add-imapHost"
+-                      type="text"
+-                      placeholder="imap.example.com"
+-                      disabled={loading}
+-                      value={serverConfig.imapHost}
+-                      onChange={(e) => setServerConfig({ ...serverConfig, imapHost: e.target.value })}
+-                      className="h-8 text-sm"
+-                    />
+-                  </div>
+-                  <div className="flex flex-col gap-1">
+-                    <Label htmlFor="add-imapPort" className="text-xs">Port</Label>
+-                    <Input
+-                      id="add-imapPort"
+-                      type="number"
+-                      placeholder="993"
+-                      disabled={loading}
+-                      value={serverConfig.imapPort}
+-                      onChange={(e) => setServerConfig({ ...serverConfig, imapPort: e.target.value })}
+-                      className="h-8 text-sm"
+-                    />
+-                  </div>
+-                </div>
+-                <label htmlFor="add-imapTls" className="flex items-center gap-2 cursor-pointer select-none">
+-                  <input
+-                    id="add-imapTls"
+-                    type="checkbox"
+-                    checked={serverConfig.imapTls}
+-                    onChange={(e) => setServerConfig({ ...serverConfig, imapTls: e.target.checked })}
+-                    disabled={loading}
+-                    className="size-3 rounded border-muted-foreground/40 accent-primary"
+-                  />
+-                  <span className="text-xs text-muted-foreground">Use TLS</span>
+-                </label>
+-
+-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mt-1">
+-                  SMTP Settings
+-                </div>
+-                <div className="grid grid-cols-2 gap-2">
+-                  <div className="flex flex-col gap-1">
+-                    <Label htmlFor="add-smtpHost" className="text-xs">Host</Label>
+-                    <Input
+-                      id="add-smtpHost"
+-                      type="text"
+-                      placeholder="smtp.example.com"
+-                      disabled={loading}
+-                      value={serverConfig.smtpHost}
+-                      onChange={(e) => setServerConfig({ ...serverConfig, smtpHost: e.target.value })}
+-                      className="h-8 text-sm"
+-                    />
+-                  </div>
+-                  <div className="flex flex-col gap-1">
+-                    <Label htmlFor="add-smtpPort" className="text-xs">Port</Label>
+-                    <Input
+-                      id="add-smtpPort"
+-                      type="number"
+-                      placeholder="587"
+-                      disabled={loading}
+-                      value={serverConfig.smtpPort}
+-                      onChange={(e) => setServerConfig({ ...serverConfig, smtpPort: e.target.value })}
+-                      className="h-8 text-sm"
+-                    />
+-                  </div>
+-                </div>
+-                <label htmlFor="add-smtpTls" className="flex items-center gap-2 cursor-pointer select-none">
+-                  <input
+-                    id="add-smtpTls"
+-                    type="checkbox"
+-                    checked={serverConfig.smtpTls}
+-                    onChange={(e) => setServerConfig({ ...serverConfig, smtpTls: e.target.checked })}
+-                    disabled={loading}
+-                    className="size-3 rounded border-muted-foreground/40 accent-primary"
+-                  />
+-                  <span className="text-xs text-muted-foreground">Use TLS</span>
+-                </label>
+-              </div>
+-            )}
+-
+             <div className="flex justify-end gap-2 mt-2">
+               <Button
+                 type="button"
