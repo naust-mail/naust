@@ -1,0 +1,152 @@
+Mail-in-a-Box patch: frontend - empty states + search tips click-toggle
+=======================================================================
+
+Companion frontend patch improving zero-state UX in three components and
+fixing an undiscoverable search tips interaction.
+
+Previously all three empty states showed bare plain text with no visual
+treatment, making the UI feel unfinished. The search tips button used a
+hold-to-show gesture (mousedown/mouseup) that was completely undiscoverable
+on desktop and worked differently on touch.
+
+Changes:
+
+  MessageList.tsx: empty folder/tag view gets a large Inbox or Tag icon
+    (lucide, strokeWidth 1.25, muted at 40% opacity) above the existing
+    text, which is promoted to font-medium for better hierarchy.
+
+  SearchResults.tsx: no-results state gets a SearchX icon above the
+    existing "No results found" text, plus a muted hint line:
+    "Try different keywords or check spelling".
+
+  ReadingPane.tsx: no-message-selected state gets a Mail icon above
+    updated copy: "Select a message from the list".
+
+  SearchBar.tsx: the ? tips button previously used onMouseDown/onMouseUp/
+    onMouseLeave/onTouchStart (hold gesture) to show/hide the tips panel.
+    This removes all four handlers and replaces them with a single
+    onClick toggle. The mouseHolding useState is also removed. The
+    existing outside-click dismiss useEffect and keyboard handlers
+    (Enter/Space/Escape) are untouched.
+
+diff --git a/frontend/src/components/mail/MessageList.tsx b/frontend/src/components/mail/MessageList.tsx
+index f2a4465..5fa5c0a 100644
+--- a/frontend/src/components/mail/MessageList.tsx
++++ b/frontend/src/components/mail/MessageList.tsx
+@@ -4,7 +4,7 @@ import { useRef, useCallback, useEffect, useState } from "react";
+ import { useVirtualizer } from "@tanstack/react-virtual";
+ import { AnimatePresence } from "framer-motion";
+ import { AnimatedDiv } from "@/lib/motion/AnimatedDiv";
+-import { PenLine, X, PanelRight } from "lucide-react";
++import { PenLine, X, PanelRight, Inbox, Tag } from "lucide-react";
+ import { useMessages } from "@/hooks/useMessages";
+ import { useTags, useTagMessages } from "@/hooks/useTags";
+ import { useListDrafts, useGetDraft, useDeleteDraft } from "@/hooks/useCompose";
+@@ -438,8 +438,15 @@ export function MessageList() {
+
+       {/* Empty state (only when not a drafts folder or no drafts either) */}
+       {!isLoading && !isError && messages.length === 0 && !showDrafts && (
+-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+-          {isTagView ? "No messages with this tag" : "No messages in this folder"}
++        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
++          {isTagView ? (
++            <Tag className="size-10 text-muted-foreground/40" strokeWidth={1.25} />
++          ) : (
++            <Inbox className="size-10 text-muted-foreground/40" strokeWidth={1.25} />
++          )}
++          <p className="text-sm font-medium text-muted-foreground">
++            {isTagView ? "No messages with this tag" : "No messages in this folder"}
++          </p>
+         </div>
+       )}
+
+diff --git a/frontend/src/components/mail/ReadingPane.tsx b/frontend/src/components/mail/ReadingPane.tsx
+index 9fa194e..87409a4 100644
+--- a/frontend/src/components/mail/ReadingPane.tsx
++++ b/frontend/src/components/mail/ReadingPane.tsx
+@@ -13,6 +13,7 @@ import {
+   Sun,
+   Moon,
+   Monitor,
++  Mail,
+ } from "lucide-react";
+ import { useQueryClient } from "@tanstack/react-query";
+ import { useUiStore } from "@/stores/useUiStore";
+@@ -102,8 +103,9 @@ export function ReadingPane() {
+   // No message selected
+   if (selectedMessageUid === null) {
+     return (
+-      <div className="flex h-full items-center justify-center text-muted-foreground">
+-        Select a message to read
++      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
++        <Mail className="size-10 text-muted-foreground/40" strokeWidth={1.25} />
++        <p className="text-sm font-medium text-muted-foreground">Select a message from the list</p>
+       </div>
+     );
+   }
+diff --git a/frontend/src/components/mail/SearchBar.tsx b/frontend/src/components/mail/SearchBar.tsx
+index bd6f29d..d789b9a 100644
+--- a/frontend/src/components/mail/SearchBar.tsx
++++ b/frontend/src/components/mail/SearchBar.tsx
+@@ -32,7 +32,6 @@ export function SearchBar() {
+
+   const [inputValue, setInputValue] = useState(searchQuery);
+   const [showTips, setShowTips] = useState(false);
+-  const [mouseHolding, setMouseHolding] = useState(false);
+   const inputRef = useRef<HTMLInputElement>(null);
+   const tipsButtonRef = useRef<HTMLButtonElement>(null);
+   const tipsRef = useRef<HTMLDivElement>(null);
+@@ -230,24 +229,7 @@ export function SearchBar() {
+             <button
+               ref={tipsButtonRef}
+               type="button"
+-              onMouseDown={() => {
+-                setMouseHolding(true);
+-                setShowTips(true);
+-              }}
+-              onMouseUp={() => {
+-                setMouseHolding(false);
+-                setShowTips(false);
+-              }}
+-              onMouseLeave={() => {
+-                if (mouseHolding) {
+-                  setMouseHolding(false);
+-                  setShowTips(false);
+-                }
+-              }}
+-              onTouchStart={(e) => {
+-                e.preventDefault();
+-                setShowTips((prev) => !prev);
+-              }}
++              onClick={() => setShowTips((prev) => !prev)}
+               onKeyDown={(e) => {
+                 if (e.key === "Enter" || e.key === " ") {
+                   e.preventDefault();
+diff --git a/frontend/src/components/mail/SearchResults.tsx b/frontend/src/components/mail/SearchResults.tsx
+index a82b50f..dea4e98 100644
+--- a/frontend/src/components/mail/SearchResults.tsx
++++ b/frontend/src/components/mail/SearchResults.tsx
+@@ -3,7 +3,7 @@
+ import { useCallback, useEffect, useRef } from "react";
+ import { AnimatePresence } from "framer-motion";
+ import { AnimatedDiv } from "@/lib/motion/AnimatedDiv";
+-import { ArrowDown, ArrowUp, Loader2, Paperclip, X } from "lucide-react";
++import { ArrowDown, ArrowUp, Loader2, Paperclip, X, SearchX } from "lucide-react";
+ import { cn } from "@/lib/utils";
+ import { useUiStore } from "@/stores/useUiStore";
+ import { useSearch } from "@/hooks/useSearch";
+@@ -266,8 +266,12 @@ export function SearchResults() {
+
+       {/* Empty state */}
+       {!isLoading && !isError && hasValidCommittedSearch && results.length === 0 && (
+-        <div className="flex flex-1 items-center justify-center px-4 pt-4 text-center">
+-          <p className="text-sm text-muted-foreground">No results found</p>
++        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
++          <SearchX className="size-10 text-muted-foreground/40" strokeWidth={1.25} />
++          <div>
++            <p className="text-sm font-medium text-muted-foreground">No results found</p>
++            <p className="mt-0.5 text-xs text-muted-foreground/70">Try different keywords or check spelling</p>
++          </div>
+         </div>
+       )}
+

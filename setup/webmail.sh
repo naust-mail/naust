@@ -46,18 +46,18 @@ if ! git -C "$OXI_DIR" cat-file -e "${OXI_COMMIT}^{commit}" 2>/dev/null; then
 fi
 git -C "$OXI_DIR" checkout -q "$OXI_COMMIT"
 
-# Apply MIAB-specific patches. Patches are applied in order; reversed in
+# Apply MIAB-specific patches in numeric order (1_, 2_, ...). Reversed in
 # reverse order first so the operation is idempotent across re-runs.
-OXI_PATCH1="$PWD/management/oxi/1_miab_oxi_auth_patch.patch"
-OXI_PATCH2="$PWD/management/oxi/2_miab_oxi_ui_patch.patch"
-OXI_PATCH3="$PWD/management/oxi/3_miab_oxi_subfolder_patch.patch"
-for _p in "$OXI_PATCH3" "$OXI_PATCH2" "$OXI_PATCH1"; do
-	[ -f "$_p" ] || continue
+# To add a patch: drop a new N_name.patch file in management/oxi/ - no
+# changes to this script needed.
+_OXI_PATCHES=( $(ls -1 "$PWD/management/oxi/"*.patch 2>/dev/null | sort) )
+for (( _i=${#_OXI_PATCHES[@]}-1; _i>=0; _i-- )); do
+	_p="${_OXI_PATCHES[$_i]}"
 	git -C "$OXI_DIR" apply --reverse --check "$_p" 2>/dev/null && \
 		git -C "$OXI_DIR" apply --reverse "$_p"
 done
-for _p in "$OXI_PATCH1" "$OXI_PATCH2" "$OXI_PATCH3"; do
-	[ -f "$_p" ] && git -C "$OXI_DIR" apply "$_p"
+for _p in "${_OXI_PATCHES[@]}"; do
+	git -C "$OXI_DIR" apply "$_p"
 done
 
 # Frontend and backend use separate stamps so a patch-only change does not
@@ -65,11 +65,11 @@ done
 # left off on the next run. Each stamp is written only after its deploy step
 # succeeds, so a partial failure leaves the stamp invalid for retry.
 
-# Frontend stamp: commit + lockfile hash + UI patch hash + subfolder patch hash.
-_fe_want="$OXI_COMMIT:$(hash_files "$OXI_DIR/frontend/bun.lock" "$OXI_PATCH2" "$OXI_PATCH3")"
+# Frontend stamp: commit + lockfile + all patch hashes.
+_fe_want="$OXI_COMMIT:$(hash_files "$OXI_DIR/frontend/bun.lock" "${_OXI_PATCHES[@]}")"
 
-# Backend stamp: commit + backend patch hash.
-_be_want="$OXI_COMMIT:$(hash_files "$OXI_PATCH1")"
+# Backend stamp: commit + backend patch hash (patch 1 only touches the backend).
+_be_want="$OXI_COMMIT:$(hash_files "$PWD/management/oxi/1_"*.patch)"
 
 OXI_STATIC_DIR=/usr/local/share/oxi-email/static
 mkdir -p "$OXI_STATIC_DIR"
