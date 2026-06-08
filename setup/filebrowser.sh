@@ -46,11 +46,11 @@ FB_DB="$STORAGE_ROOT/filebrowser/filebrowser.db"
 # Exit codes: 0=auth or block (FileBrowser reads hook.action), 1=server error.
 # Bad credentials must exit 0 with hook.action=block - a non-zero exit makes
 # FileBrowser return 500 instead of 403, which breaks fail2ban targeting.
-cat > /usr/local/lib/filebrowser-auth.py << 'EOF'
+cat > /usr/local/lib/filebrowser-auth.py << EOF
 #!/usr/bin/env python3
 import sys, os, imaplib, ssl, socket, re
 
-FILES_ROOT = "/home/user-data/files"
+FILES_ROOT = "$STORAGE_ROOT/files"
 
 socket.setdefaulttimeout(5)
 
@@ -121,6 +121,21 @@ hide_output sudo -u www-data filebrowser config set \
 # Ensure the log file exists before fail2ban starts watching it.
 touch /var/log/filebrowser.log
 chown www-data:www-data /var/log/filebrowser.log
+
+# Logrotate config: rotate weekly, keep 4 weeks, copytruncate so we don't
+# need to signal FileBrowser to reopen the file (it doesn't support SIGUSR1).
+cat > /etc/logrotate.d/filebrowser << 'LOGROTATEOF'
+/var/log/filebrowser.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 www-data www-data
+    copytruncate
+}
+LOGROTATEOF
 
 cat > /lib/systemd/system/filebrowser.service << EOF
 [Unit]

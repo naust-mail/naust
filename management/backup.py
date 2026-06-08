@@ -302,6 +302,13 @@ def perform_backup(full_backup):
 			if quit:
 				sys.exit(code)
 
+	# Stop webmail and file manager before mail services - they depend on IMAP.
+	# oxi-email uses SQLite; FileBrowser uses BoltDB. Both must be idle for a
+	# consistent snapshot. quit=False so a pre-stopped service doesn't abort backup.
+	service_command("oxi-email", "stop", quit=False)
+	if env.get("ENABLE_FILEBROWSER", "false").lower() == "true":
+		service_command("filebrowser", "stop", quit=False)
+
 	service_command("php8.0-fpm", "stop", quit=True)
 	service_command("postfix", "stop", quit=True)
 	service_command("dovecot", "stop", quit=True)
@@ -336,11 +343,16 @@ def perform_backup(full_backup):
 			],
 			get_duplicity_env_vars(env))
 	finally:
-		# Start services again.
+		# Start services again (reverse order of stop).
 		service_command("postgrey", "start", quit=False)
 		service_command("dovecot", "start", quit=False)
 		service_command("postfix", "start", quit=False)
 		service_command("php8.0-fpm", "start", quit=False)
+
+		# Restart webmail and file manager after mail services are up.
+		service_command("oxi-email", "start", quit=False)
+		if env.get("ENABLE_FILEBROWSER", "false").lower() == "true":
+			service_command("filebrowser", "start", quit=False)
 
 	# Remove old backups. This deletes all backup data no longer needed
 	# from more than 3 days ago.

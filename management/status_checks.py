@@ -6,6 +6,8 @@
 
 import sys, os, os.path, re, datetime, multiprocessing.pool, multiprocessing
 import asyncio
+import json
+import urllib.request, urllib.error
 import dateutil.parser, dateutil.relativedelta, dateutil.tz
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -72,6 +74,7 @@ def get_services():
 		{ "name": "OpenDKIM", "port": 8891, "public": False, },
 		{ "name": "OpenDMARC", "port": 8893, "public": False, },
 		{ "name": "Mail-in-a-Box Management Daemon", "port": 10222, "public": False, },
+		{ "name": "oxi.email Webmail (oxi-email)", "port": 3001, "public": False, },
 		{ "name": "SSH Login (ssh)", "port": get_ssh_port(), "public": True, },
 		{ "name": "Public DNS (nsd4)", "port": 53, "public": True, },
 		{ "name": "Incoming Mail (SMTP/postfix)", "port": 25, "public": True, },
@@ -230,6 +233,8 @@ def run_system_checks(rounded_values, env, output):
 			(check_backup, (rounded_values, env)),
 			(check_time_synchronization, (env,)),
 			(check_disk_health, (env,)),
+			(check_webmail, (env,)),
+			(check_filebrowser, (env,)),
 		]:
 			check_output = BufferedOutput()
 			futures.append((executor.submit(check_func, *args, check_output), check_output))
@@ -444,6 +449,80 @@ def check_disk_health(env, output):
 	except Exception:
 		# If anything goes wrong, silently skip this check
 		pass
+
+
+def check_webmail(env, output):
+	# Verify oxi.email is actually serving HTTP, not just occupying the port.
+	# The TCP port check in run_services_checks only confirms the socket is open.
+	try:
+		with urllib.request.urlopen("http://127.0.0.1:3001/api/health", timeout=5) as resp:
+			data = json.loads(resp.read())
+		if resp.status == 200 and data.get("status") == "ok":
+			output.print_ok("oxi.email webmail is running and healthy.")
+		else:
+			output.print_error(f"oxi.email webmail returned an unexpected health response (HTTP {resp.status}).")
+	except urllib.error.URLError as e:
+		output.print_error(f"oxi.email webmail is not responding to requests: {e.reason}. Run: systemctl restart oxi-email")
+		return
+	except Exception as e:
+		output.print_error(f"oxi.email webmail health check failed: {e}")
+		return
+
+	# Data directory must exist; oxi writes per-user SQLite DBs and search indexes here.
+	oxi_data = os.path.join(env["STORAGE_ROOT"], "oxi")
+	if not os.path.isdir(oxi_data):
+		output.print_error(f"oxi.email data directory {oxi_data} is missing. Re-run setup.")
+	elif not os.access(oxi_data, os.W_OK):
+		output.print_error(f"oxi.email data directory {oxi_data} is not writable. Check permissions (should be owned by www-data).")
+
+	# Runtime config must exist.
+	if not os.path.isfile("/etc/oxi/config.env"):
+		output.print_error("oxi.email configuration /etc/oxi/config.env is missing. Re-run setup.")
+
+
+def check_filebrowser(env, output):
+	# FileBrowser is optional; skip silently if not enabled.
+	if env.get("ENABLE_FILEBROWSER", "false").lower() != "true":
+		return
+
+	# Verify the systemd service is active (FileBrowser port not in get_services because it's optional).
+	code, _ = shell('check_output', ["systemctl", "is-active", "filebrowser"], capture_stderr=True, trap=True)
+	if code != 0:
+		output.print_error("FileBrowser file manager service is not running. Run: systemctl start filebrowser")
+		return
+
+	# HTTP health check - FileBrowser exposes GET /health (with baseURL /files → /files/health).
+	# Returns 200 {"status":"OK"} when healthy.
+	try:
+		with urllib.request.urlopen("http://127.0.0.1:8080/files/health", timeout=5) as resp:
+			data = json.loads(resp.read())
+		if resp.status == 200 and data.get("status") == "OK":
+			output.print_ok("FileBrowser file manager is running and healthy.")
+		else:
+			output.print_error(f"FileBrowser returned an unexpected health response (HTTP {resp.status}). Run: journalctl -u filebrowser")
+	except urllib.error.URLError as e:
+		output.print_error(f"FileBrowser is not responding to requests: {e.reason}. Run: systemctl restart filebrowser")
+		return
+	except Exception as e:
+		output.print_error(f"FileBrowser health check failed: {e}")
+		return
+
+	# BoltDB database must exist; without it FileBrowser refuses to start.
+	fb_db = os.path.join(env["STORAGE_ROOT"], "filebrowser", "filebrowser.db")
+	if not os.path.isfile(fb_db):
+		output.print_error(f"FileBrowser database {fb_db} is missing. Re-run setup.")
+
+	# Auth hook must be executable; if it's missing all logins silently fail.
+	hook = "/usr/local/lib/filebrowser-auth.py"
+	if not os.path.isfile(hook):
+		output.print_error(f"FileBrowser auth hook {hook} is missing. Re-run setup.")
+	elif not os.access(hook, os.X_OK):
+		output.print_error(f"FileBrowser auth hook {hook} is not executable. Run: chmod +x {hook}")
+
+	# Files root must exist; users cannot store files without it.
+	files_root = os.path.join(env["STORAGE_ROOT"], "files")
+	if not os.path.isdir(files_root):
+		output.print_error(f"FileBrowser files root {files_root} is missing. Re-run setup.")
 
 
 def run_network_checks(env, output):
