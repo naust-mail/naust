@@ -176,7 +176,7 @@ async function handleLogout(): Promise<void> {
         >
           <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-1">
             <Info class="size-4 text-gray-400 shrink-0" />
-            <div class="text-xs text-gray-500 truncate">{{ config.hostname || 'Guest' }}</div>
+            <div class="text-xs text-gray-500 truncate">{{ auth.email || 'Guest' }}</div>
           </div>
           <button
             class="flex w-full items-center gap-2 rounded-xl py-1.5 px-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition text-gray-700 dark:text-gray-300"

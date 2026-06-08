@@ -73,7 +73,15 @@ async function submitPassword(): Promise<void> {
     } else if (result === 'missing-totp-token') {
       step.value = 'totp'
     } else {
-      toast.error(result)
+      const messages: Record<string, string> = {
+        'invalid-totp-token': 'Incorrect authenticator code.',
+        'missing-webauthn-assertion': 'A passkey is required for this account. Use your passkey to sign in.',
+      }
+      // Hints may be comma-joined when multiple MFA types are active.
+      // Show the first recognisable message, falling back to the raw string.
+      const codes = result.split(',').map(s => s.trim())
+      const mapped = codes.map(c => messages[c] ?? c)
+      toast.error(mapped[0])
     }
   } catch {
     toast.error('Login failed. Please try again.')

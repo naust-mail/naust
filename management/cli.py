@@ -74,6 +74,9 @@ if len(sys.argv) < 2:
   {cli} alias add incoming.name@domain.com sent.to@other.domain.com
   {cli} alias add incoming.name@domain.com 'sent.to@other.domain.com, multiple.people@other.domain.com'
   {cli} alias remove incoming.name@domain.com
+  {cli} filebrowser enable                       (enable FileBrowser, takes effect on next setup run)
+  {cli} filebrowser disable                      (disable FileBrowser and stop the service immediately)
+  {cli} filebrowser status                       (show whether FileBrowser is enabled)
 
 Removing a mail user does not delete their mail folders on disk. It only prevents IMAP/SMTP login.
 """.format(
@@ -130,9 +133,9 @@ elif sys.argv[1] == "user" and len(sys.argv) == 5 and sys.argv[2:4] == ["mfa", "
 	# Show MFA status for a user.
 	status = mgmt("/mfa/status", { "user": sys.argv[4] }, is_json=True)
 	W = csv.writer(sys.stdout)
-	W.writerow(["id", "type", "label"])
+	W.writerow(["id", "type", "label/name", "last_used"])
 	for mfa in status["enabled_mfa"]:
-		W.writerow([mfa["id"], mfa["type"], mfa["label"]])
+		W.writerow([mfa["id"], mfa["type"], mfa.get("label") or mfa.get("name", ""), mfa.get("last_used", "")])
 
 elif sys.argv[1] == "user" and len(sys.argv) in {5, 6} and sys.argv[2:4] == ["mfa", "disable"]:
 	# Disable MFA (all or a particular device) for a user.
@@ -146,6 +149,29 @@ elif sys.argv[1] == "alias" and sys.argv[2] == "add" and len(sys.argv) == 5:
 
 elif sys.argv[1] == "alias" and sys.argv[2] == "remove" and len(sys.argv) == 4:
 	print(mgmt("/mail/aliases/remove", { "address": sys.argv[3] }))
+
+elif sys.argv[1] == "filebrowser" and len(sys.argv) == 3 and sys.argv[2] in {"enable", "disable", "status"}:
+	import subprocess, re
+	conf = "/etc/mailinabox.conf"
+	with open(conf, encoding="utf-8") as f:
+		content = f.read()
+	current = re.search(r'^ENABLE_FILEBROWSER=(.*)$', content, re.MULTILINE)
+	current_val = current.group(1).strip() if current else "true"
+
+	if sys.argv[2] == "status":
+		print("FileBrowser is", "enabled" if current_val == "true" else "disabled")
+	elif sys.argv[2] == "enable":
+		content = re.sub(r'^ENABLE_FILEBROWSER=.*$', 'ENABLE_FILEBROWSER=true', content, flags=re.MULTILINE)
+		with open(conf, "w", encoding="utf-8") as f:
+			f.write(content)
+		print("FileBrowser enabled. Run 'sudo mailinabox' to install and start it.")
+	elif sys.argv[2] == "disable":
+		content = re.sub(r'^ENABLE_FILEBROWSER=.*$', 'ENABLE_FILEBROWSER=false', content, flags=re.MULTILINE)
+		with open(conf, "w", encoding="utf-8") as f:
+			f.write(content)
+		subprocess.run(["systemctl", "stop", "filebrowser"], check=False)
+		subprocess.run(["systemctl", "disable", "filebrowser"], check=False)
+		print("FileBrowser disabled and stopped.")
 
 else:
 	print("Invalid command-line arguments.")
