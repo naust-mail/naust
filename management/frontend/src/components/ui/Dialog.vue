@@ -38,7 +38,7 @@ watch(open, async (val) => {
       />
     </Transition>
 
-    <!-- Panel — flyAndScale: 200ms, translateY -8px + scale 0.95→1 -->
+    <!-- Panel - flyAndScale: 200ms, translateY -8px + scale 0.95→1 -->
     <Transition
       enter-from-class="opacity-0 -translate-y-2 scale-95"
       enter-active-class="transition duration-200 ease-out"

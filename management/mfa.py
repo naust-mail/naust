@@ -24,11 +24,15 @@ def get_mfa_state(email, env):
 	]
 
 def get_public_mfa_state(email, env):
-	mfa_state = get_mfa_state(email, env)
-	return [
+	totp = [
 		{ "id": s["id"], "type": s["type"], "label": s["label"] }
-		for s in mfa_state
+		for s in get_mfa_state(email, env)
 	]
+	passkeys = [
+		{ "id": p["id"], "type": "webauthn", "name": p["name"], "last_used": p["last_used"] }
+		for p in get_public_webauthn_credentials(email, env)
+	]
+	return totp + passkeys
 
 def get_hash_mfa_state(email, env):
 	mfa_state = get_mfa_state(email, env)
@@ -62,15 +66,21 @@ def set_mru_token(email, mfa_id, token, env):
 
 def disable_mfa(email, mfa_id, env):
 	conn, c = open_database(env, with_connection=True)
+	user_id = get_user_id(email, c)
 	if mfa_id is None:
-		# Disable all MFA for a user.
-		c.execute('DELETE FROM mfa WHERE user_id=?', (get_user_id(email, c),))
+		# Disable all MFA for a user (TOTP and passkeys).
+		c.execute('DELETE FROM mfa WHERE user_id=?', (user_id,))
+		c.execute('DELETE FROM webauthn_credentials WHERE user_id=?', (user_id,))
+		deleted = c.rowcount > 0
 	else:
-		# Disable a particular MFA mode for a user.
-		c.execute('DELETE FROM mfa WHERE user_id=? AND id=?', (get_user_id(email, c), mfa_id))
+		# Try TOTP table first, then webauthn_credentials.
+		c.execute('DELETE FROM mfa WHERE user_id=? AND id=?', (user_id, mfa_id))
+		if c.rowcount == 0:
+			c.execute('DELETE FROM webauthn_credentials WHERE user_id=? AND id=?', (user_id, mfa_id))
+		deleted = c.rowcount > 0
 	conn.commit()
 	conn.close()
-	return c.rowcount > 0
+	return deleted
 
 def validate_totp_secret(secret):
 	if not isinstance(secret, str) or secret.strip() == "":

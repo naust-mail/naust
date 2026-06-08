@@ -7,6 +7,9 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Card from '@/components/ui/Card.vue'
+import Badge from '@/components/ui/Badge.vue'
+import Code from '@/components/ui/Code.vue'
+import Divider from '@/components/ui/Divider.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Dialog from '@/components/ui/Dialog.vue'
@@ -49,7 +52,11 @@ async function load(): Promise<void> {
   loadError.value = false
   try {
     const res = await api.post('/admin/mfa/status')
-    if (!res.ok) { loadError.value = true; toast.error('Failed to load MFA status.'); return }
+    if (!res.ok) {
+      loadError.value = true;
+      toast.error('Failed to load MFA status.');
+      return
+    }
     const data: MfaStatus = await res.json()
     totpEntries.value = data.enabled_mfa.filter(e => e.type === 'totp')
     passkeyEntries.value = data.enabled_mfa.filter(e => e.type === 'webauthn')
@@ -121,7 +128,10 @@ async function addPasskey(): Promise<void> {
   addingPasskey.value = true
   try {
     const beginRes = await api.post('/admin/mfa/webauthn/register/begin')
-    if (!beginRes.ok) { toast.error(await beginRes.text()); return }
+    if (!beginRes.ok) {
+      toast.error(await beginRes.text());
+      return
+    }
     const { options, nonce } = await beginRes.json()
 
     const credential = await startRegistration({ optionsJSON: options.publicKey })
@@ -131,7 +141,10 @@ async function addPasskey(): Promise<void> {
       name: passkeyName.value.trim(),
       credential: JSON.stringify(credential),
     })
-    if (!completeRes.ok) { toast.error(await completeRes.text()); return }
+    if (!completeRes.ok) {
+      toast.error(await completeRes.text());
+      return
+    }
 
     toast.success('Passkey added.')
     passkeyName.value = ''
@@ -164,7 +177,9 @@ onMounted(load)
       title="Could not load MFA settings"
       description="The server did not respond. Check your connection and try again."
     >
-      <template #icon><WifiOff /></template>
+      <template #icon>
+        <WifiOff/>
+      </template>
       <template #action>
         <Button variant="secondary" @click="load">Try again</Button>
       </template>
@@ -175,8 +190,8 @@ onMounted(load)
       <h2 class="text-base font-semibold mb-3">Passkeys</h2>
       <Card class="p-5 mb-6">
         <template v-if="loading">
-          <Skeleton class="h-4 w-48 mb-3" />
-          <Skeleton class="h-9 w-32" />
+          <Skeleton class="h-4 w-48 mb-3"/>
+          <Skeleton class="h-9 w-32"/>
         </template>
 
         <template v-else>
@@ -203,29 +218,37 @@ onMounted(load)
             description="Passkeys let you sign in with your fingerprint, face, or device PIN."
             class="py-4"
           >
-            <template #icon><KeyRound /></template>
+            <template #icon>
+              <KeyRound/>
+            </template>
             <template #action>
               <Button @click="showAddPasskey = true">Add a passkey</Button>
             </template>
           </EmptyState>
 
           <!-- Add passkey button (when passkeys exist) -->
-          <div v-if="passkeyEntries.length > 0 && !showAddPasskey" class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <Button variant="secondary" @click="showAddPasskey = true">Add a passkey</Button>
-          </div>
+          <template v-if="passkeyEntries.length > 0 && !showAddPasskey">
+            <Divider class="mt-4" />
+            <div class="pt-4">
+              <Button variant="secondary" @click="showAddPasskey = true">Add a passkey</Button>
+            </div>
+          </template>
 
           <!-- Add passkey form -->
-          <div v-if="showAddPasskey" :class="{ 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-800': passkeyEntries.length > 0 }">
-            <label for="passkeyName" class="block text-sm font-medium mb-2">Name this passkey:</label>
-            <div class="flex gap-2 max-w-sm">
-              <Input id="passkeyName" v-model="passkeyName" placeholder="e.g. My MacBook" />
-              <Button :disabled="!passkeyName.trim() || addingPasskey" @click="addPasskey">
-                {{ addingPasskey ? 'Adding...' : 'Add' }}
-              </Button>
-              <Button variant="ghost" @click="showAddPasskey = false; passkeyName = ''">Cancel</Button>
+          <template v-if="showAddPasskey">
+            <Divider v-if="passkeyEntries.length > 0" class="mt-4"/>
+            <div :class="{ 'pt-4': passkeyEntries.length > 0 }">
+              <label for="passkeyName" class="block text-sm font-medium mb-2">Name this passkey:</label>
+              <div class="flex gap-2 max-w-sm">
+                <Input id="passkeyName" v-model="passkeyName" placeholder="e.g. My MacBook"/>
+                <Button :disabled="!passkeyName.trim() || addingPasskey" @click="addPasskey">
+                  {{ addingPasskey ? 'Adding...' : 'Add' }}
+                </Button>
+                <Button variant="ghost" @click="showAddPasskey = false; passkeyName = ''">Cancel</Button>
+              </div>
+              <p class="text-xs text-gray-500 mt-1.5">Your browser will prompt you to create a passkey.</p>
             </div>
-            <p class="text-xs text-gray-500 mt-1.5">Your browser will prompt you to create a passkey.</p>
-          </div>
+          </template>
         </template>
       </Card>
 
@@ -233,16 +256,19 @@ onMounted(load)
       <h2 class="text-base font-semibold mb-3">Authenticator App (TOTP)</h2>
       <Card class="p-5">
         <template v-if="loading">
-          <Skeleton class="h-4 w-64 mb-3" />
-          <Skeleton class="h-9 w-40" />
+          <Skeleton class="h-4 w-64 mb-3"/>
+          <Skeleton class="h-9 w-40"/>
         </template>
 
         <!-- TOTP active -->
         <template v-else-if="totpEntries.length > 0">
-          <div v-for="entry in totpEntries" :key="entry.id" class="flex items-center justify-between py-2">
-            <div>
-              <p class="text-sm font-medium">TOTP is active{{ entry.label ? ` on "${entry.label}"` : '' }}</p>
-              <p class="text-xs text-gray-500 mt-0.5">You will be prompted for a 6-digit code on login.</p>
+          <div v-for="entry in totpEntries" :key="entry.id" class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="flex size-2 rounded-full bg-green-500"/>
+              <div>
+                <p class="text-sm font-medium">Active{{ entry.label ? ` - ${entry.label}` : '' }}</p>
+                <p class="text-xs text-gray-500 mt-0.5">A 6-digit code is required at login.</p>
+              </div>
             </div>
             <Button variant="destructive" size="sm" @click="openDisable(entry)">Disable</Button>
           </div>
@@ -250,45 +276,62 @@ onMounted(load)
 
         <!-- TOTP setup form -->
         <template v-else-if="totpSetup">
-          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Install <a href="https://freeotp.github.io/" target="_blank" class="underline">FreeOTP</a> or
-            any TOTP authenticator app, then follow these steps:
+          <p class="text-sm text-gray-500 mb-5">
+            Use <a href="https://freeotp.github.io/" target="_blank" rel="noopener"
+                   class="underline underline-offset-2">FreeOTP</a>,
+            Google Authenticator, or any TOTP app.
           </p>
 
-          <div class="space-y-5">
-            <div>
-              <p class="text-sm font-medium mb-2">1. Scan the QR code or enter the secret manually:</p>
-              <img
-                :src="`data:image/png;base64,${totpSetup.qr_code_base64}`"
-                alt="QR code for TOTP setup"
-                class="w-48 h-48 rounded-lg border border-gray-200 dark:border-gray-700 mb-2"
-              />
-              <p class="text-xs font-mono text-gray-500 select-all">Secret: {{ totpSetup.secret }}</p>
-            </div>
-
-            <div>
-              <label for="enrollLabel" class="block text-sm font-medium mb-1.5">
-                2. Give this device a label <span class="font-normal text-gray-400">(optional)</span>
-              </label>
-              <Input id="enrollLabel" v-model="enrollLabel" placeholder="my phone" class="max-w-xs" />
-            </div>
-
-            <div>
-              <label for="enrollToken" class="block text-sm font-medium mb-1.5">3. Enter the 6-digit code from the app:</label>
-              <div class="flex gap-2 items-start max-w-xs">
-                <Input
-                  id="enrollToken"
-                  v-model="enrollToken"
-                  inputmode="numeric"
-                  :maxlength="6"
-                  placeholder="000000"
-                  class="font-mono tracking-widest"
-                />
-                <Button :disabled="!enrollTokenValid || enrolling" @click="enableTotp">
-                  {{ enrolling ? 'Enabling...' : 'Enable' }}
-                </Button>
+          <div class="space-y-6">
+            <!-- Step 1: QR code -->
+            <div class="flex gap-5 items-start">
+              <Badge class="flex-none mt-0.5 size-6 justify-center rounded-full px-0">1</Badge>
+              <div>
+                <p class="text-sm font-medium mb-3">Scan the QR code with your app</p>
+                <Card class="inline-flex p-3 mb-3">
+                  <img
+                    :src="`data:image/png;base64,${totpSetup.qr_code_base64}`"
+                    alt="QR code for TOTP setup"
+                    class="w-40 h-40"
+                  />
+                </Card>
+                <p class="text-xs text-gray-500 mb-1">Or enter the secret manually:</p>
+                <Code block class="max-w-xs">{{ totpSetup.secret }}</Code>
               </div>
-              <p class="text-xs text-gray-500 mt-1">You will be logged out after enabling.</p>
+            </div>
+
+            <!-- Step 2: Label -->
+            <div class="flex gap-5 items-start">
+              <Badge class="flex-none mt-0.5 size-6 justify-center rounded-full px-0">2</Badge>
+              <div class="w-full max-w-xs">
+                <label for="enrollLabel" class="block text-sm font-medium mb-1.5">
+                  Label this device <span class="font-normal text-gray-400">(optional)</span>
+                </label>
+                <Input id="enrollLabel" v-model="enrollLabel" placeholder="e.g. my phone"/>
+              </div>
+            </div>
+
+            <!-- Step 3: Verify -->
+            <div class="flex gap-5 items-start">
+              <Badge class="flex-none mt-0.5 size-6 justify-center rounded-full px-0">3</Badge>
+              <div class="w-full">
+                <label for="enrollToken" class="block text-sm font-medium mb-1.5">Enter the 6-digit code from your
+                  app</label>
+                <div class="flex gap-2 items-center max-w-xs">
+                  <Input
+                    id="enrollToken"
+                    v-model="enrollToken"
+                    inputmode="numeric"
+                    :maxlength="6"
+                    placeholder="000000"
+                    class="font-mono tracking-widest text-center"
+                  />
+                  <Button :disabled="!enrollTokenValid || enrolling" @click="enableTotp">
+                    {{ enrolling ? 'Enabling...' : 'Enable' }}
+                  </Button>
+                </div>
+                <p class="text-xs text-gray-500 mt-1.5">You will be logged out after enabling.</p>
+              </div>
             </div>
           </div>
         </template>

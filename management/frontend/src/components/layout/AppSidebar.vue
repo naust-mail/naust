@@ -33,6 +33,11 @@ const navGroups: NavGroup[] = [
       { label: 'Status', path: '/system-status', icon: Activity, adminOnly: true },
       { label: 'Backup', path: '/system-backup', icon: Database, adminOnly: true },
       { label: 'TLS', path: '/ssl', icon: Shield, adminOnly: true },
+    ],
+  },
+  {
+    label: 'DNS',
+    items: [
       { label: 'Custom DNS', path: '/custom-dns', icon: Globe, adminOnly: true },
       { label: 'External DNS', path: '/external-dns', icon: ExternalLink, adminOnly: true },
     ],

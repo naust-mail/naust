@@ -5,6 +5,7 @@ import { Globe } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import Card from '@/components/ui/Card.vue'
+import Code from '@/components/ui/Code.vue'
 import Table from '@/components/ui/Table.vue'
 import TableHead from '@/components/ui/TableHead.vue'
 import Th from '@/components/ui/Th.vue'
@@ -89,7 +90,7 @@ onMounted(load)
         <li>
           Install an SFTP client such as
           <a href="https://filezilla-project.org/" target="_blank" class="underline">FileZilla</a>
-          or use <code class="text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">scp</code>.
+          or use <Code>scp</Code>.
         </li>
         <li>
           Connect to <strong>{{ config.hostname }}</strong> over SSH/SFTP using your

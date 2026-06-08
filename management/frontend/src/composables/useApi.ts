@@ -16,7 +16,7 @@ export function useApi() {
     const init: RequestInit = { method, headers, credentials: 'same-origin' }
     if (body) {
       if (typeof body === 'string') {
-        // Raw text body — used by DNS endpoints that read request.stream directly
+        // Raw text body - used by DNS endpoints that read request.stream directly
         init.body = body
         headers['Content-Type'] = 'text/plain; charset=ascii'
       } else if (body instanceof FormData) {

@@ -87,7 +87,7 @@ async function addRecord(): Promise<void> {
   if (!qname.value || !fValue.value || saving.value) return
   saving.value = true
   try {
-    // Value sent as raw text — daemon reads request.stream directly
+    // Value sent as raw text - daemon reads request.stream directly
     const res = await api.post(
       `/admin/dns/custom/${encodeURIComponent(qname.value)}/${fRtype.value}`,
       fValue.value,

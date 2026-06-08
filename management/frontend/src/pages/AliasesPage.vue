@@ -204,7 +204,7 @@ onMounted(load)
           </div>
           <div v-if="fAdvanced">
             <label for="fPermittedSenders" class="block text-sm font-medium mb-1.5">Permitted Senders</label>
-            <Textarea id="fPermittedSenders" v-model="fPermittedSenders" placeholder="One sender per line — only these addresses may send as this alias" />
+            <Textarea id="fPermittedSenders" v-model="fPermittedSenders" placeholder="One sender per line - only these addresses may send as this alias" />
           </div>
         </div>
 

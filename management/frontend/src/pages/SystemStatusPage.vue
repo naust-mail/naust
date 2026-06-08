@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import Card from '@/components/ui/Card.vue'
 import Dialog from '@/components/ui/Dialog.vue'
+import Divider from '@/components/ui/Divider.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusIcon from '@/components/shared/StatusIcon.vue'
 import { useApi } from '@/composables/useApi'
@@ -272,12 +273,12 @@ onUnmounted(stopPolling)
             {{ section.heading }}
           </h2>
           <Card>
-            <div
+            <template
               v-for="({ item, idx }, i) in section.items"
               :key="idx"
-              class="px-4 py-3"
-              :class="{ 'border-t border-gray-100 dark:border-gray-800': i > 0 }"
             >
+              <Divider v-if="i > 0" />
+              <div class="px-4 py-3">
               <div class="flex items-start gap-3">
                 <StatusIcon :status="item.type as 'ok' | 'error' | 'warning'" class="mt-0.5 shrink-0" />
                 <div class="flex-1 min-w-0">
@@ -303,6 +304,7 @@ onUnmounted(stopPolling)
                 </div>
               </div>
             </div>
+            </template>
           </Card>
         </div>
 

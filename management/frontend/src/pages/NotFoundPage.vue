@@ -13,7 +13,7 @@ const router = useRouter()
     <EmptyState title="Page not found" description="The page you're looking for doesn't exist.">
       <template #icon><SearchX /></template>
       <template #action>
-        <Button variant="secondary" @click="router.push('/welcome')">Go home</Button>
+        <Button variant="secondary" @click="router.push('/system-status')">Go home</Button>
       </template>
     </EmptyState>
   </PageBackground>

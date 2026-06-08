@@ -52,7 +52,7 @@ type NavGroup = {
 }
 
 // ---------------------------------------------------------------------------
-// Mail users — GET /admin/mail/users?format=json
+// Mail users - GET /admin/mail/users?format=json
 // ---------------------------------------------------------------------------
 
 /** A single mail user account. */
@@ -74,7 +74,7 @@ type MailUserDomain = {
 }
 
 // ---------------------------------------------------------------------------
-// Mail aliases — GET /admin/mail/aliases?format=json
+// Mail aliases - GET /admin/mail/aliases?format=json
 // ---------------------------------------------------------------------------
 
 /** A single mail alias. */
@@ -93,7 +93,7 @@ type MailAliasDomain = {
 }
 
 // ---------------------------------------------------------------------------
-// DNS — GET /admin/dns/custom
+// DNS - GET /admin/dns/custom
 // ---------------------------------------------------------------------------
 
 /** A custom DNS record. */
@@ -114,7 +114,7 @@ type ExternalDnsEntry = {
 }
 
 // ---------------------------------------------------------------------------
-// System status — GET /admin/system/status (instant) + POST (trigger fresh run)
+// System status - GET /admin/system/status (instant) + POST (trigger fresh run)
 // ---------------------------------------------------------------------------
 
 /** A single line in the system status output. */
@@ -141,7 +141,7 @@ type StatusCheckResponse = {
 }
 
 // ---------------------------------------------------------------------------
-// SSL / TLS — GET /admin/ssl/status
+// SSL / TLS - GET /admin/ssl/status
 // ---------------------------------------------------------------------------
 
 /** TLS certificate status for one domain. */
@@ -158,7 +158,7 @@ type SslStatus = {
 }
 
 // ---------------------------------------------------------------------------
-// Backup — GET /admin/system/backup/status and /config
+// Backup - GET /admin/system/backup/status and /config
 // ---------------------------------------------------------------------------
 
 /** One backup entry in the backup history list. */
@@ -208,7 +208,7 @@ type BackupConfig = {
 }
 
 // ---------------------------------------------------------------------------
-// SSL provision — POST /admin/ssl/provision
+// SSL provision - POST /admin/ssl/provision
 // ---------------------------------------------------------------------------
 
 /** Result for a single domain group in a TLS provision run. */
@@ -225,7 +225,7 @@ type SslProvisionResult = {
 }
 
 // ---------------------------------------------------------------------------
-// MFA — POST /admin/mfa/status
+// MFA - POST /admin/mfa/status
 // ---------------------------------------------------------------------------
 
 /** An enabled MFA entry for a user. */
@@ -251,7 +251,7 @@ type MfaStatus = {
 }
 
 // ---------------------------------------------------------------------------
-// Web hosting — GET /admin/web/domains
+// Web hosting - GET /admin/web/domains
 // ---------------------------------------------------------------------------
 
 /** A web domain entry. */

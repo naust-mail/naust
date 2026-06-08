@@ -14,6 +14,7 @@ import Th from '@/components/ui/Th.vue'
 import TableRow from '@/components/ui/TableRow.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import Well from '@/components/ui/Well.vue'
 import { useApi } from '@/composables/useApi'
 import { useConfigStore } from '@/stores/config'
 import type { BackupEntry, BackupStatus, BackupConfig } from '@/types'
@@ -310,10 +311,10 @@ onMounted(() => Promise.all([loadStatus(), loadConfig()]))
 
         <!-- Local info -->
         <template v-if="targetType === 'local'">
-          <div class="rounded-lg bg-gray-50 dark:bg-gray-900 px-4 py-3 text-sm space-y-1">
+          <Well class="text-sm space-y-1">
             <p class="text-gray-500">Storage location: <span class="font-mono text-gray-700 dark:text-gray-300">{{ fileTargetDir }}</span></p>
             <p class="text-gray-500">Encryption key: <span class="font-mono text-gray-700 dark:text-gray-300">{{ encPwFile }}</span></p>
-          </div>
+          </Well>
         </template>
 
         <!-- Rsync fields -->
@@ -332,10 +333,10 @@ onMounted(() => Promise.all([loadStatus(), loadConfig()]))
               <Input id="rsyncPath" v-model="rsyncPath" placeholder="backups/mailinabox" />
             </div>
           </div>
-          <div v-if="sshPubKey" class="rounded-lg bg-gray-50 dark:bg-gray-900 px-4 py-3">
+          <Well v-if="sshPubKey">
             <p class="text-xs font-medium text-gray-500 mb-1.5">SSH public key (add to remote authorized_keys)</p>
             <pre class="text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all select-all">{{ sshPubKey }}</pre>
-          </div>
+          </Well>
         </template>
 
         <!-- S3 fields -->

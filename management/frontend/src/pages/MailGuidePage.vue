@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Card from '@/components/ui/Card.vue'
+import Code from '@/components/ui/Code.vue'
+import Divider from '@/components/ui/Divider.vue'
 import Table from '@/components/ui/Table.vue'
 import TableRow from '@/components/ui/TableRow.vue'
 import { useConfigStore } from '@/stores/config'
@@ -50,7 +52,7 @@ const activeSyncRows: SettingRow[] = [
     <!-- IMAP / SMTP -->
     <h2 class="text-base font-semibold mb-3">Mobile &amp; Desktop Apps</h2>
     <Card class="mb-6">
-      <div class="p-5 border-b border-gray-100 dark:border-gray-800">
+      <div class="p-5">
         <p class="text-sm text-gray-500 mb-2">
           iOS and macOS users can set up Mail automatically using the configuration profile:
         </p>
@@ -61,6 +63,7 @@ const activeSyncRows: SettingRow[] = [
           Download configuration profile
         </a>
       </div>
+      <Divider />
       <div class="p-5">
         <p class="text-sm font-medium mb-3">Manual IMAP / SMTP settings</p>
         <Table>
@@ -110,7 +113,7 @@ const activeSyncRows: SettingRow[] = [
           <p class="text-sm font-medium mb-1">Tagged addresses</p>
           <p class="text-sm text-gray-500">
             Mail sent to
-            <code class="text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded font-mono">you+anything@yourdomain.com</code>
+            <Code>you+anything@yourdomain.com</Code>
             is delivered to your inbox automatically. Useful for filtering.
           </p>
         </div>

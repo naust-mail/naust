@@ -69,7 +69,7 @@ async function submitPassword(): Promise<void> {
     )
     if (result === 'ok') {
       saveEmailPreference()
-      await router.push('/welcome')
+      await router.push('/system-status')
     } else if (result === 'missing-totp-token') {
       step.value = 'totp'
     } else {
@@ -111,7 +111,7 @@ async function submitPasskey(): Promise<void> {
     if (result.status === 'ok') {
       auth.handleAuthSuccess(result.email, result.privileges)
       saveEmailPreference()
-      await router.push('/welcome')
+      await router.push('/system-status')
     } else {
       toast.error(result.reason || 'Passkey authentication failed.')
     }
