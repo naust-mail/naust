@@ -12,6 +12,22 @@
 
 ---
 
+> **Archived branch: the Python-era fork.**
+>
+> This branch (`python-legacy`) is a frozen snapshot of the fork's complete
+> Python/Flask management system, preserved as a middle ground between
+> upstream Mail-in-a-Box and the Go rewrite that replaced it on `main`.
+>
+> - It is fully functional as of its last commit: Python management daemon,
+>   Vue 3 admin panel, rspamd, Dovecot 2.4, Docker deployment, and the rest.
+> - It contains no Go code and has no Go toolchain requirement anywhere.
+> - It is **unsupported and receives no updates**. Install fixes may be
+>   accepted; features will not be backported.
+>
+> For the actively developed system, use the `main` branch.
+
+---
+
 ## Table of contents
 
 - [Why](#why)
