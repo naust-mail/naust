@@ -34,9 +34,9 @@ COMPONENT = Component(
 # The hash must be copied from the release's checksums.txt, not fetched at
 # install time - fetching from the same place as the binary means a compromised
 # release could ship a tampered binary and a matching tampered hash.
-OXI_VERSION = "v0.2.0+d106387"
+OXI_VERSION = "v0.2.0+edbc93d"
 OXI_ASSET = "oxi-email-server-linux-x86_64.tar.gz"
-OXI_SHA256 = "aa13851f51a8830bb6a5bbe81603f6016078659ffbe078d2b5943b17b7956c04"
+OXI_SHA256 = "0187d8ef8c49dc47c6f1476551ac5697ef516cbf0685c3b78a5b5e9ec71681b1"
 OXI_URL = f"https://github.com/boomboompower/oxi-miab/releases/download/{OXI_VERSION.replace('+', '%2B')}/{OXI_ASSET}"
 
 _OXI_STATIC_DIR = "/usr/local/share/oxi-email/static"
