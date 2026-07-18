@@ -13,12 +13,6 @@ preview = true
 
 output-format = "concise"
 
-# management/ (Flask) is parked and on the delete-list, not maintained code -
-# skip it here so CI doesn't gate on a tree that's going away. CI no longer
-# passes "management/" on the command line at all, but force-exclude is kept
-# so any explicit/local invocation (e.g. `ruff check .`) still skips it too -
-# exclude/extend-exclude are otherwise ignored for explicitly-passed paths.
-extend-exclude = ["management"]
 force-exclude = true
 
 [tool.ruff.lint]

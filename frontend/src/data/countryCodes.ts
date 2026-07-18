@@ -1,4 +1,4 @@
-// ISO 3166-1 alpha-2 country codes. Derived from management/csr_country_codes.tsv.
+// ISO 3166-1 alpha-2 country codes.
 // Top entries are ordered by internet user count; remainder alphabetical.
 // Static - these codes do not change at runtime.
 const CSR_COUNTRY_CODES: [string, string][] = [

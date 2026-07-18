@@ -199,34 +199,4 @@ pre-built tarball fetched by the setup scripts. It bundles npm packages
 whose licenses are listed in `frontend/package.json` and `frontend/package-lock.json`.
 All bundled packages use permissive licenses (MIT, BSD, Apache 2.0, ISC).
 
----
 
-## Python packages (management daemon)
-
-The following packages are installed into a private virtualenv
-(`/usr/local/lib/mailinabox/env`) at setup time from PyPI. They are not
-bundled in this repository.
-
-| Package                  | License             |
-|--------------------------|---------------------|
-| flask                    | BSD 3-Clause        |
-| gunicorn                 | MIT                 |
-| dnspython                | ISC                 |
-| cryptography             | Apache 2.0 + BSD    |
-| passlib                  | BSD 3-Clause        |
-| bcrypt                   | Apache 2.0          |
-| pyotp                    | MIT                 |
-| fido2                    | BSD 3-Clause        |
-| qrcode / Pillow          | BSD 3-Clause / HPND |
-| psutil                   | BSD 3-Clause        |
-| postfix-mta-sts-resolver | Apache 2.0          |
-| email_validator          | CC0                 |
-| rtyaml                   | MIT                 |
-| python-dateutil          | Apache 2.0 / BSD    |
-| expiringdict             | Apache 2.0          |
-| idna                     | BSD 3-Clause        |
-| duplicity                | GPL v2              |
-| b2sdk                    | MIT                 |
-| boto3                    | Apache 2.0          |
-| fasteners                | Apache 2.0          |
-| radicale                 | GPL v3              |

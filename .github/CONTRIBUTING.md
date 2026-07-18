@@ -80,7 +80,7 @@ The admin UI talks to the Go control-plane daemon (`managerd`) at `https://<box>
 ## Codebase layout
 
 ```
-daemon/            # Go control-plane daemon (managerd) - the successor to management/
+daemon/            # Go control-plane daemon (managerd)
   internal/
     auth/           # password hashing, sessions, WebAuthn
     httpapi/        # REST API served under /api
@@ -98,9 +98,6 @@ setup/
     dovecot/        # Dovecot config templates, versioned by dialect
     fail2ban/       # jails and filters
     systemd/        # service unit files
-
-management/         # legacy Python (Flask) daemon and REST API - being retired by
-                     # daemon/; still present during the cutover, avoid new features here
 
 frontend/            # Vue 3 + Vite + TypeScript admin UI
   src/

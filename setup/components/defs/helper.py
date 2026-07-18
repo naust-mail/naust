@@ -4,8 +4,7 @@ Privileged helper daemon (helperd, Go).
 Executes the fixed menu of privileged operations (service lifecycle,
 allowlisted postfix/config writes, apt, reboot) over
 /run/naust/helper.sock so the management daemon can run without root.
-The management daemon delegates automatically when the socket exists
-(management/services/control_plane.py).
+The management daemon delegates automatically when the socket exists.
 
 Steps:
   group - create the 'naust' system group that may connect to the socket

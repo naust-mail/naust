@@ -1,15 +1,14 @@
-// managerd is the Naust management daemon (Go rewrite of the
-// Python management/ daemon, in progress). It runs as an unprivileged
-// user and holds no state outside the database: sessions, credentials,
-// desired configuration, rate-limit windows, and counters all live in
-// the store, so the process is disposable and any number of replicas
-// against one store can serve requests. Background singletons (backup
-// runs, scheduled check batches and their digest, ACME renewal
-// sweeps) coordinate through store leases so exactly one replica runs
-// each; the config appliers instead run on every process, because
-// they converge host-local files and re-tick periodically to pick up
-// mutations another replica handled. The one designed exception to
-// store-only state is the bootstrap token: a root-minted file on this
+// managerd is the Naust management daemon.
+// It runs as an unprivileged user and holds no state outside the database:
+// sessions, credentials, desired configuration, rate-limit windows, and
+// counters all live in the store, so the process is disposable and any
+// number of replicas against one store can serve requests. Background
+// singletons (backup runs, scheduled check batches and their digest,
+// ACME renewal sweeps) coordinate through store leases so exactly one
+// replica runs each; the config appliers instead run on every process,
+// because they converge host-local files and re-tick periodically to
+// pick up mutations another replica handled. The one designed exception
+// to store-only state is the bootstrap token: a root-minted file on this
 // host, because first-admin trust anchors to the operator's shell,
 // not to database contents. Privileged operations are delegated to
 // helperd over its intent socket.

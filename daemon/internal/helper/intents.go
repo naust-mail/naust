@@ -83,7 +83,6 @@ var Intents = map[string]intentDef{
 		},
 	},
 
-	// Exact argv from management/core/views/system_views.py.
 	"host.apt_update": {
 		timeout: 10 * time.Minute,
 		execute: func(ctx context.Context, d Deps, _ map[string]string) (string, error) {

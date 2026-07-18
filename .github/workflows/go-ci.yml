@@ -1,0 +1,56 @@
+name: Go daemon CI
+
+# Builds and tests the Go control-plane daemon (managerd, helperd, boxctl,
+# muninweb) on every push and pull request that touches it. This is what
+# deploy/docker/management/Dockerfile builds from and what project-release.yml
+# ships as prebuilt binaries - previously the only place `go build`/`go test`
+# ran was that manual, tag-triggered release workflow, so a broken daemon/
+# change could merge with no CI catching it at all.
+
+on:
+  push:
+    paths:
+      - 'daemon/**'
+      - '.github/workflows/go-ci.yml'
+  pull_request:
+    paths:
+      - 'daemon/**'
+      - '.github/workflows/go-ci.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+
+      - name: Build
+        working-directory: daemon
+        run: go build ./...
+
+      - name: Vet
+        working-directory: daemon
+        run: go vet ./...
+
+      - name: gofmt check
+        working-directory: daemon
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following files are not gofmt'd:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      # -race matches how this daemon is actually exercised: the check
+      # engine (internal/checks) runs checks concurrently via goroutines.
+      # Safe to run for the whole module - internal/auth lowers bcrypt's
+      # cost factor under testing.Testing(), so bcrypt-heavy tests in
+      # internal/httpapi no longer compound race instrumentation's
+      # overhead into a 20-minute-plus suite.
+      - name: Test
+        working-directory: daemon
+        run: go test ./... -race

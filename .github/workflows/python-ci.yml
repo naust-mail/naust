@@ -50,19 +50,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-xdist ruff doit exclusiveprocess \
-            email-validator rtyaml
+            email-validator rtyaml bcrypt
 
       # ruff check: linting (unused imports, undefined names, style issues, etc.)
-      # tests/management is excluded along with management/ itself: that
-      # Flask app is retired and parked (enabled=False), not shipped by
-      # Docker or setup anymore.
       - name: Ruff lint
-        run: python -m ruff check setup/ tests/ --exclude tests/management
+        run: python -m ruff check setup/ tests/
 
       # ruff format --check: fails if any file would be reformatted.
       # Keeps diffs clean and avoids "format-only" commits cluttering history.
       - name: Ruff format
-        run: python -m ruff format --check setup/ tests/ --exclude tests/management
+        run: python -m ruff format --check setup/ tests/
 
       - name: Run tests
-        run: python -m pytest tests/ --ignore=tests/management -n auto --dist=worksteal --tb=short
+        run: python -m pytest tests/ -n auto --dist=worksteal --tb=short

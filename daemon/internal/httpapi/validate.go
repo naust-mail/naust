@@ -8,7 +8,6 @@ import (
 	"naust/daemon/internal/dns"
 )
 
-// Validation rules ported from management/mail/mailconfig/validation.py.
 // Internationalized domains are punycoded at the API boundary (see
 // asciiEmailDomain) so everything stored and materialized is ASCII.
 // User account addresses stay ASCII-only by policy: they are login

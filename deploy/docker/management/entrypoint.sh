@@ -4,9 +4,7 @@
 # Runs helperd (root) and managerd (unprivileged naust user) under
 # supervisord - the same privilege split as bare metal's
 # naust-helper.service / naust-managerd.service, just inside one container.
-# The legacy Flask app (management/) is retired from Docker entirely; there
-# is nothing else for this container to run. First-admin creation is a
-# manual operator step here too, same as bare metal:
+#  First-admin creation is a manual operator step here too, same as bare metal:
 #   docker exec <management container> boxctl bootstrap
 
 set -euo pipefail

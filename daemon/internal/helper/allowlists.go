@@ -15,9 +15,7 @@ type serviceDef struct {
 	reloadFallback []string
 }
 
-// services mirrors the service set managed by the Python daemon
-// (management/services/control_plane.py). Custom sequences are copied
-// verbatim from _BARE_METAL_RELOAD / _BARE_METAL_RELOAD_FALLBACK.
+// Custom sequences are copied verbatim from _BARE_METAL_RELOAD / _BARE_METAL_RELOAD_FALLBACK.
 var services = map[string]serviceDef{
 	"nsd": {
 		reload: [][]string{
@@ -56,7 +54,6 @@ func KnownService(name string) bool {
 
 // postfixKeys are the only main.cf parameters postfix.set may touch -
 // exactly the relay parameters the daemon manages today
-// (management/core/views/relay_views.py).
 var postfixKeys = map[string]bool{
 	"relayhost":                  true,
 	"smtp_sasl_auth_enable":      true,
