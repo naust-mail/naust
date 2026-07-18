@@ -20,11 +20,15 @@ import subprocess
 
 from doit.tools import config_changed
 
-from ... import artifacts
+from ... import SETUP_DIR, artifacts
 from ... import packages as pkg
 from ...component import Component
 from ...task_names import DOVECOT_VERSION
-from .shared import setup_dovecot_imapsieve
+from .shared import enable_antispam_plugin, setup_dovecot_antispam_pipe, setup_dovecot_imapsieve
+
+# Both dialects live under this dir; hashed whole so editing either invalidates
+# the stamp regardless of which branch is live on this box.
+_TPL_DIR = os.path.join(SETUP_DIR, "conf", "filter")
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -44,7 +48,7 @@ _SPAMPD_BASE = ["spampd", "libmail-dkim-perl"]
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	hostname = env.get("PRIMARY_HOSTNAME", "localhost")
 
@@ -54,11 +58,14 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 	dovecot_version = ver_result.stdout.split()[0] if ver_result.stdout.strip() else "2.3"
 	is_24 = dovecot_version.startswith("2.4.")
 
-	# Both plugin branches stamped so editing either branch invalidates.
+	# Both plugin branches stamped so editing either branch invalidates, plus
+	# the shared filter/ template dir hash since the config text itself lives
+	# outside the functions.
 	plugin_stamp = "|".join([
 		dovecot_version,
 		artifacts.fn_stamp(_dovecot_plugin_24),
 		artifacts.fn_stamp(_dovecot_plugin_23),
+		artifacts.hash_files(_TPL_DIR),
 	])
 
 	return [
@@ -116,7 +123,7 @@ def _config() -> None:
 	# so editconf doesn't abort on a missing file.
 	for f in ["/etc/default/spamassassin", "/etc/default/spampd"]:
 		if not os.path.exists(f):
-			open(f, "a").close()
+			open(f, "a", encoding="utf-8").close()
 
 	# Enable the spamassassin rule update cron (or systemd timer equivalent).
 	artifacts.editconf("/etc/default/spamassassin", "CRON=1")
@@ -159,7 +166,7 @@ def _spf_dmarc_rules(hostname: str) -> None:
 	escaped = hostname.replace(".", "\\.")
 
 	artifacts.write_file(
-		"/etc/spamassassin/miab_spf_dmarc.cf",
+		"/etc/spamassassin/naust_spf_dmarc.cf",
 		"# Evaluate DMARC Authentication-Results\n"
 		f"header DMARC_PASS Authentication-Results =~ /{escaped}; dmarc=pass/\n"
 		"describe DMARC_PASS DMARC check passed\n"
@@ -253,31 +260,14 @@ def _dovecot_plugin_24() -> None:
 	)
 
 
-def _dovecot_plugin_23(storage_root: str) -> None:
+def _dovecot_plugin_23(_storage_root: str) -> None:
 	"""Dovecot 2.3 spam learning via the third-party dovecot-antispam plugin.
 
 	Sieve-based learning is not available in 2.3. antispam_backend=pipe calls
 	sa-learn-pipe.sh on Spam/Not-Spam moves. 2.4 uses imapsieve instead.
 	"""
-	# Add antispam plugin to IMAP and POP3 mail_plugins.
-	for conf in ["/etc/dovecot/conf.d/20-imap.conf", "/etc/dovecot/conf.d/20-pop3.conf"]:
-		subprocess.run(
-			["sed", "-i", r"s/#mail_plugins = .*/mail_plugins = $mail_plugins antispam/", conf],
-			check=True,
-		)
-
-	artifacts.write_file(
-		"/etc/dovecot/conf.d/99-local-spam-learning.conf",
-		"plugin {\n"
-		"    antispam_backend = pipe\n"
-		"    antispam_spam_pattern_ignorecase = SPAM\n"
-		"    antispam_trash_pattern_ignorecase = trash;Deleted *\n"
-		"    antispam_allow_append_to_spam = yes\n"
-		"    antispam_pipe_program_spam_args = /usr/local/bin/sa-learn-pipe.sh;--spam\n"
-		"    antispam_pipe_program_notspam_args = /usr/local/bin/sa-learn-pipe.sh;--ham\n"
-		"    antispam_pipe_program = /bin/bash\n"
-		"}\n",
-	)
+	enable_antispam_plugin()
+	setup_dovecot_antispam_pipe("sa-learn-pipe.sh;--spam", "sa-learn-pipe.sh;--ham")
 
 	# Remove legacy location before writing the canonical one.
 	legacy = "/usr/bin/sa-learn-pipe.sh"
@@ -286,7 +276,7 @@ def _dovecot_plugin_23(storage_root: str) -> None:
 
 	artifacts.write_file(
 		"/usr/local/bin/sa-learn-pipe.sh",
-		"#!/bin/bash\ncat <&0 >> /tmp/sendmail-msg-$$.txt\n/usr/bin/sa-learn \"$@\" /tmp/sendmail-msg-$$.txt > /dev/null\nrm -f /tmp/sendmail-msg-$$.txt\nexit 0\n",
+		'#!/bin/bash\ncat <&0 >> /tmp/sendmail-msg-$$.txt\n/usr/bin/sa-learn "$@" /tmp/sendmail-msg-$$.txt > /dev/null\nrm -f /tmp/sendmail-msg-$$.txt\nexit 0\n',
 		mode=0o755,
 	)
 

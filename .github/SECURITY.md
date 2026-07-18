@@ -4,7 +4,7 @@ This fork turns a fresh Ubuntu LTS machine into a mail server appliance. This pa
 
 ## Reporting Vulnerabilities
 
-Report security vulnerabilities privately via [GitHub Security Advisories](https://github.com/boomboompower/mailinabox/security/advisories/new). Do not open a public issue.
+Report security vulnerabilities privately via [GitHub Security Advisories](https://github.com/naust-mail/naust/security/advisories/new). Do not open a public issue.
 
 ## Threat Model
 
@@ -26,7 +26,7 @@ We do **not** protect against:
 
 The control panel is served exclusively over HTTPS. It supports three authentication factors:
 
-- **Password** - stored using SHA512-CRYPT. ([source](management/mailconfig.py))
+- **Password** - stored as a bcrypt hash (Dovecot `{BLF-CRYPT}` format, cost 12). ([source](daemon/internal/auth/password.go))
 - **TOTP** - time-based one-time passwords via any authenticator app.
 - **WebAuthn passkeys** - hardware security keys and platform authenticators (Touch ID, Windows Hello, etc.).
 
@@ -50,7 +50,7 @@ All credential-carrying services require TLS:
 TLS settings on all services:
 
 - Minimum TLSv1.2; TLSv1.3 preferred where supported
-- Certificates are provisioned automatically by Let's Encrypt; self-signed fallback until provisioning completes ([source](setup/infra/ssl.sh))
+- Certificates are provisioned automatically by Let's Encrypt; self-signed fallback until provisioning completes ([source](setup/components/defs/ssl.py))
 - [Mozilla Intermediate Ciphers](https://wiki.mozilla.org/Security/Server_Side_TLS) profile - balancing security with broad mail client compatibility
 - HTTPS Strict Transport Security header set; HTTP redirects to HTTPS ([source](setup/conf/nginx/nginx-ssl.conf))
 - The [Qualys SSL Labs test](https://www.ssllabs.com/ssltest) should report an A+ grade
@@ -65,7 +65,7 @@ TLS settings on all services:
 | IMAP (Dovecot) | mail log |
 | SMTP submission (Postfix) | mail log |
 | Admin control panel | syslog |
-| oxi.email webmail | nginx access log |
+| Rav webmail | nginx access log |
 | Cypht webmail | `/var/log/cypht-auth.log` (application-level log) |
 | FileBrowser | nginx access log |
 | Radicale (CardDAV/CalDAV) | nginx access log |
@@ -92,17 +92,17 @@ The box runs a local [DNSSEC](https://en.wikipedia.org/wiki/DNSSEC)-validating r
 
 ### Encryption
 
-Outbound mail uses [opportunistic TLS](https://en.wikipedia.org/wiki/Opportunistic_encryption) - connections are encrypted where the recipient server supports it, protecting against passive eavesdropping. TLSv1.2+ is used where available. ([source](setup/mail/postfix.sh))
+Outbound mail uses [opportunistic TLS](https://en.wikipedia.org/wiki/Opportunistic_encryption) - connections are encrypted where the recipient server supports it, protecting against passive eavesdropping. TLSv1.2+ is used where available. ([source](setup/components/defs/postfix.py))
 
 ### DANE
 
-If the recipient's domain publishes a [DANE TLSA](https://en.wikipedia.org/wiki/DNS-based_Authentication_of_Named_Entities) record and has DNSSEC enabled, the connection is upgraded to authenticated encryption - the recipient server must present a certificate matching the TLSA record, defeating man-in-the-middle attacks. ([source](setup/mail/postfix.sh))
+If the recipient's domain publishes a [DANE TLSA](https://en.wikipedia.org/wiki/DNS-based_Authentication_of_Named_Entities) record and has DNSSEC enabled, the connection is upgraded to authenticated encryption - the recipient server must present a certificate matching the TLSA record, defeating man-in-the-middle attacks. ([source](setup/components/defs/postfix.py))
 
 ### Domain Policy (DKIM, DMARC, SPF)
 
 All outbound mail is signed with [DKIM](https://en.wikipedia.org/wiki/DomainKeys_Identified_Mail). [DMARC](https://en.wikipedia.org/wiki/DMARC) records are published at "quarantine" policy by default. [SPF](https://en.wikipedia.org/wiki/Sender_Policy_Framework) records are published automatically.
 
-DKIM signing and DMARC reporting are handled by rspamd (default) or OpenDKIM (SpamAssassin path). ([source](setup/mail/rspamd.sh))
+DKIM signing and DMARC reporting are handled by rspamd (default) or OpenDKIM (SpamAssassin path). ([source](setup/components/defs/filter/rspamd.py))
 
 ### Sender Restrictions
 
@@ -112,7 +112,7 @@ Users may only send mail with an envelope sender address that matches their own 
 
 ### Encryption
 
-Incoming SMTP (port 25) offers STARTTLS but cannot require it - some legitimate senders do not support it. TLSv1.2+ and modern ciphers are offered to give senders the best chance at encrypting. ([source](setup/mail/postfix.sh))
+Incoming SMTP (port 25) offers STARTTLS but cannot require it - some legitimate senders do not support it. TLSv1.2+ and modern ciphers are offered to give senders the best chance at encrypting. ([source](setup/components/defs/postfix.py))
 
 ### MTA-STS
 
@@ -120,7 +120,7 @@ The box publishes an [MTA-STS](https://en.wikipedia.org/wiki/Simple_Mail_Transfe
 
 ### DANE
 
-When DNSSEC is enabled at the registrar, DANE TLSA records are published automatically. Senders supporting DANE will enforce authenticated encryption when connecting to the box. ([source](management/dns_update.py))
+When DNSSEC is enabled at the registrar, DANE TLSA records are published automatically. Senders supporting DANE will enforce authenticated encryption when connecting to the box. ([source](setup/components/defs/dns.py))
 
 ### Spam and Abuse Filters
 

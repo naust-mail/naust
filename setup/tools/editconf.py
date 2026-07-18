@@ -26,7 +26,11 @@
 # NAME VAL
 #   UE
 
-import os, sys, re, tempfile
+import os
+import sys
+import re
+import tempfile
+import contextlib
 
 # sanity check
 if len(sys.argv) < 3:
@@ -68,7 +72,7 @@ while settings[0][0] == "-" and settings[0] != "--":
 for setting in settings:
 	try:
 		name, value = setting.split("=", 1)
-	except:
+	except ValueError:
 		import subprocess
 
 		print("Invalid command line: ", subprocess.list2cmdline(sys.argv))
@@ -104,7 +108,7 @@ while len(input_lines) > 0:
 			r"(\s*)"
 			"(" + re.escape(comment_char) + r"\s*)?" + re.escape(name) + delimiter_re + r"(.*?)\s*$",
 			line,
-			re.S,
+			re.DOTALL,
 		)
 		if not m:
 			continue
@@ -155,17 +159,21 @@ for i in range(len(settings)):
 
 if not testing:
 	# Write atomically via temp file so a kill mid-write never leaves a truncated config.
+	# The temp file is born 0600; carry the original file's owner/group/mode
+	# across the rename, or every edited config silently becomes root-only.
 	dir_ = os.path.dirname(os.path.abspath(filename))
+	st = os.stat(filename) if os.path.exists(filename) else None
 	fd, tmp = tempfile.mkstemp(dir=dir_)
 	try:
 		with os.fdopen(fd, "w", encoding="utf-8") as f:
 			f.write(buf)
+		if st is not None:
+			os.chmod(tmp, st.st_mode & 0o7777)
+			os.chown(tmp, st.st_uid, st.st_gid)
 		os.replace(tmp, filename)
 	except Exception:
-		try:
+		with contextlib.suppress(OSError):
 			os.unlink(tmp)
-		except OSError:
-			pass
 		raise
 else:
 	# Just print the new file to stdout.

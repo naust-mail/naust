@@ -4,8 +4,7 @@ All doveadm subprocess calls and kick() (which calls DNS/web update) are mocked
 so the tests run without system daemons or network access.
 """
 
-import sqlite3
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 

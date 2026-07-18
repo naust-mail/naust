@@ -11,6 +11,7 @@ from flask import Blueprint, make_response, request
 from core.app_context import env, auth_service
 from auth.bootstrap import has_admin_users
 from mail.mailconfig import get_mail_users, get_admins, get_mail_user_privileges
+import pathlib
 
 bp = Blueprint("spa", __name__)
 
@@ -65,11 +66,10 @@ def get_s3_backup_regions():
 def autodiscover():
 	from flask import Response
 
-	autodiscover_path = '/var/lib/mailinabox/autodiscover.xml'
+	autodiscover_path = '/var/lib/naust/autodiscover.xml'
 	if not os.path.exists(autodiscover_path):
 		return ('Autodiscover not configured.', 404)
-	with open(autodiscover_path) as f:
-		xml = f.read()
+	xml = pathlib.Path(autodiscover_path).read_text()
 	return Response(xml, mimetype='application/xml')
 
 
@@ -125,7 +125,7 @@ def _build_required_page() -> str:
   <h1>Admin Panel Not Built</h1>
   <p>The admin frontend has not been compiled for this installation. This can happen after a fresh clone or a failed update.</p>
   <p>Re-run setup to build it:</p>
-  <div class="cmd">sudo mailinabox</div>
+  <div class="cmd">sudo naust</div>
 </div>
 </body>
 </html>"""
@@ -183,8 +183,7 @@ def spa_fallback(path):
 			"needsBootstrap": not has_admin_users(env),
 		}
 
-	with open(spa_index, encoding='utf-8') as f:
-		html = f.read()
+	html = pathlib.Path(spa_index).read_text(encoding='utf-8')
 
 	# Escape HTML-special chars so a value containing </script> can never break
 	# out of the script tag. This produces valid JSON (unicode escapes are legal).

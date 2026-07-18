@@ -1,4 +1,4 @@
-// helperd is the privileged helper for the Mail-in-a-Box management
+// helperd is the privileged helper for the Naust management
 // daemon. It listens on a local Unix socket and executes a fixed menu of
 // privileged operations (service restarts, allowlisted config writes,
 // apt, reboot) on behalf of the unprivileged manager process.
@@ -10,6 +10,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -19,12 +20,12 @@ import (
 	"strconv"
 	"syscall"
 
-	"mailinabox/daemon/internal/helper"
+	"naust/daemon/internal/helper"
 )
 
 func main() {
-	socketPath := flag.String("socket", "/run/mailinabox/helper.sock", "unix socket path to listen on")
-	socketGroup := flag.String("socket-group", "mailinabox", "group granted connect access to the socket")
+	socketPath := flag.String("socket", "/run/naust/helper.sock", "unix socket path to listen on")
+	socketGroup := flag.String("socket-group", "naust", "group granted connect access to the socket")
 	allowUID := flag.Int("allow-uid", -1, "restrict callers to this peer uid (-1 allows any; socket permissions remain the primary gate)")
 	flag.Parse()
 
@@ -35,13 +36,8 @@ func main() {
 	}
 	// Remove a stale socket from an unclean shutdown; refuse to remove
 	// anything that is not a socket.
-	if fi, err := os.Lstat(*socketPath); err == nil {
-		if fi.Mode()&os.ModeSocket == 0 {
-			logger.Fatalf("%s exists and is not a socket; refusing to remove", *socketPath)
-		}
-		if err := os.Remove(*socketPath); err != nil {
-			logger.Fatalf("remove stale socket: %v", err)
-		}
+	if err := removeStaleSocket(*socketPath); err != nil {
+		logger.Fatalf("%v", err)
 	}
 
 	l, err := net.Listen("unix", *socketPath)
@@ -71,6 +67,27 @@ func main() {
 	if err := srv.Serve(l); err != nil {
 		logger.Fatalf("serve: %v", err)
 	}
+}
+
+// removeStaleSocket removes a leftover socket file from an unclean
+// shutdown so a fresh net.Listen can bind the path. It refuses to
+// remove anything that is not actually a socket, and it is not an
+// error for the path to not exist yet.
+func removeStaleSocket(path string) error {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	if fi.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("%s exists and is not a socket; refusing to remove", path)
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("remove stale socket: %w", err)
+	}
+	return nil
 }
 
 // restrictSocket sets the socket to 0660 root:<group> so only the

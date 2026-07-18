@@ -20,25 +20,25 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Copy component defs before the full source COPY so this layer is only
 # invalidated when component definitions change, not on every code change.
-COPY setup/components /opt/mailinabox/setup/components
-WORKDIR /opt/mailinabox
+COPY setup/components /opt/naust/setup/components
+WORKDIR /opt/naust
 
 # Install component packages (nsd, ldnsutils, openssh-client, unbound, unbound-anchor).
 # RUNTIME is unset here so ensure_installed() runs apt normally.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    PYTHONPATH=/opt/mailinabox/setup python3 -m components.runner --build-mode dns
+    PYTHONPATH=/opt/naust/setup python3 -m components.runner --build-mode dns
 
-COPY . /opt/mailinabox
-WORKDIR /opt/mailinabox
+COPY . /opt/naust
+WORKDIR /opt/naust
 
 COPY deploy/docker/dns/supervisord.conf /etc/supervisor/conf.d/dns.conf
 
-COPY deploy/docker/dns/handlers/ /etc/miab/handlers/
+COPY deploy/docker/dns/handlers/ /etc/naust/handlers/
 COPY deploy/docker/control-socket-server.py /usr/local/sbin/control-socket-server
 COPY deploy/docker/dns/entrypoint.sh /entrypoint.sh
-RUN chmod +x /usr/local/sbin/control-socket-server /etc/miab/handlers/* /entrypoint.sh
+RUN chmod +x /usr/local/sbin/control-socket-server /etc/naust/handlers/* /entrypoint.sh
 
 # 53/tcp and 53/udp are exposed to the host network for public DNS.
 EXPOSE 53/tcp 53/udp

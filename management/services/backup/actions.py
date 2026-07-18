@@ -6,7 +6,8 @@ from core.utils import load_environment, shell
 
 def _atomic_json_write(path, data):
 	"""Write data as JSON to path atomically (temp-file + os.replace) with 0o600 permissions."""
-	import json, tempfile
+	import json
+	import tempfile
 
 	dir_ = os.path.dirname(path)
 	os.makedirs(dir_, exist_ok=True)
@@ -42,7 +43,7 @@ def perform_backup(full_backup):
 
 	from core.utils import acquire_process_lock
 
-	_backup_lock = acquire_process_lock("/tmp/mailinabox-backup.lock")  # noqa: F841
+	_backup_lock = acquire_process_lock("/tmp/naust-backup.lock")
 
 	config = get_backup_config(env)
 	if config["target"] == "off":
@@ -59,7 +60,8 @@ def _checkpoint_sqlite_databases(storage_root):
 	# a plain file copy (duplicity, or restic's own file scan) sees a fully
 	# consistent database file. All databases are opened with WAL mode via
 	# initialize_database().
-	import sqlite3, pathlib
+	import sqlite3
+	import pathlib
 
 	for db_path in pathlib.Path(storage_root).rglob('*.sqlite'):
 		try:
@@ -292,7 +294,8 @@ def _duplicity_check_cache_path(env):
 
 
 def _verify_duplicity(env, config, backup_cache_dir):
-	import datetime, subprocess
+	import datetime
+	import subprocess
 	from .duplicity_args import DUPLICITY, get_duplicity_additional_args, get_duplicity_env_vars, get_duplicity_target_url
 
 	# collection-status verifies the backup chain is intact without downloading data.
@@ -344,7 +347,8 @@ def _verify_duplicity(env, config, backup_cache_dir):
 
 
 def _verify_restic(repo, extra_args, restic_env, env):
-	import datetime, subprocess
+	import datetime
+	import subprocess
 	from .restic_args import RESTIC
 	from .config import get_backup_config as _get_cfg
 

@@ -1,6 +1,9 @@
 """Terminal UI primitives - ANSI rendering, raw input, select/text components."""
 
-import os, select, sys, termios
+import os
+import select
+import sys
+import termios
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 
@@ -102,7 +105,7 @@ def read_key():
 	b = _rb()
 
 	if b != b'\x1b':
-		if b in (b'\r', b'\n'):
+		if b in {b'\r', b'\n'}:
 			return 'enter'
 		if b == b'\x03':
 			return 'ctrl_c'
@@ -157,6 +160,11 @@ def nav(labels, current, done):
 	Render the step nav bar, windowed to fit the terminal width.
 	The window always contains `current`. Steps that scroll off either
 	edge are replaced with a dim "..." marker.
+
+	`current` may be None (editing a preset field from the confirm screen
+	that isn't one of this run's active steps - see runner.py). No label
+	gets the active highlight in that case; the window anchors on the last
+	label ("Confirm") since that's where control returns to afterward.
 	"""
 	cols = _term_width()
 	sep = "  "
@@ -174,10 +182,10 @@ def nav(labels, current, done):
 	# Visible width of a rendered token (strip ANSI for measurement)
 	import re as _re
 
-	_ansi = _re.compile(r'\x1b\[[0-9;]*m')
+	ansi = _re.compile(r'\x1b\[[0-9;]*m')
 
 	def vis(s):
-		return len(_ansi.sub("", s))
+		return len(ansi.sub("", s))
 
 	ellipsis = gray_desc("...")
 	ell_w = vis(ellipsis)
@@ -186,10 +194,12 @@ def nav(labels, current, done):
 	# usable width for the step tokens + separators
 	budget = cols - len(prefix) - len(suffix) - 2
 
-	# Find the widest window around `current` that fits
-	lo = current
-	hi = current
-	used = vis(rendered[current])
+	# Find the widest window around `current` that fits. `current=None` has
+	# no label of its own to anchor on, so use the last one (Confirm).
+	anchor = current if current is not None else len(labels) - 1
+	lo = anchor
+	hi = anchor
+	used = vis(rendered[anchor])
 
 	# Expand outward greedily
 	while True:
@@ -253,9 +263,7 @@ def select_prompt(question, subtitle, options, current_value, revisit=False, val
 			print("\033[u\033[J", end="", flush=True)
 
 		out = []
-		out.append(f"  {bold(question)}")
-		out.append(f"  {gray_desc(subtitle)}" if subtitle else "")
-		out.append("")
+		out.extend((f"  {bold(question)}", f"  {gray_desc(subtitle)}" if subtitle else "", ""))
 
 		for i, (label, desc, value) in enumerate(options):
 			is_custom = value == "__custom__"
@@ -290,8 +298,7 @@ def select_prompt(question, subtitle, options, current_value, revisit=False, val
 			elif desc:
 				out.append(f"       {gray_desc(desc)}")
 
-		out.append("")
-		out.append(f"  {gray_desc(HINT_EDIT if editing else HINT_SEL)}")
+		out.extend(("", f"  {gray_desc(HINT_EDIT if editing else HINT_SEL)}"))
 
 		text = "\n".join(out)
 		print(text, end="\n", flush=True)
@@ -342,29 +349,28 @@ def select_prompt(question, subtitle, options, current_value, revisit=False, val
 						edit_buf.insert(edit_pos, k)
 						edit_pos += 1
 						err = ""
-				else:
-					if k in ('up', 'shift_tab'):
-						idx = (idx - 1) % n_opts
-					elif k in ('down', 'tab'):
-						idx = (idx + 1) % n_opts
-					elif k == 'enter':
-						if options[idx][2] == '__custom__':
-							editing = True
-							edit_pos = len(edit_buf)
-						else:
-							return options[idx][2]
-					elif k == 'esc':
-						return None
-					elif k == 'ctrl_c':
-						raise KeyboardInterrupt
-					elif k.isdigit() and 1 <= int(k) <= n_opts:
-						target = int(k) - 1
-						if options[target][2] == '__custom__':
-							idx = target
-							editing = True
-							edit_pos = len(edit_buf)
-						else:
-							return options[target][2]
+				elif k in {'up', 'shift_tab'}:
+					idx = (idx - 1) % n_opts
+				elif k in {'down', 'tab'}:
+					idx = (idx + 1) % n_opts
+				elif k == 'enter':
+					if options[idx][2] == '__custom__':
+						editing = True
+						edit_pos = len(edit_buf)
+					else:
+						return options[idx][2]
+				elif k == 'esc':
+					return None
+				elif k == 'ctrl_c':
+					raise KeyboardInterrupt
+				elif k.isdigit() and 1 <= int(k) <= n_opts:
+					target = int(k) - 1
+					if options[target][2] == '__custom__':
+						idx = target
+						editing = True
+						edit_pos = len(edit_buf)
+					else:
+						return options[target][2]
 
 				render()
 	finally:
@@ -392,9 +398,7 @@ def multiselect_prompt(question, subtitle, options, current_values):
 			print("\033[u\033[J", end="", flush=True)
 
 		out = []
-		out.append(f"  {bold(question)}")
-		out.append(f"  {gray_desc(subtitle)}" if subtitle else "")
-		out.append("")
+		out.extend((f"  {bold(question)}", f"  {gray_desc(subtitle)}" if subtitle else "", ""))
 
 		for i, (label, desc, key) in enumerate(options):
 			is_sel = i == idx
@@ -406,8 +410,7 @@ def multiselect_prompt(question, subtitle, options, current_values):
 			if desc:
 				out.append(f"       {gray_desc(desc)}")
 
-		out.append("")
-		out.append(f"  {gray_desc(HINT_MULTI)}")
+		out.extend(("", f"  {gray_desc(HINT_MULTI)}"))
 
 		text = "\n".join(out)
 		print(text, end="\n", flush=True)
@@ -419,9 +422,9 @@ def multiselect_prompt(question, subtitle, options, current_values):
 		with Raw():
 			while True:
 				k = read_key()
-				if k in ('up', 'shift_tab'):
+				if k in {'up', 'shift_tab'}:
 					idx = (idx - 1) % n_opts
-				elif k in ('down', 'tab'):
+				elif k in {'down', 'tab'}:
 					idx = (idx + 1) % n_opts
 				elif k == ' ':
 					selected[options[idx][2]] = not selected[options[idx][2]]
@@ -487,11 +490,11 @@ def text_prompt(question, subtitle, default="", validate_fn=None):
 							continue
 					err = ""
 					return value
-				elif k == 'esc':
+				if k == 'esc':
 					return None
-				elif k == 'ctrl_c':
+				if k == 'ctrl_c':
 					raise KeyboardInterrupt
-				elif k == 'backspace' and pos > 0:
+				if k == 'backspace' and pos > 0:
 					del buf[pos - 1]
 					pos -= 1
 					err = ""
@@ -570,11 +573,9 @@ def filter_prompt(question, subtitle, options, default=""):
 			if overflow > 0:
 				out.append(f"    {gray_desc(f'... {overflow} more')}")
 		elif s and not err:
-			out.append("")
-			out.append(f"    {gray_desc('no matches')}")
+			out.extend(("", f"    {gray_desc('no matches')}"))
 
-		out.append("")
-		out.append(f"  {gray_desc(HINT_FLIST if list_idx >= 0 else HINT_FILTER)}")
+		out.extend(("", f"  {gray_desc(HINT_FLIST if list_idx >= 0 else HINT_FILTER)}"))
 
 		text = "\n".join(out)
 		print(text, end="\n", flush=True)
@@ -593,12 +594,9 @@ def filter_prompt(question, subtitle, options, default=""):
 						value = "".join(buf).strip() or default
 						if value in options_set:
 							return value
-						elif len(matches) == 1:
+						if len(matches) == 1:
 							return matches[0]
-						elif not matches:
-							err = "Not found - try e.g. America/New_York or Europe/London"
-						else:
-							err = f"Type more to narrow down ({len(matches)} matches)"
+						err = "Not found - try e.g. America/New_York or Europe/London" if not matches else f"Type more to narrow down ({len(matches)} matches)"
 					elif k == 'down' and matches:
 						list_idx = 0
 						err = ""
@@ -626,9 +624,9 @@ def filter_prompt(question, subtitle, options, default=""):
 					shown_count = min(len(matches), _FILTER_MAX)
 					if k == 'enter' and 0 <= list_idx < len(matches):
 						return matches[list_idx]
-					elif k in ('up', 'shift_tab'):
+					if k in {'up', 'shift_tab'}:
 						list_idx = -1 if list_idx == 0 else list_idx - 1
-					elif k in ('down', 'tab'):
+					elif k in {'down', 'tab'}:
 						if list_idx < shown_count - 1:
 							list_idx += 1
 					elif k == 'esc':
@@ -697,11 +695,11 @@ def password_prompt(question, subtitle="", validate_fn=None):
 							render()
 							continue
 					return value
-				elif k == 'esc':
+				if k == 'esc':
 					return None
-				elif k == 'ctrl_c':
+				if k == 'ctrl_c':
 					raise KeyboardInterrupt
-				elif k == 'backspace' and buf:
+				if k == 'backspace' and buf:
 					buf.pop()
 					err = ""
 				elif isinstance(k, str) and len(k) == 1 and k.isprintable():

@@ -24,15 +24,15 @@ def _noopify(graph: dict[str, list[dict]]) -> dict[str, list[dict]]:
 	"""Replace task actions with no-ops while preserving uptodate stamps.
 
 	Strips targets so stamp checks rely solely on config_changed/run_once.
-	Tasks with no uptodate (only targets for idempotency, e.g. db-init,
-	dkim-key) get run_once added - they run exactly once then stay cached,
+	Tasks with no uptodate (only targets for idempotency, e.g. dkim-key)
+	get run_once added - they run exactly once then stay cached,
 	which is the correct semantics for a second-run test.
 	"""
 	result = {}
 	for comp_name, tasks in graph.items():
 		nooped = []
 		for task in tasks:
-			t = {k: v for k, v in task.items() if k not in ("actions", "targets")}
+			t = {k: v for k, v in task.items() if k not in {"actions", "targets"}}
 			t["actions"] = [lambda: None]
 			if "uptodate" not in t:
 				t["uptodate"] = [run_once]
@@ -62,10 +62,10 @@ def test_stamps_prevent_reruns(tmp_path):
 	with patch.object(_runner, "STATE_DB", state_db):
 		graph = build_graph_full(env, "baremetal")
 
-		ran1 = _runner._run_doit(_noopify(graph))
+		ran1 = _runner._run_doit(_noopify(graph))  # noqa: SLF001
 		assert len(ran1) > 0, "First run must execute tasks"
 
-		ran2 = _runner._run_doit(_noopify(graph))
+		ran2 = _runner._run_doit(_noopify(graph))  # noqa: SLF001
 		cached = _MUST_CACHE & ran1  # only assert on components that ran in run 1
 		assert not (cached & ran2), f"These components ran again despite no config change: {cached & ran2}"
 
@@ -93,12 +93,12 @@ def test_spam_filter_switch_reruns_only_affected_components(tmp_path):
 	with patch.object(_runner, "STATE_DB", state_db):
 		# Prime stamps with the rspamd config.
 		rspamd_graph = build_graph_full(rspamd_env, "baremetal")
-		ran1 = _runner._run_doit(_noopify(rspamd_graph))
+		ran1 = _runner._run_doit(_noopify(rspamd_graph))  # noqa: SLF001
 		assert len(ran1) > 0
 
 		# Switch spam filter - build a fresh graph (avoid doit's in-place name mutation).
 		spam_graph = build_graph_full(spam_env, "baremetal")
-		ran2 = _runner._run_doit(_noopify(spam_graph))
+		ran2 = _runner._run_doit(_noopify(spam_graph))  # noqa: SLF001
 
 		# postfix:spam-filter stamp includes the SPAM_FILTER value - must re-run.
 		assert "postfix" in ran2, "postfix must re-run when SPAM_FILTER changes"

@@ -51,7 +51,7 @@ def get_backup_config(env, for_save=False, for_ui=False):
 	if config["target"] == "local":
 		# Expand to the full URL.
 		config["target"] = "file://" + config["file_target_directory"]
-	ssh_pub_key = os.path.join('/root', '.ssh', 'id_rsa_miab.pub')
+	ssh_pub_key = os.path.join('/root', '.ssh', 'id_rsa_naust.pub')
 	if os.path.exists(ssh_pub_key):
 		with open(ssh_pub_key, encoding="utf-8") as f:
 			config["ssh_pub_key"] = f.read()

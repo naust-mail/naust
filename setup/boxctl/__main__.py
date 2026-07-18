@@ -1,27 +1,33 @@
 """Entry point: python3 setup/boxctl [docker|questions|bootstrap|doctor]"""
 
-import argparse, os, signal, sys, termios
+import argparse
+import contextlib
+import os
+import pathlib
+import signal
+import sys
+import termios
 
 # When run as `python3 setup/boxctl`, __package__ is '' and relative imports fail.
 # Add the setup/ directory to sys.path so `import boxctl` works as an absolute import.
-if __package__ in (None, ''):
+if __package__ in {None, ''}:
 	sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 	from boxctl.questions import STEPS, VALUE_DISPLAY
 	from boxctl.runner import run_questions, write_output, load_conf
-	from boxctl.ui import select_prompt, clear, bold, gray_desc, green, red, _term_width
+	from boxctl.ui import select_prompt, clear, bold, gray_desc, red, _term_width
 else:
 	from .questions import STEPS, VALUE_DISPLAY
 	from .runner import run_questions, write_output, load_conf
-	from .ui import select_prompt, clear, bold, gray_desc, green, red, _term_width
+	from .ui import select_prompt, clear, bold, gray_desc, red, _term_width
 
-BARE_METAL_CONF = "/etc/mailinabox.conf"
+BARE_METAL_CONF = "/etc/naust.conf"
 DOCKER_ENV_DEFAULT = "deploy/docker/.env"
 
 
 def _landing():
 	"""Interactive landing screen shown when no subcommand is given."""
 	clear()
-	print(f"\n  {bold('boxctl')}  {gray_desc('-')}  {gray_desc('Mail-in-a-Box management CLI')}")
+	print(f"\n  {bold('boxctl')}  {gray_desc('-')}  {gray_desc('Naust management CLI')}")
 	width = _term_width() - 4
 	print(f"  {gray_desc('─' * width)}\n")
 	options = [
@@ -45,22 +51,19 @@ def _preflight():
 	OK, WARN, ERR = "ok", "warn", "err"
 	checks = []
 
-	try:
-		with open("/proc/meminfo") as f:
-			for line in f:
-				if line.startswith("MemTotal:"):
-					mb = int(line.split()[1]) // 1024
-					if mb < 256:
-						checks.append((ERR, "RAM", f"{mb} MB available - 512 MB minimum required"))
-					elif mb < 512:
-						checks.append((WARN, "RAM", f"{mb} MB available - 512 MB recommended"))
-					else:
-						checks.append((OK, "RAM", f"{mb} MB available"))
-					break
-	except Exception:
-		pass
+	with contextlib.suppress(Exception), open("/proc/meminfo", encoding='utf-8') as f:
+		for line in f:
+			if line.startswith("MemTotal:"):
+				mb = int(line.split()[1]) // 1024
+				if mb < 256:
+					checks.append((ERR, "RAM", f"{mb} MB available - 512 MB minimum required"))
+				elif mb < 512:
+					checks.append((WARN, "RAM", f"{mb} MB available - 512 MB recommended"))
+				else:
+					checks.append((OK, "RAM", f"{mb} MB available"))
+				break
 
-	try:
+	with contextlib.suppress(Exception):
 		free_gb = shutil.disk_usage("/home").free // (1024**3)
 		if free_gb < 2:
 			checks.append((ERR, "Disk", f"{free_gb} GB free at /home - 5 GB recommended"))
@@ -68,13 +71,11 @@ def _preflight():
 			checks.append((WARN, "Disk", f"{free_gb} GB free at /home"))
 		else:
 			checks.append((OK, "Disk", f"{free_gb} GB free at /home"))
-	except Exception:
-		pass
 
 	if not checks:
 		return True
 
-	_ICON = {OK: f"\033[38;2;95;255;135m✓\033[0m", WARN: f"\033[38;2;255;215;0m!\033[0m", ERR: f"\033[38;2;255;85;85m✗\033[0m"}
+	ICON = {OK: "\033[38;2;95;255;135m✓\033[0m", WARN: "\033[38;2;255;215;0m!\033[0m", ERR: "\033[38;2;255;85;85m✗\033[0m"}
 	width = _term_width() - 2
 	label_w = max(len(label) for _, label, _ in checks) + 2
 	any_err = any(s == ERR for s, _, _ in checks)
@@ -85,7 +86,7 @@ def _preflight():
 		print(f"  {gray_desc('─' * (width - 2))}")
 		for status, label, msg in checks:
 			pad = " " * (label_w - len(label))
-			print(f"  {_ICON[status]}  {label}{pad}{gray_desc(msg)}")
+			print(f"  {ICON[status]}  {label}{pad}{gray_desc(msg)}")
 		print()
 
 	if any_err:
@@ -96,10 +97,15 @@ def _preflight():
 
 
 def _run_update():
-	import os, subprocess, sys, tarfile, tempfile, urllib.request
+	import os
+	import subprocess
+	import sys
+	import tarfile
+	import tempfile
+	import urllib.request
 
 	# Docker users update by pulling a new image, not by running setup.
-	if os.path.exists("/.dockerenv") or os.environ.get("container") == "docker":
+	if os.path.exists("/.dockerenv") or os.environ.get("container") == "docker":  # noqa: SIM112 - "container" is the actual lowercase env var systemd/Docker set, not ours to capitalize
 		print("boxctl update is only available on bare metal installs.")
 		print("To update a Docker deployment, pull a new image and restart your containers.")
 		sys.exit(1)
@@ -109,28 +115,27 @@ def _run_update():
 		sys.exit(1)
 
 	# /releases/latest excludes prereleases, so frontend hash builds never appear here.
-	api_url = "https://api.github.com/repos/boomboompower/mailinabox/releases/latest"
+	api_url = "https://api.github.com/repos/naust-mail/naust/releases/latest"
 	print("Fetching latest release info...")
 	try:
 		with urllib.request.urlopen(api_url, timeout=15) as r:
 			import json
 
 			release = json.loads(r.read())
-	except Exception as e:
+	except Exception as e:  # noqa: BLE001 - network/JSON fetch, any failure becomes a user-facing CLI message
 		print(f"Failed to fetch release info: {e}")
 		sys.exit(1)
 
 	version = release.get("tag_name", "unknown")
 	tarball_url = release.get("tarball_url")
 	if not tarball_url:
-		print("No versioned release found. Check https://github.com/boomboompower/mailinabox/releases")
+		print("No versioned release found. Check https://github.com/naust-mail/naust/releases")
 		sys.exit(1)
 
 	current_version = ""
-	version_file = "/usr/local/share/mailinabox/version"
+	version_file = "/usr/local/share/naust/version"
 	if os.path.exists(version_file):
-		with open(version_file) as f:
-			current_version = f.read().strip()
+		current_version = pathlib.Path(version_file).read_text(encoding='utf-8').strip()
 
 	if current_version == version:
 		print(f"Already on the latest version ({version}).")
@@ -140,18 +145,18 @@ def _run_update():
 	else:
 		print(f"Updating from {current_version or 'unknown'} to {version}...")
 
-	with tempfile.TemporaryDirectory(prefix="miab-update-") as tmp:
+	with tempfile.TemporaryDirectory(prefix="naust-update-") as tmp:
 		tarball = os.path.join(tmp, "release.tar.gz")
 		print("Downloading...")
 		try:
 			urllib.request.urlretrieve(tarball_url, tarball)
-		except Exception as e:
+		except Exception as e:  # noqa: BLE001 - network fetch, any failure becomes a user-facing CLI message
 			print(f"Download failed: {e}")
 			sys.exit(1)
 
 		print("Extracting...")
 		with tarfile.open(tarball, "r:gz") as tf:
-			tf.extractall(tmp)
+			tf.extractall(tmp, filter="data")
 
 		# GitHub tarballs extract to a single top-level directory.
 		subdirs = [d for d in os.listdir(tmp) if os.path.isdir(os.path.join(tmp, d)) and d != "__MACOSX"]
@@ -168,24 +173,24 @@ def _run_update():
 def main():
 	# bootstrap, update, and doctor --check don't need an interactive terminal.
 	# Exempt them before the TTY check so they work from scripts and monitoring.
-	if len(sys.argv) > 1 and sys.argv[1] in ('bootstrap', 'update'):
+	if len(sys.argv) > 1 and sys.argv[1] in {'bootstrap', 'update'}:
 		p = argparse.ArgumentParser(add_help=False)
 		p.add_argument('command')
 		p.add_argument('--show-cert', action='store_true')
 		p.add_argument('--install', action='store_true')
-		_quick, _ = p.parse_known_args()
-		if _quick.command == 'bootstrap':
-			if __package__ in (None, ''):
+		quick, _ = p.parse_known_args()
+		if quick.command == 'bootstrap':
+			if __package__ in {None, ''}:
 				from boxctl.bootstrap import run as run_bootstrap
 			else:
 				from .bootstrap import run as run_bootstrap
-			run_bootstrap(show_cert=_quick.show_cert, install=_quick.install)
-		elif _quick.command == 'update':
+			run_bootstrap(show_cert=quick.show_cert, install=quick.install)
+		elif quick.command == 'update':
 			_run_update()
 		return
 
 	if len(sys.argv) > 1 and sys.argv[1] == 'doctor' and '--check' in sys.argv:
-		if __package__ in (None, ''):
+		if __package__ in {None, ''}:
 			from boxctl.doctor import run as run_doctor
 		else:
 			from .doctor import run as run_doctor
@@ -195,20 +200,18 @@ def main():
 	if not sys.stdin.isatty():
 		sys.exit("Interactive terminal required")
 
-	_saved = termios.tcgetattr(sys.stdin.fileno())
+	saved = termios.tcgetattr(sys.stdin.fileno())
 
-	def _on_sigterm(sig, frame):
-		try:
-			termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, _saved)
-		except Exception:
-			pass
+	def _on_sigterm(_sig, _frame):
+		with contextlib.suppress(Exception):
+			termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
 		print("\033[?25h", end="", flush=True)
 		sys.exit(1)
 
 	signal.signal(signal.SIGTERM, _on_sigterm)
 
 	p = argparse.ArgumentParser(
-		description="boxctl - Mail-in-a-Box management CLI. Run with no subcommand for an interactive menu.",
+		description="boxctl - Naust management CLI. Run with no subcommand for an interactive menu.",
 		epilog="Run without a subcommand to choose interactively.",
 	)
 	sub = p.add_subparsers(dest="command", required=False, title="subcommands", description="Pass one of the following, or omit to get the interactive menu.")
@@ -258,7 +261,7 @@ def main():
 			if mode is None:
 				sys.exit(0)
 			elif mode == "docker":
-				if __package__ in (None, ''):
+				if __package__ in {None, ''}:
 					from boxctl.docker import run as run_docker
 				else:
 					from .docker import run as run_docker
@@ -266,11 +269,11 @@ def main():
 			elif mode == "baremetal":
 				clear()
 				print(f"\n  {bold('Bare metal setup')}\n")
-				print(f"  Run the installer on your Ubuntu machine:\n")
-				print(f"    sudo setup/install.sh\n")
+				print("  Run the installer on your Ubuntu machine:\n")
+				print("    sudo setup/install.sh\n")
 				print(f"  {gray_desc('boxctl runs automatically during installation.')}\n")
 			elif mode == "doctor":
-				if __package__ in (None, ''):
+				if __package__ in {None, ''}:
 					from boxctl.doctor import run as run_doctor
 				else:
 					from .doctor import run as run_doctor
@@ -287,21 +290,21 @@ def main():
 			write_output(args.output, results)
 
 		elif args.command == "docker":
-			if __package__ in (None, ''):
+			if __package__ in {None, ''}:
 				from boxctl.docker import run as run_docker
 			else:
 				from .docker import run as run_docker
 			run_docker(args.env)
 
 		elif args.command == "doctor":
-			if __package__ in (None, ''):
+			if __package__ in {None, ''}:
 				from boxctl.doctor import run as run_doctor
 			else:
 				from .doctor import run as run_doctor
 			run_doctor(check=getattr(args, "check", False))
 
 		elif args.command == "bootstrap":
-			if __package__ in (None, ''):
+			if __package__ in {None, ''}:
 				from boxctl.bootstrap import run as run_bootstrap
 			else:
 				from .bootstrap import run as run_bootstrap

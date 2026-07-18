@@ -3,6 +3,8 @@ import os
 from ..registry import check
 from ..reporter import CheckFailed
 from .. import utils
+from itertools import starmap
+import pathlib
 
 
 def _get_dns_zonefiles(env):
@@ -38,8 +40,7 @@ def _check_dnssec(env, report, domain, dns_zonefiles, is_checking_primary=False)
 		return  # DNS has not yet been updated for this domain
 
 	try:
-		with open(ds_file, encoding="utf-8") as f:
-			ds_content = f.read()
+		ds_content = pathlib.Path(ds_file).read_text(encoding="utf-8")
 		if len(ds_content) > 1048576:  # 1MB limit
 			return
 
@@ -122,7 +123,7 @@ def _format_ds_suggestions(expected_ds_records, current_ds):
 			continue
 		lines.append(f"Option {i + 1}: Key Tag {s['keytag']}, Flags KSK/257, Algorithm {s['alg']}/{s['alg_name']}, Digest Type {s['digalg']}/{s['digalg_name']}, Digest {s['digest']}")
 	if current_ds:
-		lines.append("Currently set to: " + "; ".join("Key Tag {}, Algorithm {}, Digest Type {}, Digest {}".format(*rr) for rr in sorted(current_ds)))
+		lines.append("Currently set to: " + "; ".join(starmap("Key Tag {}, Algorithm {}, Digest Type {}, Digest {}".format, sorted(current_ds))))
 	return " ".join(lines)
 
 

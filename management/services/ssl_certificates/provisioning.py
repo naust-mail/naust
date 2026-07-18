@@ -8,6 +8,7 @@ import sys
 import tempfile
 
 from core.utils import sort_domains
+import pathlib
 
 
 def get_certificates_to_provision(env, limit_domains=None, show_valid_certs=True):
@@ -168,8 +169,7 @@ def provision_certificates(env, limit_domains):
 				builder = builder.add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
 				builder = builder.add_extension(x509.SubjectAlternativeName([x509.DNSName(d) for d in domain_list]), critical=False)
 				request = builder.sign(load_pem(load_cert_chain(key_file)[0]), hashes.SHA256(), default_backend())
-				with open(csr_file.name, "wb") as f:
-					f.write(request.public_bytes(Encoding.PEM))
+				pathlib.Path(csr_file.name).write_bytes(request.public_bytes(Encoding.PEM))
 
 				# Provision, writing to a temporary file.
 				webroot = os.path.join(account_path, 'webroot')
@@ -182,7 +182,7 @@ def provision_certificates(env, limit_domains):
 							"certbot",
 							"certonly",
 							# "-v", # just enough to see ACME errors
-							"--non-interactive",  # will fail if user hasn't registered during Mail-in-a-Box setup
+							"--non-interactive",  # will fail if user hasn't registered during Naust setup
 							"-d",
 							",".join(domain_list),  # first will be main domain
 							"--csr",
@@ -223,7 +223,7 @@ def provision_certificates(env, limit_domains):
 def provision_certificates_cmdline():
 	from core.utils import load_environment, acquire_process_lock
 
-	_ssl_lock = acquire_process_lock("/tmp/mailinabox-ssl.lock")  # noqa: F841
+	_ssl_lock = acquire_process_lock("/tmp/naust-ssl.lock")
 	env = load_environment()
 
 	quiet = False

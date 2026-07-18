@@ -6,36 +6,36 @@
 
 set -euo pipefail
 
-MIAB=/opt/mailinabox
-source "$MIAB/deploy/docker/common-entrypoint.sh"
+NAUST=/opt/naust
+source "$NAUST/deploy/docker/common-entrypoint.sh"
 
 install_systemctl_stub
-write_mailinabox_conf
+write_naust_conf
 
 export RUNTIME=docker
 
-cd "$MIAB"
+cd "$NAUST"
 
 export LANGUAGE=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 export LC_TYPE=en_US.UTF-8
 
-source /etc/mailinabox.conf
+source /etc/naust.conf
 mkdir -p "$STORAGE_ROOT"
 
 link_conf_to_storage /etc/nsd nsd
 
 echo "Configuring DNS services..."
-cd "$MIAB/setup"
+cd "$NAUST/setup"
 python3 -m components.runner dns
-cd "$MIAB"
+cd "$NAUST"
 
 # Write a Docker-specific unbound config. On bare metal unbound listens only on
 # 127.0.0.1; here it must answer on all interfaces so other containers can reach
 # it as their recursive resolver over the Docker bridge.
 mkdir -p /etc/unbound/unbound.conf.d
-cat > /etc/unbound/unbound.conf.d/mailinabox.conf << 'EOF'
+cat > /etc/unbound/unbound.conf.d/naust.conf << 'EOF'
 server:
     interface: 0.0.0.0
     port: 53

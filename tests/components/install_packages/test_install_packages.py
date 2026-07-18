@@ -6,9 +6,8 @@ and calls ensure_installed(). It predates --build-mode and may eventually be
 superseded by it, but it must still work correctly while it exists.
 """
 
-import sys
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 def _main(component_names):
@@ -49,9 +48,8 @@ def test_multiple_components_batched_into_one_call():
 def test_unknown_component_exits_nonzero():
 	from components.install_packages import main
 
-	with patch("components.packages.ensure_installed"):
-		with pytest.raises(SystemExit) as exc_info:
-			main(["this_component_does_not_exist"])
+	with patch("components.packages.ensure_installed"), pytest.raises(SystemExit) as exc_info:
+		main(["this_component_does_not_exist"])
 	assert exc_info.value.code != 0
 
 

@@ -4,21 +4,21 @@
 # Runs: postfix, dovecot
 # Spam filtering (rspamd) and Redis run in separate containers.
 #
-# The MIAB setup scripts are sourced with RUNTIME=docker so that apt_install,
+# The NAUST setup scripts are sourced with RUNTIME=docker so that apt_install,
 # ufw_allow etc. no-op, and 'systemctl start/restart' calls are forwarded to
 # supervisorctl via the stub.
 
 set -euo pipefail
 
-MIAB=/opt/mailinabox
-source "$MIAB/deploy/docker/common-entrypoint.sh"
+NAUST=/opt/naust
+source "$NAUST/deploy/docker/common-entrypoint.sh"
 
 install_systemctl_stub
-write_mailinabox_conf
+write_naust_conf
 
 export RUNTIME=docker
 
-cd "$MIAB"
+cd "$NAUST"
 
 # Ensure locale is set - some setup scripts depend on it.
 export LANGUAGE=en_US.UTF-8
@@ -27,7 +27,7 @@ export LANG=en_US.UTF-8
 export LC_TYPE=en_US.UTF-8
 
 # Ensure the storage directories the mail scripts expect exist.
-source /etc/mailinabox.conf
+source /etc/naust.conf
 mkdir -p "$STORAGE_ROOT"
 
 if [ "${SPAM_FILTER:-rspamd}" = "spamassassin" ]; then
@@ -37,9 +37,9 @@ fi
 # Generate TLS certificates and configure mail services via the component runner.
 # ssl must run before postfix/dovecot (they refuse to start without a cert).
 echo "Configuring mail services..."
-cd "$MIAB/setup"
+cd "$NAUST/setup"
 python3 -m components.runner ssl postfix dovecot users
-cd "$MIAB"
+cd "$NAUST"
 
 # Rspamd runs in its own container. Wire Postfix to use it as a milter and
 # set the transport/restrictions that rspamd.sh would normally set on bare metal.

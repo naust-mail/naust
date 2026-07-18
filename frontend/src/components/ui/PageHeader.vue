@@ -9,6 +9,8 @@ defineProps<{ title: string; description?: string }>()
       <p v-if="description" class="text-xs text-muted mt-0.5">{{ description }}</p>
       <slot name="description" />
     </div>
-    <slot name="actions" />
+    <div class="flex items-center gap-2">
+      <slot name="actions" />
+    </div>
   </div>
 </template>

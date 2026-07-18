@@ -1,14 +1,14 @@
-#!/usr/local/lib/mailinabox/env/bin/python3
+#!/usr/local/lib/naust/env/bin/python3
 #
 # The API can be accessed on the command line, e.g. use `curl` like so:
-#    curl --user $(</var/lib/mailinabox/api.key): http://localhost:10222/mail/users
+#    curl --user $(</var/lib/naust/api.key): http://localhost:10222/mail/users
 #
-# During development, you can start the Mail-in-a-Box control panel
+# During development, you can start the Naust control panel
 # by running this script, e.g.:
 #
-# service mailinabox stop # stop the system process
+# service naust stop # stop the system process
 # DEBUG=1 management/core/daemon.py
-# service mailinabox start # when done debugging, start it up again
+# service naust start # when done debugging, start it up again
 #
 # This file just assembles the app and registers each resource's routes
 # (see core/views/). The actual route handlers live in core/views/*.py,
@@ -16,7 +16,9 @@
 # singletons in core/app_context.py.
 
 import contextlib
-import os, os.path, sys
+import os
+import os.path
+import sys
 
 from flask import Flask, abort, request
 
@@ -36,7 +38,7 @@ with contextlib.suppress(OSError):
 # Prefer the installed frontend path so the daemon works even if the source
 # repo is no longer present. Fall back to the repo-relative path for local dev
 # (running daemon.py directly without having run setup).
-_INSTALLED_DIST = "/usr/local/share/mailinabox/frontend/dist"
+_INSTALLED_DIST = "/usr/local/share/naust/frontend/dist"
 if os.path.isdir(_INSTALLED_DIST):
 	static_dir = _INSTALLED_DIST
 else:
@@ -73,7 +75,7 @@ def internal_error(error):
 
 		return jsonify({'status': 'error', 'reason': 'Internal server error.'}), 500
 	try:
-		with open('/var/lib/mailinabox/500.html', encoding='utf-8') as f:
+		with open('/var/lib/naust/500.html', encoding='utf-8') as f:
 			return f.read(), 500, {'Content-Type': 'text/html; charset=utf-8'}
 	except FileNotFoundError:
 		pass
@@ -83,7 +85,7 @@ def internal_error(error):
 		(
 			'<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Server error</title></head>'
 			'<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f8f8f8">'
-			'<div style="text-align:center"><p style="color:#9b9b9b;font-size:0.9rem">Something went wrong. Check <code>sudo journalctl -u mailinabox</code> for details.</p></div>'
+			'<div style="text-align:center"><p style="color:#9b9b9b;font-size:0.9rem">Something went wrong. Check <code>sudo journalctl -u naust</code> for details.</p></div>'
 			'</body></html>'
 		),
 		500,

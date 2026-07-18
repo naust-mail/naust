@@ -14,8 +14,9 @@ import subprocess
 
 from doit.tools import config_changed
 
-from ... import artifacts
+from ... import artifacts, SETUP_DIR
 from ...component import Component
+import pathlib
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -38,13 +39,13 @@ COMPONENT = Component(
 	],
 	services=[],  # runs under PHP-FPM, no own service
 	docker_services=[],
-	enabled=lambda env: env.get("WEBMAIL_CLIENT", "oxi") == "cypht",
+	enabled=lambda env: env.get("WEBMAIL_CLIENT", "rav") == "cypht",
 )
 
 # Pinned to a commit rather than a release tag so merged upstream fixes land
 # without waiting for a release. Update CYPHT_COMMIT + CYPHT_SHA256 together.
-CYPHT_COMMIT = "17115f4cb27ef990fb517cce7fd6798f6a4f805d"
-CYPHT_SHA256 = "fc69f09da8bf3c46363648b0144d8f0bfa5b3ded74432a78e979ec4907c97c89"
+CYPHT_COMMIT = "0e8c64c01acb862e0271c14491166334245de279"
+CYPHT_SHA256 = "9f4704482915e8467ef872bc953214477d89dd6950da7196980867fbf9caa7b0"
 CYPHT_URL = f"https://github.com/cypht-org/cypht/archive/{CYPHT_COMMIT}.tar.gz"
 
 _CYPHT_SRC = "/usr/local/src/cypht"
@@ -53,21 +54,29 @@ _CYPHT_STAMP = "/usr/local/share/cypht.version"
 
 _BASE_MODULES = "core,contacts,local_contacts,feeds,imap,smtp,account,idle_timer,desktop_notifications,themes,nux,profiles,imap_folders,sievefilters,tags,history,scheduled_sends"
 
+# PHP handler classes injected into the upstream sources by the patch
+# functions below, plus the .env template. Whole file bodies live under
+# setup/conf/, not inline.
+_CARDDAV_HANDLER_SRC = os.path.join(SETUP_DIR, "conf", "cypht", "carddav-autofill.php")
+_LOGIN_LOGGER_SRC = os.path.join(SETUP_DIR, "conf", "cypht", "failed-login-logger.php")
+_ENV_TPL = os.path.join(SETUP_DIR, "conf", "cypht", "env")
+
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	enable_radicale = env.get("ENABLE_RADICALE", "true").lower() != "false"
 
 	return [
 		{
 			"name": "fetch",
-			# Stamp includes fn_stamp of _fetch so patch changes force redeploy
-			# even when the commit pin hasn't changed.
+			# Stamp includes fn_stamp of _fetch plus the injected handler
+			# sources so patch changes force redeploy even when the commit
+			# pin hasn't changed (fn_stamp cannot see template files).
 			"targets": [_CYPHT_STAMP],
-			"uptodate": [config_changed(f"{CYPHT_COMMIT}:{artifacts.fn_stamp(_fetch)}")],
+			"uptodate": [config_changed(f"{CYPHT_COMMIT}:{artifacts.hash_files(_CARDDAV_HANDLER_SRC, _LOGIN_LOGGER_SRC)}:{artifacts.fn_stamp(_fetch)}")],
 			"actions": [(_fetch,)],
 		},
 		{
@@ -89,7 +98,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 			"name": "config",
 			"targets": [f"{_CYPHT_TARGET}/.env"],
 			# Re-runs when env vars or module list changes - config_gen.php re-reads .env.
-			"uptodate": [config_changed(f"{storage_root}:{enable_radicale}:{artifacts.fn_stamp(_config)}")],
+			"uptodate": [config_changed(f"{storage_root}:{enable_radicale}:{artifacts.hash_files(_ENV_TPL)}:{artifacts.fn_stamp(_config)}")],
 			"task_dep": ["cypht:fetch", "cypht:dirs"],
 			"actions": [(_config, [storage_root, enable_radicale])],
 		},
@@ -114,9 +123,12 @@ def _fetch() -> None:
 	"""
 	import re
 	import shutil
+	import tempfile
 
-	tmp = "/tmp/cypht.tar.gz"
+	tmp_fd, tmp = tempfile.mkstemp(suffix=".tar.gz")
+	os.close(tmp_fd)
 	try:
+		print("Downloading Cypht...", flush=True)
 		subprocess.run(["wget", "-q", "-O", tmp, CYPHT_URL], check=True)
 		result = subprocess.run(
 			["sha256sum", "--check", "--strict"],
@@ -126,7 +138,8 @@ def _fetch() -> None:
 			check=False,
 		)
 		if result.returncode != 0:
-			raise RuntimeError(f"Cypht SHA256 mismatch: {result.stderr.strip()}")
+			msg = f"Cypht SHA256 mismatch: {result.stderr.strip()}"
+			raise RuntimeError(msg)
 
 		shutil.rmtree(_CYPHT_SRC, ignore_errors=True)
 		os.makedirs(_CYPHT_SRC, exist_ok=True)
@@ -138,11 +151,11 @@ def _fetch() -> None:
 	# Install vendor dependencies.
 	env_copy = os.environ.copy()
 	env_copy["COMPOSER_ALLOW_SUPERUSER"] = "1"
+	print("Installing Cypht dependencies via composer...", flush=True)
 	subprocess.run(
 		["composer", "install", "--no-dev", "--working-dir", _CYPHT_SRC],
 		check=True,
 		env=env_copy,
-		capture_output=True,
 	)
 
 	os.makedirs(_CYPHT_TARGET, exist_ok=True)
@@ -192,70 +205,39 @@ def _fetch() -> None:
 
 	subprocess.run(["chown", "-R", "root:root", _CYPHT_TARGET], check=True)
 
-	with open(_CYPHT_STAMP, "w") as fh:
-		fh.write(CYPHT_COMMIT)
+	pathlib.Path(_CYPHT_STAMP).write_text(CYPHT_COMMIT, encoding="utf-8")
 
 
 def _patch_file(path: str, old: str, new: str) -> None:
 	"""Replace old with new in path (once, idempotent)."""
-	with open(path, encoding="utf-8") as fh:
-		content = fh.read()
+	content = pathlib.Path(path).read_text(encoding="utf-8")
 	if new in content:
 		return
 	if old not in content:
 		return
-	with open(path, "w", encoding="utf-8") as fh:
-		fh.write(content.replace(old, new, 1))
+	pathlib.Path(path).write_text(content.replace(old, new, 1), encoding="utf-8")
 
 
 def _patch_carddav_autofill(modules_php: str, setup_php: str) -> None:
 	"""Inject handler that auto-populates CardDAV credentials from login credentials."""
-	handler = r"""
-class Hm_Handler_auto_populate_carddav_credentials extends Hm_Handler_Module {
-    public function process() {
-        list($success, $form) = $this->process_form(array("username", "password"));
-        if (!$success || !$this->session->is_active()) {
-            return;
-        }
-        $existing = $this->user_config->get("carddav_contacts_auth_setting", array());
-        $servers  = config("carddav");
-        $changed  = false;
-        foreach ($servers as $name => $details) {
-            if (!isset($existing[$name]["user"]) || empty($existing[$name]["user"])) {
-                $existing[$name] = array("user" => rtrim($form["username"]), "pass" => $form["password"]);
-                $changed = true;
-            }
-        }
-        if ($changed) {
-            $this->user_config->set("carddav_contacts_auth_setting", $existing);
-            $this->user_config->save(rtrim($form["username"]), $form["password"]);
-        }
-    }
-}
-"""
+	handler = "\n" + artifacts.render_template(_CARDDAV_HANDLER_SRC)
 	hook = "add_handler('home', 'auto_populate_carddav_credentials', true, 'carddav_contacts', 'load_user_data', 'after');"
-	with open(modules_php, encoding="utf-8") as fh:
-		c = fh.read()
+	c = pathlib.Path(modules_php).read_text(encoding="utf-8")
 	if "auto_populate_carddav_credentials" not in c:
-		with open(modules_php, "w", encoding="utf-8") as fh:
-			fh.write(c.rstrip() + "\n" + handler + "\n")
+		pathlib.Path(modules_php).write_text(c.rstrip() + "\n" + handler + "\n", encoding="utf-8")
 
-	with open(setup_php, encoding="utf-8") as fh:
-		c = fh.read()
+	c = pathlib.Path(setup_php).read_text(encoding="utf-8")
 	if "auto_populate_carddav_credentials" not in c:
-		with open(setup_php, "w", encoding="utf-8") as fh:
-			fh.write(c.replace("handler_source(", hook + "\n" + "handler_source(", 1))
+		pathlib.Path(setup_php).write_text(c.replace("handler_source(", hook + "\n" + "handler_source(", 1), encoding="utf-8")
 
 
 def _patch_single_server_carddav(modules_php: str) -> None:
 	"""Hide CardDAV credentials form when SINGLE_SERVER_MODE is active."""
 	needle = "protected function output() {\n        $settings = $this->get('carddav_settings'"
 	guard = "protected function output() {\n        if (filter_var(env('SINGLE_SERVER_MODE', 'false'), FILTER_VALIDATE_BOOLEAN)) { return ''; }\n        $settings = $this->get('carddav_settings'"
-	with open(modules_php, encoding="utf-8") as fh:
-		c = fh.read()
+	c = pathlib.Path(modules_php).read_text(encoding="utf-8")
 	if needle in c and guard not in c:
-		with open(modules_php, "w", encoding="utf-8") as fh:
-			fh.write(c.replace(needle, guard, 1))
+		pathlib.Path(modules_php).write_text(c.replace(needle, guard, 1), encoding="utf-8")
 
 
 def _patch_single_server_wizard(target: str, re) -> None:
@@ -299,8 +281,7 @@ def _patch_single_server_wizard(target: str, re) -> None:
 		),
 	]
 	for fpath, classes in patches:
-		with open(fpath, encoding="utf-8") as fh:
-			c = fh.read()
+		c = pathlib.Path(fpath).read_text(encoding="utf-8")
 		for cls in classes:
 			if guard_php not in c:
 				pat = (
@@ -314,19 +295,16 @@ def _patch_single_server_wizard(target: str, re) -> None:
 					flags=re.DOTALL,
 					count=1,
 				)
-		with open(fpath, "w", encoding="utf-8") as fh:
-			fh.write(c)
+		pathlib.Path(fpath).write_text(c, encoding="utf-8")
 
 
 def _patch_single_server_ews(output_modules_php: str) -> None:
 	"""Hide EWS server config in single-server mode (upstream omits the check)."""
 	needle = "class Hm_Output_server_config_ews extends Hm_Output_Module {\n    protected function output() {\n        $hasEWSActivated"
 	guard = "class Hm_Output_server_config_ews extends Hm_Output_Module {\n    protected function output() {\n        if ($this->get('single_server_mode')) { return ''; }\n        $hasEWSActivated"
-	with open(output_modules_php, encoding="utf-8") as fh:
-		c = fh.read()
+	c = pathlib.Path(output_modules_php).read_text(encoding="utf-8")
 	if needle in c and guard not in c:
-		with open(output_modules_php, "w", encoding="utf-8") as fh:
-			fh.write(c.replace(needle, guard, 1))
+		pathlib.Path(output_modules_php).write_text(c.replace(needle, guard, 1), encoding="utf-8")
 
 
 def _patch_env_function(environment_php: str, re) -> None:
@@ -335,8 +313,7 @@ def _patch_env_function(environment_php: str, re) -> None:
 	Dotenv 6.x deprecated putenv() - values land in $_ENV only. Cypht's env()
 	uses getenv() which reads the process env and sees nothing without this fix.
 	"""
-	with open(environment_php, encoding="utf-8") as fh:
-		c = fh.read()
+	c = pathlib.Path(environment_php).read_text(encoding="utf-8")
 	if "$_ENV" in c:
 		return
 	fixed = "    function env($key, $default = null) {\n        $v = getenv($key);\n        if ($v !== false) return $v;\n        return isset($_ENV[$key]) ? $_ENV[$key] : $default;\n    }"
@@ -345,8 +322,7 @@ def _patch_env_function(environment_php: str, re) -> None:
 		fixed.lstrip(),
 		c,
 	)
-	with open(environment_php, "w", encoding="utf-8") as fh:
-		fh.write(c)
+	pathlib.Path(environment_php).write_text(c, encoding="utf-8")
 
 
 def _patch_failed_login_logger(handler_modules_php: str, setup_php: str) -> None:
@@ -355,34 +331,17 @@ def _patch_failed_login_logger(handler_modules_php: str, setup_php: str) -> None
 	Without this, Cypht's IMAP auth makes Dovecot see 127.0.0.1 as the source,
 	which is whitelisted and never banned.
 	"""
-	handler = r"""
-class Hm_Handler_log_failed_login extends Hm_Handler_Module {
-    public function process() {
-        list($success, $form) = $this->process_form(array('username', 'password'));
-        if (!$success) { return; }
-        if ($this->session->is_active()) { return; }
-        $ip = isset($this->request->server['REMOTE_ADDR']) ? $this->request->server['REMOTE_ADDR'] : 'unknown';
-        $raw = isset($form['username']) ? rtrim($form['username']) : 'unknown';
-        $user = substr(preg_replace('/[^\x20-\x7E]/', '', $raw), 0, 254);
-        $line = '[' . date('Y-m-d H:i:s') . '] Failed login for ' . $user . ' from ' . $ip . PHP_EOL;
-        @file_put_contents('/var/log/cypht-auth.log', $line, FILE_APPEND | LOCK_EX);
-    }
-}
-"""
+	handler = "\n" + artifacts.render_template(_LOGIN_LOGGER_SRC)
 	hook = "add_handler('home', 'log_failed_login', false, 'core', 'login', 'after');"
 	anchor = "add_handler('home', 'check_missing_passwords'"
 
-	with open(handler_modules_php, encoding="utf-8") as fh:
-		c = fh.read()
+	c = pathlib.Path(handler_modules_php).read_text(encoding="utf-8")
 	if "log_failed_login" not in c:
-		with open(handler_modules_php, "w", encoding="utf-8") as fh:
-			fh.write(c.rstrip() + "\n" + handler + "\n")
+		pathlib.Path(handler_modules_php).write_text(c.rstrip() + "\n" + handler + "\n", encoding="utf-8")
 
-	with open(setup_php, encoding="utf-8") as fh:
-		c = fh.read()
+	c = pathlib.Path(setup_php).read_text(encoding="utf-8")
 	if "log_failed_login" not in c:
-		with open(setup_php, "w", encoding="utf-8") as fh:
-			fh.write(c.replace(anchor, hook + "\n" + anchor, 1))
+		pathlib.Path(setup_php).write_text(c.replace(anchor, hook + "\n" + anchor, 1), encoding="utf-8")
 
 
 def _dirs(storage_root: str) -> None:
@@ -402,7 +361,7 @@ def _auth_log() -> None:
 	"""Create /var/log/cypht-auth.log with www-data:adm ownership for fail2ban."""
 	log = "/var/log/cypht-auth.log"
 	if not os.path.exists(log):
-		open(log, "a").close()
+		open(log, "a", encoding="utf-8").close()
 	subprocess.run(["chown", "www-data:adm", log], check=True)
 	subprocess.run(["chmod", "640", log], check=True)
 
@@ -437,39 +396,13 @@ def _config(storage_root: str, enable_radicale: bool) -> None:
 
 	artifacts.write_file(
 		f"{_CYPHT_TARGET}/.env",
-		"APP_NAME=Cypht\n"
-		"\n"
-		"SESSION_TYPE=PHP\n"
-		"AUTH_TYPE=IMAP\n"
-		"\n"
-		"IMAP_AUTH_NAME=MIAB\n"
-		"IMAP_AUTH_SERVER=127.0.0.1\n"
-		"IMAP_AUTH_PORT=143\n"
-		"IMAP_AUTH_TLS=false\n"
-		"\n"
-		"DEFAULT_SMTP_SERVER=127.0.0.1\n"
-		"DEFAULT_SMTP_PORT=587\n"
-		"DEFAULT_SMTP_TLS=STARTTLS\n"
-		"\n"
-		"USER_CONFIG_TYPE=file\n"
-		f"USER_SETTINGS_DIR={data_dir}/users\n"
-		f"ATTACHMENT_DIR={data_dir}/attachments\n"
-		"\n"
-		"SINGLE_SERVER_MODE=true\n"
-		"DYNAMIC_HOST=false\n"
-		"DYNAMIC_USER=false\n"
-		"\n"
-		"DEFAULT_EMAIL_DOMAIN=\n"
-		"ALLOW_EXTERNAL_IMAGE_SOURCES=false\n"
-		"ALLOW_LONG_SESSION=false\n"
-		"\n"
-		"ENABLE_DEBUG=false\n"
-		"LOG_LEVEL=WARNING\n"
-		"LOG_FILE=\n"
-		"\n"
-		"CARD_DAV_SERVER=http://127.0.0.1:5232\n"
-		"\n"
-		f"CYPHT_MODULES={modules}\n",
+		artifacts.render_template(
+			_ENV_TPL,
+			{
+				"DATA_DIR": data_dir,
+				"MODULES": modules,
+			},
+		),
 		mode=0o640,
 	)
 	subprocess.run(["chown", "root:www-data", f"{_CYPHT_TARGET}/.env"], check=True)
@@ -481,7 +414,8 @@ def _config(storage_root: str, enable_radicale: bool) -> None:
 		text=True,
 	)
 	if result.returncode != 0:
-		raise RuntimeError(f"Cypht config_gen.php failed:\n{result.stdout}{result.stderr}")
+		msg = f"Cypht config_gen.php failed:\n{result.stdout}{result.stderr}"
+		raise RuntimeError(msg)
 
 	subprocess.run(["chown", "-R", "root:root", _CYPHT_TARGET], check=True)
 	subprocess.run(

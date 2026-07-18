@@ -39,7 +39,19 @@ var services = map[string]serviceDef{
 	"spampd":      {},
 	"nginx":       {},
 	"filebrowser": {},
-	"oxi-email":   {},
+	"rav":         {},
+}
+
+// KnownService reports whether name is in the helper's closed service
+// vocabulary. Exported for one-way drift tests only: managerd callers
+// that hardcode service names assert them against this, so a rename
+// here (or a new caller naming a service the helper refuses) fails in
+// CI instead of at runtime on a box. The vocabulary itself must never
+// be derived from caller-side data - the trust boundary points the
+// other way.
+func KnownService(name string) bool {
+	_, ok := services[name]
+	return ok
 }
 
 // postfixKeys are the only main.cf parameters postfix.set may touch -
@@ -64,13 +76,8 @@ var configTargets = map[string]configTarget{
 	"nginx_local": {path: "/etc/nginx/conf.d/local.conf", mode: 0o644},
 }
 
-// mapTarget is one named Postfix lookup table postfix.map may rebuild.
-// The helper writes the plaintext, runs postmap, then deletes the
-// plaintext so secrets exist on disk only during the rebuild.
-type mapTarget struct {
-	path string
-}
-
-var mapTargets = map[string]mapTarget{
-	"sasl_passwd": {path: "/etc/postfix/sasl_passwd"},
-}
+// There is deliberately no postfix.map intent: the only Postfix lookup
+// table the daemon manages (relay sasl_passwd) lives on STORAGE_ROOT,
+// which the manager owns - it writes the file and runs postmap itself,
+// unprivileged. Per the ownership-vs-intent rule, only root-parsed
+// config (main.cf via postfix.set) needs the helper.

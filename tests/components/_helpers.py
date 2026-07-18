@@ -8,7 +8,7 @@ return appropriate mocks instead of the same MagicMock.
 
 from unittest.mock import patch, MagicMock
 
-from components.runner import _discover
+from components.runner import _discover  # noqa: PLC2701
 
 _DOVECOT_FAKE = MagicMock(stdout="2.3.21 (abc)", returncode=0)
 _FREE_FAKE = MagicMock(

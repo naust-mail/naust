@@ -19,7 +19,7 @@ else:
 	from .serialize import results_to_list
 	from . import utils
 
-_STATUS_CACHE_FILE = "/var/cache/mailinabox/status_checks.json"
+_STATUS_CACHE_FILE = "/var/cache/naust/status_checks.json"
 
 
 def render_console(results):

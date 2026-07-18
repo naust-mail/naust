@@ -8,8 +8,6 @@ The server does:
 We replicate that logic in parse_request() and test it in isolation.
 """
 
-import pytest
-
 
 def parse_request(raw_bytes: bytes) -> tuple[str | None, str | None, str | None]:
 	"""Replicate the server's parsing logic for testing.

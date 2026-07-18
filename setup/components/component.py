@@ -4,7 +4,7 @@ make_tasks(env, runtime) function. The runner imports all defs and uses these.
 """
 
 from dataclasses import dataclass, field
-from typing import Callable
+from collections.abc import Callable
 
 BAREMETAL = "baremetal"
 DOCKER = "docker"
@@ -37,3 +37,9 @@ class Component:
 	# obligations or operator-facing information that must not get lost in
 	# the install output stream.
 	notices: list[str] = field(default_factory=list)
+	# Unix groups this component creates (via its own tasks, not a package)
+	# that the naust user needs read access to for backups. Collated across
+	# all enabled components and granted once after every component's tasks
+	# have finished, so ordering against the group's own creation is never
+	# an issue. Skipped individually if the group doesn't exist.
+	naust_backup_groups: list[str] = field(default_factory=list)

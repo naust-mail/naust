@@ -1,22 +1,24 @@
 import os.path
+import pathlib
 
 # DO NOT import non-standard modules. This module is imported by
 # migrate.py which runs on fresh machines before anything is installed
 # besides Python.
 
-# THE ENVIRONMENT FILE AT /etc/mailinabox.conf
+# THE ENVIRONMENT FILE AT /etc/naust.conf
 
 
 def load_environment():
-	# Load settings from /etc/mailinabox.conf.
-	return load_env_vars_from_file("/etc/mailinabox.conf")
+	# Load settings from /etc/naust.conf.
+	return load_env_vars_from_file("/etc/naust.conf")
 
 
 def load_env_vars_from_file(fn):
 	# Load settings from a KEY=VALUE file.
 	# Uses shlex to handle shell-quoted values (KEY='value') written by the
 	# boxctl wizard, as well as plain unquoted values written by save_environment().
-	import collections, shlex
+	import collections
+	import shlex
 
 	env = collections.OrderedDict()
 	with open(fn, encoding="utf-8") as f:
@@ -34,7 +36,7 @@ def load_env_vars_from_file(fn):
 
 
 def save_environment(env):
-	with open("/etc/mailinabox.conf", "w", encoding="utf-8") as f:
+	with open("/etc/naust.conf", "w", encoding="utf-8") as f:
 		f.writelines(f"{k}={v}\n" for k, v in env.items())
 
 
@@ -46,8 +48,7 @@ def write_settings(config, env):
 
 	fn = os.path.join(env['STORAGE_ROOT'], 'settings.yaml')
 	tmp_fn = fn + ".tmp"
-	with open(tmp_fn, "w", encoding="utf-8") as f:
-		f.write(rtyaml.dump(config))
+	pathlib.Path(tmp_fn).write_text(rtyaml.dump(config), encoding="utf-8")
 	os.replace(tmp_fn, fn)
 
 
@@ -165,7 +166,8 @@ def shell(method, cmd_args, env=None, capture_stderr=False, suppress_stderr=Fals
 	except subprocess.CalledProcessError as e:
 		if not trap:
 			if False:
-				import sys, shlex
+				import sys
+				import shlex
 
 				print(shlex.join(cmd_args), file=sys.stderr)
 				raise
@@ -185,7 +187,8 @@ def shell(method, cmd_args, env=None, capture_stderr=False, suppress_stderr=Fals
 
 
 def create_syslog_handler():
-	import logging, logging.handlers
+	import logging
+	import logging.handlers
 
 	# In Docker there is no syslog daemon; /dev/log may not exist or may become
 	# invalid after the socket is created, causing noisy "Logging error" output.
@@ -225,7 +228,8 @@ def du(path):
 def wait_for_service(port, public, env, timeout):
 	# Block until a service on a given port (bound privately or publicly)
 	# is taking connections, with a maximum timeout.
-	import socket, time
+	import socket
+	import time
 
 	start = time.perf_counter()
 	while True:
@@ -277,7 +281,8 @@ def acquire_process_lock(path: str) -> "object":
 	"""Acquire an exclusive advisory lock on path using fcntl.
 	Exits immediately if another process holds the lock.
 	The returned file handle must stay in scope for the lock to be held."""
-	import fcntl, sys
+	import fcntl
+	import sys
 
 	f = open(path, 'w')
 	try:

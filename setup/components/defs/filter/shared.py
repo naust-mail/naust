@@ -1,75 +1,83 @@
 """
-Shared Dovecot imapsieve spam-learning setup.
+Shared Dovecot spam-learning setup, used by both rspamd and spamassassin.
 
-Used by both rspamd and spamassassin (Dovecot 2.4 path). Each filter
-provides its own pipe scripts; this writes the Dovecot config and sieve
-scripts that call them.
+Dovecot 2.4 path: imapsieve + sieve_extprograms (setup_dovecot_imapsieve).
+Dovecot 2.3 path: the third-party dovecot-antispam plugin, which has no
+sieve equivalent (setup_dovecot_antispam_pipe). Each filter provides its
+own pipe scripts; this writes the Dovecot config and sieve scripts that
+call them. Whole config files live as ${VAR} templates in
+setup/conf/filter/<dialect>/; see the dovecot-2x-compat memory for why
+2.3/2.4 need separate syntax.
 """
 
 import os
+import subprocess
 
-from ... import artifacts
+from ... import SETUP_DIR, artifacts
+
+_TPL_DIR_24 = os.path.join(SETUP_DIR, "conf", "filter", "2.4")
+_TPL_DIR_23 = os.path.join(SETUP_DIR, "conf", "filter", "2.3")
 
 
 def setup_dovecot_imapsieve(spam_script: str, ham_script: str) -> None:
-    """Write Dovecot imapsieve config and sieve scripts for spam learning.
+	"""Write Dovecot 2.4 imapsieve config and sieve scripts for spam learning.
 
-    Configures imap_sieve + sieve_extprograms so that moving mail into
-    the Spam folder calls spam_script, and moving mail out calls ham_script.
-    Both script names must be executables in /usr/local/bin.
+	Configures imap_sieve + sieve_extprograms so that moving mail into
+	the Spam folder calls spam_script, and moving mail out calls ham_script.
+	Both script names must be executables in /usr/local/bin.
 
-    The mail_plugins/key=yes BOOLLIST syntax appends to the existing plugin
-    list without replacing it - this is the Dovecot 2.4 way to extend lists.
+	The mail_plugins/key=yes BOOLLIST syntax appends to the existing plugin
+	list without replacing it - this is the Dovecot 2.4 way to extend lists.
 
-    Do NOT pre-compile the sieve scripts with sievec - the imapsieve and
-    vnd.dovecot.pipe extensions are registered by plugins that are not
-    loaded until Dovecot starts; lazy compilation avoids startup-time failures.
-    """
-    artifacts.write_file(
-        "/etc/dovecot/conf.d/99-local-spam-learning.conf",
-        "protocol imap {\n"
-        "  mail_plugins/imap_sieve = yes\n"
-        "}\n"
-        "\n"
-        "# sieve_imapsieve: registers the imapsieve extension and imap.* env vars.\n"
-        "# sieve_extprograms: provides the vnd.dovecot.pipe sieve command.\n"
-        "sieve_plugins/sieve_imapsieve = yes\n"
-        "sieve_plugins/sieve_extprograms = yes\n"
-        "sieve_global_extensions/imapsieve = yes\n"
-        "sieve_global_extensions/vnd.dovecot.pipe = yes\n"
-        "sieve_pipe_bin_dir = /usr/local/bin\n"
-        "\n"
-        "# When mail is moved FROM Spam: learn as ham.\n"
-        "imapsieve_from spam_to_ham {\n"
-        "  imapsieve_from_name = Spam\n"
-        "\n"
-        "  sieve_script learn_ham {\n"
-        "    sieve_script_type = before\n"
-        "    sieve_script_cause = COPY\n"
-        "    sieve_script_driver = file\n"
-        "    sieve_script_path = /etc/dovecot/sieve/learn-ham.sieve\n"
-        "  }\n"
-        "}\n"
-        "\n"
-        "# Runs on all COPY events; the script checks destination is Spam.\n"
-        "sieve_script learn_spam {\n"
-        "  sieve_script_type = before\n"
-        "  sieve_script_cause = COPY\n"
-        "  sieve_script_driver = file\n"
-        "  sieve_script_path = /etc/dovecot/sieve/learn-spam.sieve\n"
-        "}\n",
-    )
+	Do NOT pre-compile the sieve scripts with sievec - the imapsieve and
+	vnd.dovecot.pipe extensions are registered by plugins that are not
+	loaded until Dovecot starts; lazy compilation avoids startup-time failures.
+	"""
+	artifacts.write_file(
+		"/etc/dovecot/conf.d/99-local-spam-learning.conf",
+		artifacts.render_template(os.path.join(_TPL_DIR_24, "99-local-spam-learning.conf")),
+	)
 
-    os.makedirs("/etc/dovecot/sieve", exist_ok=True)
-    artifacts.write_file(
-        "/etc/dovecot/sieve/learn-spam.sieve",
-        'require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];\n'
-        'if environment :matches "imap.mailbox" "Spam" {\n'
-        f'    pipe :copy "{spam_script}";\n'
-        "}\n",
-    )
-    artifacts.write_file(
-        "/etc/dovecot/sieve/learn-ham.sieve",
-        'require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];\n'
-        f'pipe :copy "{ham_script}";\n',
-    )
+	os.makedirs("/etc/dovecot/sieve", exist_ok=True)
+	artifacts.write_file(
+		"/etc/dovecot/sieve/learn-spam.sieve",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR_24, "learn-spam.sieve"),
+			{"SPAM_SCRIPT": spam_script},
+		),
+	)
+	artifacts.write_file(
+		"/etc/dovecot/sieve/learn-ham.sieve",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR_24, "learn-ham.sieve"),
+			{"HAM_SCRIPT": ham_script},
+		),
+	)
+
+
+def setup_dovecot_antispam_pipe(spam_script: str, ham_script: str) -> None:
+	"""Write Dovecot 2.3 antispam-plugin config for spam learning.
+
+	Sieve-based learning (imapsieve) does not exist in 2.3. The third-party
+	dovecot-antispam plugin's pipe backend calls spam_script/ham_script on
+	Spam/Not-Spam moves instead. Each arg is the script name (optionally
+	with ;extra-args, e.g. "sa-learn-pipe.sh;--spam") resolved under
+	/usr/local/bin. Does not touch mail_plugins or mail_access_groups -
+	callers wire those themselves since the group differs per filter.
+	"""
+	artifacts.write_file(
+		"/etc/dovecot/conf.d/99-local-spam-learning.conf",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR_23, "99-local-spam-learning.conf"),
+			{"SPAM_SCRIPT": spam_script, "HAM_SCRIPT": ham_script},
+		),
+	)
+
+
+def enable_antispam_plugin() -> None:
+	"""Add the antispam plugin to Dovecot's IMAP and POP3 mail_plugins (2.3 only)."""
+	for conf in ["/etc/dovecot/conf.d/20-imap.conf", "/etc/dovecot/conf.d/20-pop3.conf"]:
+		subprocess.run(
+			["sed", "-i", r"s/#mail_plugins = .*/mail_plugins = $mail_plugins antispam/", conf],
+			check=True,
+		)

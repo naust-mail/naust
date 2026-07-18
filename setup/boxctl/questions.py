@@ -1,7 +1,10 @@
 """Bare metal wizard steps and validators."""
 
+import contextlib
 import ipaddress
+import pathlib
 from .ui import select_prompt, text_prompt, multiselect_prompt, filter_prompt
+from components import artifacts
 
 # ── Validators ────────────────────────────────────────────────────────────────
 
@@ -10,14 +13,15 @@ def validate_email(addr):
 	if not addr.strip():
 		return "Email address cannot be empty."
 	try:
-		from email_validator import validate_email as _chk, EmailNotValidError
+		from email_validator import validate_email as _chk
 
 		_chk(addr.strip(), check_deliverability=False)
-		return True
 	except ImportError:
 		return True  # validator not available; bare metal boot venv will have it
-	except Exception as exc:
+	except Exception as exc:  # noqa: BLE001 - turns any validator-raised error into a user-facing message
 		return str(exc)
+	else:
+		return True
 
 
 def validate_ipv4(addr):
@@ -25,9 +29,10 @@ def validate_ipv4(addr):
 		return "IPv4 address cannot be empty."
 	try:
 		ipaddress.IPv4Address(addr.strip())
-		return True
 	except ValueError:
 		return "Enter a valid IPv4 address (e.g. 1.2.3.4)."
+	else:
+		return True
 
 
 def validate_ipv6(addr):
@@ -35,9 +40,10 @@ def validate_ipv6(addr):
 		return "IPv6 address cannot be empty."
 	try:
 		ipaddress.IPv6Address(addr.strip())
-		return True
 	except ValueError:
 		return "Enter a valid IPv6 address (e.g. 2001:db8::1)."
+	else:
+		return True
 
 
 def validate_hostname(name):
@@ -82,7 +88,7 @@ def step_hostname(args, answers):
 		options.append((suggested, "Recommended - subdomain of your email domain.", suggested))
 	options.append(("✎  Enter a custom hostname", "Type any valid fully-qualified hostname.", "__custom__"))
 	return select_prompt(
-		"Choose a hostname for your Mail-in-a-Box box.",
+		"Choose a hostname for your Naust box.",
 		"The hostname is your server's address on the internet (e.g. box.example.com).",
 		options,
 		current or suggested or None,
@@ -114,7 +120,7 @@ def step_ipv6(args, answers):
 	options = [("No IPv6", "Most setups work fine with IPv4 only.", "")]
 	if args.guessed_ipv6:
 		options.append((args.guessed_ipv6, "Auto-detected from the internet.", args.guessed_ipv6))
-	if args.default_ipv6 and args.default_ipv6 not in ("", args.guessed_ipv6):
+	if args.default_ipv6 and args.default_ipv6 not in {"", args.guessed_ipv6}:
 		options.append((args.default_ipv6, "Previously configured address.", args.default_ipv6))
 	options.append(("✎  Enter a custom address", "Type an IPv6 address manually.", "__custom__"))
 	return select_prompt(
@@ -127,11 +133,11 @@ def step_ipv6(args, answers):
 	)
 
 
-def step_filebrowser(args, answers):
+def step_filebrowser(_args, answers):
 	current = answers.get("ENABLE_FILEBROWSER")
 	options = [
 		("Yes", "Install a web-based file manager at /files.", "true"),
-		("No", "Skip - can be enabled later in /etc/mailinabox.conf.", "false"),
+		("No", "Skip - can be enabled later in /etc/naust.conf.", "false"),
 	]
 	return select_prompt(
 		"Would you like to install FileBrowser?",
@@ -142,7 +148,7 @@ def step_filebrowser(args, answers):
 	)
 
 
-def step_optionals(args, answers):
+def step_optionals(_args, answers):
 	current = {
 		"ENABLE_RADICALE": answers.get("ENABLE_RADICALE", "true"),
 		"ENABLE_CLAMAV": answers.get("ENABLE_CLAMAV", "false"),
@@ -155,16 +161,16 @@ def step_optionals(args, answers):
 	]
 	return multiselect_prompt(
 		"Which optional features would you like to install?",
-		"Toggle on or off. These can be changed later in /etc/mailinabox.conf.",
+		"Toggle on or off. These can be changed later in /etc/naust.conf.",
 		options,
 		current,
 	)
 
 
-def step_webmail(args, answers):
+def step_webmail(_args, answers):
 	current = answers.get("WEBMAIL_CLIENT")
 	options = [
-		("oxi.email", "Modern webmail built with Rust + Bun. Fast and lightweight.", "oxi"),
+		("rav", "Modern webmail built with Rust + Bun. Fast and lightweight.", "rav"),
 		("SnappyMail", "Lightweight, modern PHP webmail client.", "snappymail"),
 		("Roundcube", "Long-established, widely-deployed PHP webmail client.", "roundcube"),
 		("Cypht", "Modular PHP webmail with multi-account aggregation.", "cypht"),
@@ -174,12 +180,12 @@ def step_webmail(args, answers):
 		"Which webmail client would you like to install?",
 		"Webmail lets users access email from any browser. Choose none to skip.",
 		options,
-		current or "oxi",
+		current or "rav",
 		current is not None,
 	)
 
 
-def step_encryption_at_rest(args, answers):
+def step_encryption_at_rest(_args, answers):
 	current = answers.get("ENCRYPTION_AT_REST")
 	options = [
 		("No", "Mail is stored unencrypted (default).", "false"),
@@ -197,7 +203,7 @@ def step_encryption_at_rest(args, answers):
 	)
 
 
-def step_dns_mode(args, answers):
+def step_dns_mode(_args, answers):
 	current = answers.get("DNS_MODE")
 	options = [
 		("Self-hosted DNS", "This box manages DNS for your domain (default behavior).", "self"),
@@ -212,7 +218,7 @@ def step_dns_mode(args, answers):
 	)
 
 
-def step_spam_filter(args, answers):
+def step_spam_filter(_args, answers):
 	current = answers.get("SPAM_FILTER")
 	options = [
 		("Rspamd", "Modern, fast all-in-one filter. Handles DKIM, DMARC, greylisting and Bayes. Recommended.", "rspamd"),
@@ -227,7 +233,7 @@ def step_spam_filter(args, answers):
 	)
 
 
-def step_backup_tool(args, answers):
+def step_backup_tool(_args, answers):
 	current = answers.get("BACKUP_TOOL")
 	options = [
 		("restic", "Faster, deduplicating backups. Recommended for new installs.", "restic"),
@@ -242,7 +248,7 @@ def step_backup_tool(args, answers):
 	)
 
 
-def step_monitoring(args, answers):
+def step_monitoring(_args, answers):
 	current = answers.get("MONITORING_TOOL")
 	options = [
 		("None", "No monitoring dashboard installed.", "none"),
@@ -252,14 +258,14 @@ def step_monitoring(args, answers):
 	]
 	return select_prompt(
 		"Which monitoring tool would you like to install?",
-		"Provides a web dashboard for system metrics. Can be changed later in /etc/mailinabox.conf.",
+		"Provides a web dashboard for system metrics. Can be changed later in /etc/naust.conf.",
 		options,
 		current or "none",
 		current is not None,
 	)
 
 
-def step_timezone(args, answers):
+def step_timezone(_args, answers):
 	import subprocess
 
 	current = answers.get("TIMEZONE", "")
@@ -267,7 +273,7 @@ def step_timezone(args, answers):
 	# Detect current system timezone as default
 	default = "UTC"
 	if not current:
-		try:
+		with contextlib.suppress(Exception):
 			r = subprocess.run(
 				["timedatectl", "show", "--property=Timezone", "--value"],
 				capture_output=True,
@@ -276,16 +282,11 @@ def step_timezone(args, answers):
 			tz = r.stdout.strip()
 			if tz:
 				default = tz
-		except Exception:
-			pass
 		if default == "UTC":
-			try:
-				with open("/etc/timezone") as fh:
-					tz = fh.read().strip()
-					if tz:
-						default = tz
-			except Exception:
-				pass
+			with contextlib.suppress(Exception):
+				tz = pathlib.Path("/etc/timezone").read_text(encoding="utf-8").strip()
+				if tz:
+					default = tz
 
 	try:
 		r = subprocess.run(
@@ -294,7 +295,7 @@ def step_timezone(args, answers):
 			text=True,
 		)
 		timezones = [z for z in r.stdout.splitlines() if z.strip()]
-	except Exception:
+	except Exception:  # noqa: BLE001 - best-effort; any failure just falls back to a single UTC option
 		timezones = ["UTC"]
 
 	return filter_prompt(
@@ -312,7 +313,7 @@ def step_timezone(args, answers):
 # On re-installs, existing conf values take precedence over these defaults.
 PROFILES: dict[str, dict[str, str]] = {
 	"recommended": {
-		"WEBMAIL_CLIENT": "oxi",
+		"WEBMAIL_CLIENT": "rav",
 		"SPAM_FILTER": "rspamd",
 		"DNS_MODE": "external",
 		"BACKUP_TOOL": "restic",
@@ -341,7 +342,7 @@ PROFILES: dict[str, dict[str, str]] = {
 # ── Step registry ─────────────────────────────────────────────────────────────
 
 # Each entry: (argparse_flag, conf_key, nav_label, step_fn)
-STEPS = [
+_ALL_STEPS = [
 	("ask_email", "__EMAIL_ADDR", "Email", step_email),
 	("ask_hostname", "PRIMARY_HOSTNAME", "Hostname", step_hostname),
 	("ask_ipv4", "PUBLIC_IP", "IPv4", step_ipv4),
@@ -357,12 +358,17 @@ STEPS = [
 	("ask_optionals", "__optionals__", "Optionals", step_optionals),
 ]
 
+# Encryption at Rest needs Ubuntu 26.04+ (Dovecot 2.4's dovecot.http binding).
+# Dropped from the registry entirely on older versions so it never appears in
+# the wizard, nav bar, or confirm screen - not just disabled/greyed out.
+STEPS = _ALL_STEPS if artifacts.ubuntu_supports_encryption() else [s for s in _ALL_STEPS if s[1] != "ENCRYPTION_AT_REST"]
+
 VALUE_DISPLAY = {
 	"ENABLE_FILEBROWSER": {"true": "Yes", "false": "No"},
 	"WEBMAIL_PGP": {"true": "Yes", "false": "No"},
 	"ENCRYPTION_AT_REST": {"true": "Yes", "false": "No"},
 	"SPAM_FILTER": {"rspamd": "Rspamd", "spamassassin": "SpamAssassin"},
-	"WEBMAIL_CLIENT": {"oxi": "oxi.email", "roundcube": "Roundcube", "snappymail": "SnappyMail", "cypht": "Cypht", "none": "None (external clients)"},
+	"WEBMAIL_CLIENT": {"rav": "rav", "roundcube": "Roundcube", "snappymail": "SnappyMail", "cypht": "Cypht", "none": "None (external clients)"},
 	"DNS_MODE": {"self": "Self-hosted", "external": "External"},
 	"BACKUP_TOOL": {"restic": "restic", "duplicity": "duplicity"},
 	"MONITORING_TOOL": {"none": "None", "beszel": "Beszel", "netdata": "Netdata", "munin": "Munin"},

@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 
 # Allow running this file directly as well as via gunicorn - both need
 # management/ on sys.path.

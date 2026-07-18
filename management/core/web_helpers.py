@@ -41,7 +41,7 @@ def sanitize_error_message(error_msg):
 	error_msg = re.sub(r'/\S+\.py', '[file]', error_msg)
 
 	# Shorten well-known internal path prefixes.
-	error_msg = re.sub(r'/var/lib/mailinabox/([^\s]*)', r'[storage]/\1', error_msg)
+	error_msg = re.sub(r'/var/lib/naust/([^\s]*)', r'[storage]/\1', error_msg)
 	error_msg = re.sub(r'/home/[^/\s]+/([^\s]*)', r'[home]/\1', error_msg)
 
 	# Redact line numbers.
@@ -137,4 +137,4 @@ def log_failed_login(req):
 
 	# We need to add a timestamp to the log message, otherwise /dev/log will eat the "duplicate"
 	# message.
-	current_app.logger.warning("Mail-in-a-Box Management Daemon: Failed login attempt from ip %s - timestamp %s", ip, time.time())
+	current_app.logger.warning("Naust Management Daemon: Failed login attempt from ip %s - timestamp %s", ip, time.time())

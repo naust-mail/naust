@@ -3,7 +3,7 @@ ClamAV antivirus (optional).
 
 On bare metal: installs clamav-milter so Postfix scans mail directly as a milter.
 Rspamd also connects to clamd via the unix socket for in-process scanning.
-In Docker: the miab-clamav sidecar provides clamav-milter over TCP; only
+In Docker: the naust-clamav sidecar provides clamav-milter over TCP; only
 the base ClamAV packages are needed here.
 
 Steps:
@@ -58,7 +58,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 			"name": "freshclam",
 			# Only download if the signature database is completely absent.
 			# On re-runs the running clamav-freshclam service keeps them current.
-			"uptodate": [lambda task, values: os.path.exists("/var/lib/clamav/main.cvd") or os.path.exists("/var/lib/clamav/main.cld")],
+			"uptodate": [lambda _task, _values: os.path.exists("/var/lib/clamav/main.cvd") or os.path.exists("/var/lib/clamav/main.cld")],
 			"task_dep": ["clamav:packages"],
 			"actions": [(_freshclam,)],
 		},
@@ -129,6 +129,7 @@ def _freshclam() -> None:
 		check=False,
 		capture_output=True,
 	)
+	print("Downloading the ClamAV signature database...", flush=True)
 	result = subprocess.run(["freshclam"], check=False, capture_output=True)
 	if result.returncode != 0:
 		print("WARNING: freshclam could not update signatures - check network connectivity.")
@@ -139,7 +140,7 @@ def _rspamd_wiring() -> None:
 	os.makedirs("/etc/rspamd/local.d", exist_ok=True)
 	artifacts.write_file(
 		"/etc/rspamd/local.d/antivirus.conf",
-		"clamav {\n    action = \"reject\";\n    symbol = \"CLAM_VIRUS\";\n    type = \"clamav\";\n    log_clean = false;\n    servers = \"/run/clamav/clamd.ctl\";\n    scan_mime_parts = true;\n    scan_text_mime = false;\n    scan_image_mime = false;\n    max_size = 20971520; # 20MB\n}\n",
+		'clamav {\n    action = "reject";\n    symbol = "CLAM_VIRUS";\n    type = "clamav";\n    log_clean = false;\n    servers = "/run/clamav/clamd.ctl";\n    scan_mime_parts = true;\n    scan_text_mime = false;\n    scan_image_mime = false;\n    max_size = 20971520; # 20MB\n}\n',
 	)
 
 
@@ -152,7 +153,7 @@ def _milter_config() -> None:
 	"""
 	artifacts.write_file(
 		"/etc/clamav/clamav-milter.conf",
-		"MilterSocket unix:/run/clamav/clamav-milter.sock\nMilterSocketMode 660\nPidFile /run/clamav/clamav-milter.pid\nClamdSocket unix:/run/clamav/clamd.ctl\nOnInfected Reject\nRejectMsg \"Message rejected: virus detected\"\nAddHeader Replace\nLogSyslog true\nLogFacility LOG_MAIL\n",
+		'MilterSocket unix:/run/clamav/clamav-milter.sock\nMilterSocketMode 660\nPidFile /run/clamav/clamav-milter.pid\nClamdSocket unix:/run/clamav/clamd.ctl\nOnInfected Reject\nRejectMsg "Message rejected: virus detected"\nAddHeader Replace\nLogSyslog true\nLogFacility LOG_MAIL\n',
 	)
 
 	# Append the milter to smtpd_milters in main.cf (idempotent).

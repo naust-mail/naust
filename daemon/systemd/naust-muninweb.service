@@ -1,0 +1,37 @@
+# HTTP face for munin: serves the cron-rendered static site and the
+# graph CGI on loopback so nginx can front munin like every other
+# monitoring backend (auth_request gates it; this process does no
+# authentication of its own and must never be exposed directly).
+#
+# Installed by the munin setup component; the binary is installed to
+# /usr/local/lib/naust/ (never run from the repo checkout).
+
+[Unit]
+Description=Naust munin web frontend
+After=network.target
+
+[Service]
+Type=simple
+User=munin
+Group=munin
+ExecStart=/usr/local/lib/naust/muninweb
+Restart=on-failure
+RestartSec=5
+
+# Hardening. Writes are limited to munin's CGI graph cache and logs;
+# MemoryDenyWriteExecute is deliberately NOT set because the perl CGI
+# child may need it.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/munin/cgi-tmp /var/log/munin
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

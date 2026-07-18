@@ -2,7 +2,9 @@ import datetime
 import os
 import re
 
-import dateutil.parser, dateutil.relativedelta, dateutil.tz
+import dateutil.parser
+import dateutil.relativedelta
+import dateutil.tz
 import psutil
 
 from ..registry import check
@@ -79,7 +81,7 @@ def check_free_disk_space(env, report):
 
 		if bytes_free <= 0.15 * bytes_total:
 			raise CheckFailed(disk_msg)
-		elif bytes_free <= 0.3 * bytes_total:
+		if bytes_free <= 0.3 * bytes_total:
 			report.warn(disk_msg)
 
 		backup_cache_path = os.path.join(env['STORAGE_ROOT'], 'backup/cache')
@@ -98,7 +100,7 @@ def check_free_memory(env, report):
 		memory_msg = f"System memory is {round(percent_free)!s}% free."
 		if percent_free < 10:
 			raise CheckFailed(memory_msg)
-		elif percent_free < 20:
+		if percent_free < 20:
 			report.warn(memory_msg)
 
 
@@ -172,38 +174,39 @@ def check_disk_health(env, report):
 
 
 def _webmail_enabled(env):
-	return env.get("WEBMAIL_CLIENT", "oxi") != "none"
+	return env.get("WEBMAIL_CLIENT", "rav") != "none"
 
 
 @check("webmail", category="system", enabled=_webmail_enabled)
 def check_webmail(env, report):
 	import glob
 	import json
-	import urllib.request, urllib.error
+	import urllib.request
+	import urllib.error
 
-	webmail = env.get("WEBMAIL_CLIENT", "oxi")
+	webmail = env.get("WEBMAIL_CLIENT", "rav")
 
-	if webmail == "oxi":
-		with report.step("oxi.email webmail is running and healthy"):
+	if webmail == "rav":
+		with report.step("rav is running and healthy"):
 			webmail_host = env.get('WEBMAIL_HOST', '127.0.0.1')
 			try:
 				with urllib.request.urlopen(f"http://{webmail_host}:3001/api/health", timeout=5) as resp:
 					data = json.loads(resp.read())
 					if resp.status != 200 or data.get("status") != "ok":
-						raise CheckFailed(f"oxi.email webmail returned an unexpected health response (HTTP {resp.status}).")
+						raise CheckFailed(f"rav returned an unexpected health response (HTTP {resp.status}).")
 			except urllib.error.URLError as e:
-				raise CheckFailed(f"oxi.email webmail is not responding to requests: {e.reason}. Run: systemctl restart oxi-email")
+				raise CheckFailed(f"rav is not responding to requests: {e.reason}. Run: systemctl restart rav")
 
-		with report.step("oxi.email data directory is present and writable"):
-			oxi_data = os.path.join(env["STORAGE_ROOT"], "oxi")
-			if not os.path.isdir(oxi_data):
-				raise CheckFailed(f"oxi.email data directory {oxi_data} is missing. Re-run setup.")
-			if not os.access(oxi_data, os.W_OK):
-				raise CheckFailed(f"oxi.email data directory {oxi_data} is not writable. Check permissions (should be owned by www-data).")
+		with report.step("rav data directory is present and writable"):
+			rav_data = os.path.join(env["STORAGE_ROOT"], "rav")
+			if not os.path.isdir(rav_data):
+				raise CheckFailed(f"rav data directory {rav_data} is missing. Re-run setup.")
+			if not os.access(rav_data, os.W_OK):
+				raise CheckFailed(f"rav data directory {rav_data} is not writable. Check permissions (should be owned by rav).")
 
-		with report.step("oxi.email configuration is present"):
-			if not os.path.isfile("/etc/oxi/config.env"):
-				raise CheckFailed("oxi.email configuration /etc/oxi/config.env is missing. Re-run setup.")
+		with report.step("rav configuration is present"):
+			if not os.path.isfile("/etc/rav/config.env"):
+				raise CheckFailed("rav configuration /etc/rav/config.env is missing. Re-run setup.")
 
 	elif webmail in ("roundcube", "snappymail", "cypht"):
 		_WEBMAIL_DIRS = {
@@ -235,7 +238,8 @@ def check_webmail(env, report):
 @check("filebrowser", category="system")
 def check_filebrowser(env, report):
 	import json
-	import urllib.request, urllib.error
+	import urllib.request
+	import urllib.error
 
 	if env.get("ENABLE_FILEBROWSER", "false").lower() != "true":
 		return  # optional, disabled
@@ -268,9 +272,9 @@ def check_filebrowser(env, report):
 			raise CheckFailed(f"FileBrowser files root {files_root} is missing. Re-run setup.")
 
 
-@check("miab-version", category="system")
-def check_miab_version(env, report):
-	with report.step("Mail-in-a-Box is up to date"):
+@check("naust-version", category="system")
+def check_naust_version(env, report):
+	with report.step("Naust is up to date"):
 		config = utils.load_settings(env)
 		try:
 			this_ver = utils.what_version_is_this(env)
@@ -278,11 +282,11 @@ def check_miab_version(env, report):
 			this_ver = "Unknown"
 
 		if config.get("privacy", True):
-			report.warn(f"You are running version Mail-in-a-Box {this_ver}. Version check disabled by privacy setting.")
+			report.warn(f"You are running version Naust {this_ver}. Version check disabled by privacy setting.")
 			return
 
-		latest_ver = utils.get_latest_miab_version()
+		latest_ver = utils.get_latest_naust_version()
 		if latest_ver is None:
-			raise CheckFailed(f"Latest Mail-in-a-Box version could not be determined. You are running version {this_ver}.")
+			raise CheckFailed(f"Latest Naust version could not be determined. You are running version {this_ver}.")
 		if this_ver != latest_ver:
-			raise CheckFailed(f"A new version is available. You are running {this_ver}. The latest is {latest_ver}. See https://github.com/boomboompower/mailinabox.")
+			raise CheckFailed(f"A new version is available. You are running {this_ver}. The latest is {latest_ver}. See https://github.com/naust-mail/naust.")

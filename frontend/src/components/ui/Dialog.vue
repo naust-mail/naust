@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
+import { useModalKeyboard } from '@/composables/useModalKeyboard'
 
 const open = defineModel<boolean>()
 defineProps<{
@@ -20,6 +21,8 @@ watch(open, async (val) => {
     triggerEl = null
   }
 })
+
+useModalKeyboard(open, panelRef, () => { open.value = false })
 </script>
 
 <template>
@@ -56,12 +59,14 @@ watch(open, async (val) => {
           aria-modal="true"
           aria-labelledby="dialog-title"
           tabindex="-1"
-          class="bg-surface-raised backdrop-blur-sm rounded-4xl w-full max-w-[32rem] p-6 shadow-3xl outline-none"
+          class="bg-surface-raised backdrop-blur-sm rounded-4xl w-full max-w-[32rem] max-h-[85vh] flex flex-col p-6 shadow-3xl outline-none"
         >
-          <h3 id="dialog-title" class="text-base font-semibold mb-1">{{ title }}</h3>
-          <p v-if="description" class="text-sm text-muted mb-5">{{ description }}</p>
-          <div v-if="$slots.default" class="mb-5"><slot /></div>
-          <div class="flex justify-end gap-2">
+          <h3 id="dialog-title" class="text-base font-semibold mb-1 shrink-0">{{ title }}</h3>
+          <p v-if="description" class="text-sm text-muted mb-5 shrink-0">{{ description }}</p>
+          <!-- Only the body scrolls - title/description/actions stay pinned so a
+               long step list or package list can't push the dialog off-screen. -->
+          <div v-if="$slots.default" class="mb-5 overflow-y-auto min-h-0"><slot /></div>
+          <div class="flex justify-end gap-2 shrink-0">
             <slot name="actions" />
           </div>
         </div>

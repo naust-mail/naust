@@ -1,21 +1,27 @@
 #!/usr/bin/python3
 
-# Migrates any file structures, database schemas, etc. between versions of Mail-in-a-Box.
+# Migrates any file structures, database schemas, etc. between versions of Naust.
 
 # We have to be careful here that any dependencies are already installed in the previous
 # version since this script runs before all other aspects of the setup script.
 
-import sys, os, os.path, glob, re, shutil
+import sys
+import os
+import os.path
+import glob
+import re
+import shutil
 
 sys.path.insert(0, 'management')
 from core.utils import load_environment, save_environment, shell
 import contextlib
+import pathlib
 
 
 def migration_1(env):
 	# Re-arrange where we store SSL certificates. There was a typo also.
 
-	def move_file(fn, domain_name_escaped, filename):
+	def move_file(fn, domain_name_escaped, _filename):
 		# Moves an SSL-related file into the right place.
 		fn1 = os.path.join(env["STORAGE_ROOT"], 'ssl', domain_name_escaped, file_type)
 		os.makedirs(os.path.dirname(fn1), exist_ok=True)
@@ -50,7 +56,7 @@ def migration_2(env):
 
 
 def migration_3(env):
-	# Move the migration ID from /etc/mailinabox.conf to $STORAGE_ROOT/mailinabox.version
+	# Move the migration ID from /etc/naust.conf to $STORAGE_ROOT/naust.version
 	# so that the ID stays with the data files that it describes the format of. The writing
 	# of the file will be handled by the main function.
 	pass
@@ -97,9 +103,10 @@ def migration_7(env):
 				c = conn.cursor()
 				c.execute("UPDATE aliases SET source=? WHERE source=?", (newemail, email))
 				if c.rowcount != 1:
-					raise ValueError("Alias not found.")
+					msg = "Alias not found."
+					raise ValueError(msg)
 				print("Updated alias", email, "to", newemail)
-		except Exception as e:
+		except Exception as e:  # noqa: BLE001 - one-off migration, best-effort per-row: log and continue rather than abort the batch
 			print("Error updating IDNA alias", email, e)
 
 	# Save.
@@ -155,13 +162,10 @@ def migration_10(env):
 def migration_11(env):
 	# Archive the old Let's Encrypt account directory managed by free_tls_certificates
 	# because we'll use that path now for the directory managed by certbot.
-	try:
+	with contextlib.suppress(Exception):
 		old_path = os.path.join(env["STORAGE_ROOT"], 'ssl', 'lets_encrypt')
 		new_path = os.path.join(env["STORAGE_ROOT"], 'ssl', 'lets_encrypt-old')
 		shutil.move(old_path, new_path)
-	except:
-		# meh
-		pass
 
 
 def migration_12(env):
@@ -178,13 +182,13 @@ def migration_12(env):
 		carddav_tables = c.fetchall()
 		# If there were tables that begin with 'carddav_', drop them
 		if carddav_tables:
-			for table in carddav_tables:
+			for table_row in carddav_tables:
+				table = table_row[0]
 				try:
-					table = table[0]
 					c = conn.cursor()
 					dropcmd = f"DROP TABLE {table}"
 					c.execute(dropcmd)
-				except:
+				except sqlite3.Error:
 					print("Failed to drop table", table)
 		# Save.
 		conn.commit()
@@ -283,24 +287,23 @@ def get_current_migration():
 	ver = 0
 	while True:
 		next_ver = ver + 1
-		migration_func = globals().get("migration_%d" % next_ver)
+		migration_func = globals().get(f"migration_{next_ver}")
 		if not migration_func:
 			return ver
 		ver = next_ver
 
 
 def run_migrations():
-	if not os.access("/etc/mailinabox.conf", os.W_OK, effective_ids=True):
+	if not os.access("/etc/naust.conf", os.W_OK, effective_ids=True):
 		print("This script must be run as root.", file=sys.stderr)
 		sys.exit(1)
 
 	env = load_environment()
 
-	migration_id_file = os.path.join(env['STORAGE_ROOT'], 'mailinabox.version')
+	migration_id_file = os.path.join(env['STORAGE_ROOT'], 'naust.version')
 	migration_id = None
 	if os.path.exists(migration_id_file):
-		with open(migration_id_file, encoding='utf-8') as f:
-			migration_id = f.read().strip()
+		migration_id = pathlib.Path(migration_id_file).read_text(encoding='utf-8').strip()
 
 	if migration_id is None:
 		# Load the legacy location of the migration ID. We'll drop support
@@ -316,18 +319,18 @@ def run_migrations():
 
 	while True:
 		next_ver = ourver + 1
-		migration_func = globals().get("migration_%d" % next_ver)
+		migration_func = globals().get(f"migration_{next_ver}")
 
 		if not migration_func:
 			# No more migrations to run.
 			break
 
 		print()
-		print("Running migration to Mail-in-a-Box #%d..." % next_ver)
+		print(f"Running migration to Naust #{next_ver}...")
 
 		try:
 			migration_func(env)
-		except Exception as e:
+		except Exception as e:  # noqa: BLE001 - top-level migration runner: any failure gets a clear message instead of a raw traceback
 			print()
 			print("Error running the migration script:")
 			print()
@@ -340,8 +343,7 @@ def run_migrations():
 
 		# Write out our current version now. Do this sooner rather than later
 		# in case of any problems.
-		with open(migration_id_file, "w", encoding='utf-8') as f:
-			f.write(str(ourver) + "\n")
+		pathlib.Path(migration_id_file).write_text(str(ourver) + "\n", encoding='utf-8')
 
 		# Delete the legacy location of this field.
 		if "MIGRATIONID" in env:

@@ -1,5 +1,5 @@
-#!/usr/local/lib/mailinabox/env/bin/python3
-"""Nightly maintenance tasks - run via cron from /usr/local/lib/mailinabox/."""
+#!/usr/local/lib/naust/env/bin/python3
+"""Nightly maintenance tasks - run via cron from /usr/local/lib/naust/."""
 
 import datetime
 import os
@@ -12,7 +12,7 @@ os.environ.update({
 	"LC_TYPE": "en_US.UTF-8",
 })
 
-_PYTHON = "/usr/local/lib/mailinabox/env/bin/python3"
+_PYTHON = "/usr/local/lib/naust/env/bin/python3"
 _EMAILER = "management/mail/email_administrator.py"
 
 
@@ -23,7 +23,7 @@ def run_task(cmd: list[str], subject: str) -> None:
 
 # Weekly mail usage report (Mondays only).
 if datetime.date.today().weekday() == 0:
-	run_task([_PYTHON, "management/mail/mail_log", "-t", "week"], "Mail-in-a-Box Usage Report")
+	run_task([_PYTHON, "management/mail/mail_log", "-t", "week"], "Naust Usage Report")
 
 run_task([_PYTHON, "management/services/backup"], "Backup Status")
 run_task([_PYTHON, "management/services/ssl_certificates", "-q"], "TLS Certificate Provisioning Result")

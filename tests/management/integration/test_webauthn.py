@@ -1,4 +1,3 @@
-# Confidence: 85%
 # High confidence on DB schema usage and credential byte construction. Moderate
 # uncertainty on edge cases around duplicate credential_id (UNIQUE constraint
 # behaviour tested directly via the DB). fido2 ceremonies are mocked; real

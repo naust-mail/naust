@@ -62,9 +62,9 @@ class TestSanitizeErrorMessage:
 		assert "[file]" in result
 
 	def test_redacts_storage_root_path(self):
-		msg = "Could not open /var/lib/mailinabox/mail/users.db"
+		msg = "Could not open /var/lib/naust/mail/users.db"
 		result = sanitize_error_message(msg)
-		assert "/var/lib/mailinabox/mail/users.db" not in result
+		assert "/var/lib/naust/mail/users.db" not in result
 		assert "[storage]" in result
 
 	def test_redacts_home_path(self):

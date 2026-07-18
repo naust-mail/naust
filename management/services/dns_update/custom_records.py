@@ -4,6 +4,7 @@ import re
 
 import rtyaml
 import dns.resolver
+import pathlib
 
 # From https://stackoverflow.com/questions/3026957/how-to-validate-a-domain-name-using-regex-php/16491074#16491074
 # This regular expression matches domain names according to RFCs, it also accepts fqdn with an leading dot,
@@ -111,8 +112,7 @@ def write_custom_dns_config(config, env):
 
 	# Write.
 	config_yaml = rtyaml.dump(dns_conf)
-	with open(os.path.join(env['STORAGE_ROOT'], 'dns/custom.yaml'), "w", encoding="utf-8") as f:
-		f.write(config_yaml)
+	pathlib.Path(os.path.join(env['STORAGE_ROOT'], 'dns/custom.yaml')).write_text(config_yaml, encoding="utf-8")
 
 
 def set_custom_dns_record(qname, rtype, value, action, env):

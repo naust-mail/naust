@@ -6,13 +6,12 @@ bug fixed in 2026-06-26. Each affected task is listed explicitly so that
 removing targets= fails a named test rather than silently regressing.
 """
 
-import pytest
 from unittest.mock import patch
 
 from tests.components._helpers import _subprocess_dispatch
 
 _BASE_ENV = {
-	"STORAGE_ROOT": "/tmp/test-storage",
+	"STORAGE_ROOT": "/tmp/test-storage",  # noqa: S108
 	"PRIMARY_HOSTNAME": "box.example.com",
 	"PRIVATE_IP": "10.0.0.1",
 	"PRIVATE_IPV6": "",

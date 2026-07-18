@@ -6,22 +6,22 @@
 
 set -euo pipefail
 
-MIAB=/opt/mailinabox
-source "$MIAB/deploy/docker/common-entrypoint.sh"
+NAUST=/opt/naust
+source "$NAUST/deploy/docker/common-entrypoint.sh"
 
 install_systemctl_stub
-write_mailinabox_conf
+write_naust_conf
 
 export RUNTIME=docker
 
-cd "$MIAB"
+cd "$NAUST"
 
 export LANGUAGE=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 export LC_TYPE=en_US.UTF-8
 
-source /etc/mailinabox.conf
+source /etc/naust.conf
 mkdir -p "$STORAGE_ROOT"
 
 # Redirect munin's HTML output to the shared storage volume so the management
@@ -32,10 +32,16 @@ rm -rf /var/cache/munin/www
 mkdir -p /var/cache/munin
 ln -sfn "$STORAGE_ROOT/munin/www" /var/cache/munin/www
 
+# munin-cgi-graph renders into this scratch dir; muninweb runs as the
+# munin user, so it must exist and be writable before supervisord starts
+# (same requirement the bare-metal muninweb unit satisfies with mkdir).
+mkdir -p /var/lib/munin/cgi-tmp
+chown munin:munin /var/lib/munin/cgi-tmp
+
 echo "Configuring Munin..."
-cd "$MIAB/setup"
+cd "$NAUST/setup"
 python3 -m components.runner munin
-cd "$MIAB"
+cd "$NAUST"
 
 echo "Munin setup complete. Starting supervisord..."
 exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf

@@ -7,10 +7,11 @@ import (
 	"os/exec"
 )
 
-// Runner executes a fixed argv. There is deliberately no shell anywhere:
-// argv[0] is an absolute program path and arguments are passed as-is.
+// Runner executes a fixed argv and returns its combined output. There is
+// deliberately no shell anywhere: argv[0] is an absolute program path and
+// arguments are passed as-is.
 type Runner interface {
-	Run(ctx context.Context, argv []string, extraEnv []string) error
+	Run(ctx context.Context, argv []string, extraEnv []string) (string, error)
 }
 
 // Deps carries the execution environment into intent handlers. Tests
@@ -25,14 +26,14 @@ type Deps struct {
 // ExecRunner runs commands for real.
 type ExecRunner struct{}
 
-func (ExecRunner) Run(ctx context.Context, argv []string, extraEnv []string) error {
+func (ExecRunner) Run(ctx context.Context, argv []string, extraEnv []string) (string, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Env = append(os.Environ(), extraEnv...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %w: %s", argv[0], err, truncateOutput(out))
+		return "", fmt.Errorf("%s: %w: %s", argv[0], err, truncateOutput(out))
 	}
-	return nil
+	return string(out), nil
 }
 
 func truncateOutput(out []byte) string {

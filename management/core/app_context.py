@@ -3,7 +3,7 @@
 # the app assembly point and the route modules it registers.
 
 from core import utils
-import auth.auth as auth
+from auth import auth
 from mail.mailconfig import initialize_database
 
 env = utils.load_environment()

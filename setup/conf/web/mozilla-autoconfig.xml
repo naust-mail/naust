@@ -4,7 +4,7 @@
       <domain>PRIMARY_HOSTNAME</domain>
       <domain purpose="mx">PRIMARY_HOSTNAME</domain>
 
-      <displayName>PRIMARY_HOSTNAME (Mail-in-a-Box)</displayName>
+      <displayName>PRIMARY_HOSTNAME (Naust)</displayName>
       <displayShortName>PRIMARY_HOSTNAME</displayShortName>
 
       <incomingServer type="imap">

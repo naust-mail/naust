@@ -1,21 +1,21 @@
 -- Dovecot Lua passdb for encryption at rest (mail_crypt).
 --
--- Runs as the SECOND passdb after the SQL passdb has already verified the
--- password (SQL is configured with result_success = continue). This passdb does
--- not verify anything itself (returns nopassword=y); its only job is to fetch the
--- user's unwrapped MAIL_KEY from the management daemon and hand it to mail_crypt
--- as crypt_user_key_password for the session.
+-- Runs as the SECOND passdb after the passwd-file passdb has already verified
+-- the password (configured with result_success = continue). This passdb does
+-- not verify anything itself (returns nopassword=y); its only job is to fetch
+-- the user's unwrapped mail key from managerd and hand it to mail_crypt as
+-- crypt_user_key_password for the session.
 --
--- The management unwrap endpoint is on 127.0.0.1 and requires the master api.key
--- (sent here via the X-Api-Key header). A wrong password makes the endpoint
--- return mail_key=null, so no key is delivered and the user simply cannot decrypt
--- (login still succeeds via the SQL passdb).
+-- The unwrap endpoint is on 127.0.0.1 and gated by a dedicated shared secret
+-- (sent here via the X-Api-Key header) that authorizes nothing else. A wrong
+-- password makes the endpoint return mail_key=null, so no key is delivered and
+-- the user simply cannot decrypt (login still succeeds via the first passdb).
 --
 -- Everything is wrapped so a transport failure never blocks login: on any error
 -- we return OK with no key and a mailcrypt_dbg field for troubleshooting.
 
-local UNWRAP_URL = "http://127.0.0.1:10222/user/encryption/unwrap"
-local KEY_FILE = "/var/lib/mailinabox/api.key"
+local UNWRAP_URL = "http://127.0.0.1:10223/internal/mailcrypt/unwrap"
+local KEY_FILE = "/var/lib/naust/mailcrypt-unwrap.key"
 
 local http_client = nil
 

@@ -86,7 +86,7 @@ def get_restic_extra_args(env, config):
 			port = 22
 		if port is None:
 			port = 22
-		args += ["-o", f"sftp.command=ssh -i /root/.ssh/id_rsa_miab -p {port} -oStrictHostKeyChecking=no -oBatchMode=yes {target.username}@{target.hostname} -s sftp"]
+		args += ["-o", f"sftp.command=ssh -i /root/.ssh/id_rsa_naust -p {port} -oStrictHostKeyChecking=no -oBatchMode=yes {target.username}@{target.hostname} -s sftp"]
 
 	return args
 

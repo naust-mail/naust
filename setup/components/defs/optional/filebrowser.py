@@ -4,7 +4,7 @@ FileBrowser web file manager (optional).
 Steps:
   fetch        - download and install the pinned filebrowser binary (SHA256 stamp)
   dirs         - create files/ and filebrowser/ directories in STORAGE_ROOT
-  auth-hook    - write filebrowser-auth.py (delegates auth to management daemon)
+  auth-hook    - write filebrowser-auth.py (delegates auth to managerd)
   config-init  - initialize the BoltDB config file (skipped if already exists)
   config-set   - apply filebrowser settings on every run
   logrotate    - write logrotate config for /var/log/filebrowser.log
@@ -12,7 +12,7 @@ Steps:
 """
 
 import os
-import shutil
+import pathlib
 import subprocess
 
 from doit.tools import config_changed
@@ -30,19 +30,20 @@ COMPONENT = Component(
 	enabled=lambda env: env.get("ENABLE_FILEBROWSER", "false").lower() == "true",
 )
 
-FB_VERSION = "v2.63.17"
-FB_SHA256 = "d463799e80bebff70f2e6faddf8628184b11248722cd0298ca3fd340f98914e9"
+FB_VERSION = "v2.63.18"
+FB_SHA256 = "cd599c34afad0e8e61c577d1061c820bccb7feaa3c5a4477a12db586a1cd93ff"
 FB_URL = f"https://github.com/filebrowser/filebrowser/releases/download/{FB_VERSION}/linux-amd64-filebrowser.tar.gz"
 
 _FB_BINARY = "/usr/local/bin/filebrowser"
 
 _CONF_DIR = os.path.join(SETUP_DIR, "conf", "systemd")
+_AUTH_HOOK_TPL = os.path.join(SETUP_DIR, "conf", "filebrowser", "filebrowser-auth.py")
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	hostname = env.get("PRIMARY_HOSTNAME", "localhost")
 	# FILEBROWSER_BIND: 127.0.0.1 on bare metal (nginx co-located);
@@ -66,8 +67,8 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 		},
 		{
 			"name": "auth-hook",
-			# auth hook includes storage_root and management_host as embedded literals.
-			"uptodate": [config_changed(f"{storage_root}:{management_host}:{artifacts.fn_stamp(_auth_hook)}")],
+			# Template hash is part of the stamp - fn_stamp cannot see it.
+			"uptodate": [config_changed(f"{storage_root}:{management_host}:{artifacts.hash_files(_AUTH_HOOK_TPL)}:{artifacts.fn_stamp(_auth_hook)}")],
 			"actions": [(_auth_hook, [storage_root, management_host])],
 		},
 		{
@@ -104,9 +105,12 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 def _fetch() -> None:
 	"""Download, verify (SHA256), and install the pinned filebrowser binary."""
 	import hashlib
+	import tempfile
 
-	tmp = "/tmp/filebrowser.tar.gz"
+	tmp_fd, tmp = tempfile.mkstemp(suffix=".tar.gz")
+	os.close(tmp_fd)
 	try:
+		print(f"Downloading filebrowser {FB_VERSION}...", flush=True)
 		subprocess.run(["wget", "-q", "-O", tmp, FB_URL], check=True)
 
 		h = hashlib.sha256()
@@ -115,7 +119,8 @@ def _fetch() -> None:
 				h.update(chunk)
 		actual = h.hexdigest()
 		if actual != FB_SHA256:
-			raise RuntimeError(f"filebrowser SHA256 mismatch: got {actual}, expected {FB_SHA256}")
+			msg = f"filebrowser SHA256 mismatch: got {actual}, expected {FB_SHA256}"
+			raise RuntimeError(msg)
 
 		subprocess.run(
 			["tar", "-xzf", tmp, "-C", "/usr/local/bin", "filebrowser"],
@@ -144,50 +149,19 @@ def _dirs(storage_root: str) -> None:
 def _auth_hook(storage_root: str, management_host: str) -> None:
 	"""Write the filebrowser auth hook script.
 
-	The hook verifies credentials against the management daemon's /auth/verify
+	The hook verifies credentials against managerd's /internal/auth/verify
 	endpoint. Bad credentials exit 0 with hook.action=block (not exit 1) because
 	FileBrowser returns 500 on non-zero exit, which breaks fail2ban targeting.
 	"""
 	artifacts.write_file(
 		"/usr/local/lib/filebrowser-auth.py",
-		"#!/usr/bin/env python3\n"
-		"import hashlib, os, sys, urllib.error, urllib.parse, urllib.request\n"
-		"\n"
-		f"FILES_ROOT = {storage_root!r}\n"
-		f"MANAGEMENT_HOST = {management_host!r}\n"
-		"\n"
-		"username = os.environ.get('USERNAME', '')\n"
-		"password = os.environ.get('PASSWORD', '')\n"
-		"\n"
-		"if not username or not password:\n"
-		"    print('hook.action=block')\n"
-		"    sys.exit(0)\n"
-		"\n"
-		"try:\n"
-		"    data = urllib.parse.urlencode({'email': username, 'password': password}).encode()\n"
-		"    req = urllib.request.Request(\n"
-		"        f'http://{MANAGEMENT_HOST}:10222/auth/verify',\n"
-		"        data=data,\n"
-		"        method='POST',\n"
-		"    )\n"
-		"    with urllib.request.urlopen(req, timeout=5) as resp:\n"
-		"        resp.read()\n"
-		"\n"
-		"    # Hash the email to avoid exposing addresses in the filesystem.\n"
-		"    # SHA-256 of raw email bytes (lowercase hex) to match other systems.\n"
-		"    user_hash = hashlib.sha256(username.encode()).hexdigest()\n"
-		"    os.makedirs(os.path.join(FILES_ROOT, user_hash), mode=0o750, exist_ok=True)\n"
-		"\n"
-		"    print('hook.action=auth')\n"
-		"    print(f'user.scope={user_hash}')\n"
-		"    sys.exit(0)\n"
-		"except urllib.error.HTTPError as e:\n"
-		"    if e.code == 401:\n"
-		"        print('hook.action=block')\n"
-		"        sys.exit(0)\n"
-		"    sys.exit(1)\n"
-		"except Exception:\n"
-		"    sys.exit(1)\n",
+		artifacts.render_template(
+			_AUTH_HOOK_TPL,
+			{
+				"FILES_ROOT": storage_root,
+				"MANAGEMENT_HOST": management_host,
+			},
+		),
 		mode=0o755,
 	)
 	subprocess.run(["chown", "root:root", "/usr/local/lib/filebrowser-auth.py"], check=True)
@@ -244,7 +218,7 @@ def _config_set(db_path: str, storage_root: str, hostname: str, fb_bind: str) ->
 	# Ensure the log file exists before fail2ban starts watching it.
 	log = "/var/log/filebrowser.log"
 	if not os.path.exists(log):
-		open(log, "a").close()
+		open(log, "a", encoding="utf-8").close()
 	subprocess.run(["chown", "www-data:www-data", log], check=True)
 
 
@@ -260,8 +234,7 @@ def _systemd(storage_root: str) -> None:
 	"""Install and enable the filebrowser systemd unit."""
 	unit_src = os.path.join(_CONF_DIR, "filebrowser.service")
 	if os.path.exists(unit_src):
-		with open(unit_src) as fh:
-			unit_content = fh.read().replace("${STORAGE_ROOT}", storage_root)
+		unit_content = pathlib.Path(unit_src).read_text(encoding="utf-8").replace("${STORAGE_ROOT}", storage_root)
 		artifacts.write_file("/lib/systemd/system/filebrowser.service", unit_content)
 
 	subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)

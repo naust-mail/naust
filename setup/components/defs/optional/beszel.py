@@ -23,7 +23,8 @@ import urllib.request
 from doit.tools import config_changed
 
 from ... import artifacts, SETUP_DIR
-from ...component import Component
+from ...component import Component, DOCKER
+import pathlib
 
 # ── Pin ───────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ COMPONENT = Component(
 	services=["beszel-hub", "beszel-agent"],
 	docker_services=["beszel-hub", "beszel-agent"],
 	enabled=lambda env: env.get("MONITORING_TOOL", "none") == "beszel",
+	naust_backup_groups=["beszel"],
 )
 
 _SYSTEMD_DIR = os.path.join(SETUP_DIR, "conf", "systemd")
@@ -72,7 +74,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 			"name": "hub-keys",
 			"targets": [os.path.join(storage_root, "beszel", "id_ed25519")],
 			"uptodate": [config_changed(artifacts.fn_stamp(_generate_keypair))],
-			"actions": [(_generate_keypair, [storage_root, env["PRIMARY_HOSTNAME"]])],
+			"actions": [(_generate_keypair, [storage_root, env["PRIMARY_HOSTNAME"], runtime])],
 		},
 		{
 			"name": "systemd",
@@ -100,17 +102,18 @@ def _fetch_and_verify(url: str, expected_sha256: str, dest: str) -> None:
 		tmp_path = tmp.name
 
 	try:
+		print(f"Downloading {url}...", flush=True)
 		urllib.request.urlretrieve(url, tmp_path)
 
 		if expected_sha256:
-			with open(tmp_path, "rb") as f:
-				digest = hashlib.sha256(f.read()).hexdigest()
+			digest = hashlib.sha256(pathlib.Path(tmp_path).read_bytes()).hexdigest()
 			if digest != expected_sha256:
-				raise ValueError(f"SHA256 mismatch for {url}: got {digest}")
+				msg = f"SHA256 mismatch for {url}: got {digest}"
+				raise ValueError(msg)
 
 		with tarfile.open(tmp_path, "r:gz") as tar:
 			for member in tar.getmembers():
-				if member.name in ("beszel", "beszel-agent") and "/" not in member.name:
+				if member.name in {"beszel", "beszel-agent"} and "/" not in member.name:
 					member.name = os.path.basename(dest)
 					tar.extract(member, path=os.path.dirname(dest))
 					break
@@ -128,17 +131,15 @@ def _install_units(storage_root: str, primary_hostname: str) -> None:
 	for unit in ("beszel-hub.service", "beszel-agent.service"):
 		src = os.path.join(_SYSTEMD_DIR, unit)
 		dst = f"/lib/systemd/system/{unit}"
-		with open(src) as f:
-			content = f.read().replace("${STORAGE_ROOT}", storage_root).replace("${PRIMARY_HOSTNAME}", primary_hostname)
-		with open(dst, "w") as f:
-			f.write(content)
+		content = pathlib.Path(src).read_text(encoding="utf-8").replace("${STORAGE_ROOT}", storage_root).replace("${PRIMARY_HOSTNAME}", primary_hostname)
+		pathlib.Path(dst).write_text(content, encoding="utf-8")
 
 	subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
 	for unit in ("beszel-hub", "beszel-agent"):
 		subprocess.run(["systemctl", "enable", unit], check=True, capture_output=True)
 
 
-def _generate_keypair(storage_root: str, primary_hostname: str) -> None:
+def _generate_keypair(storage_root: str, primary_hostname: str, runtime: str) -> None:
 	import uuid
 
 	data_dir = os.path.join(storage_root, "beszel")
@@ -153,38 +154,41 @@ def _generate_keypair(storage_root: str, primary_hostname: str) -> None:
 		return
 
 	os.makedirs(data_dir, exist_ok=True)
+	print("Generating the beszel hub SSH keypair...", flush=True)
 	subprocess.run(
 		["ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", "", "-C", "beszel-hub"],
 		check=True,
 		capture_output=True,
 	)
 
-	with open(f"{key_path}.pub") as f:
-		pub_key = f.read().strip()
+	pub_key = pathlib.Path(f"{key_path}.pub").read_text(encoding="utf-8").strip()
 
 	# Token shared between agent.env and config.yml.
 	# Hub reads config.yml on startup and creates the system + fingerprint record.
 	# Agent uses the same token to connect. Users field omitted - hub defaults to first user.
 	token = str(uuid.uuid4())
 
-	with open(agent_env_path, "w") as f:
-		f.write(f"KEY={pub_key}\nTOKEN={token}\n")
+	# KEY holds a full "ssh-ed25519 AAAA... comment" line, which contains
+	# spaces - quoted so a shell `source` of this file (the Docker agent
+	# entrypoint) parses it as one value, not a command line. systemd's
+	# EnvironmentFile= (bare metal) parses lines literally either way.
+	pathlib.Path(agent_env_path).write_text(f'KEY="{pub_key}"\nTOKEN={token}\n', encoding="utf-8")
 
 	# hub.env: consumed by the initial migration on first DB creation only.
 	# USER_EMAIL is a random internal identity, not guessable from public info.
 	# USER_PASSWORD is random; DISABLE_PASSWORD_AUTH=true means it can never be used.
 	hub_email = f"beszel-{os.urandom(12).hex()}@beszel.local"
 	hub_password = os.urandom(24).hex()
-	with open(hub_env_path, "w") as f:
-		f.write(f"USER_EMAIL={hub_email}\nUSER_PASSWORD={hub_password}\n")
+	pathlib.Path(hub_env_path).write_text(f"USER_EMAIL={hub_email}\nUSER_PASSWORD={hub_password}\n", encoding="utf-8")
 
-	# config.yml: read by hub on startup to provision the local agent as a system.
-	with open(config_path, "w") as f:
-		f.write(f"systems:\n  - name: {primary_hostname}\n    host: 127.0.0.1\n    port: 45876\n    token: {token}\n")
+	# config.yml: read by hub on startup to provision the local agent as a
+	# system. On bare metal hub and agent are co-located (127.0.0.1); in
+	# Docker the agent runs in a separate container reached by service name.
+	agent_host = "beszel-agent" if runtime == DOCKER else "127.0.0.1"
+	pathlib.Path(config_path).write_text(f"systems:\n  - name: {primary_hostname}\n    host: {agent_host}\n    port: 45876\n    token: {token}\n", encoding="utf-8")
 
 	# beszel-user: read by web_update.py for nginx config generation (root-only).
-	with open(user_file, "w") as f:
-		f.write(hub_email)
+	pathlib.Path(user_file).write_text(hub_email, encoding="utf-8")
 	os.chmod(user_file, 0o600)
 
 	subprocess.run(

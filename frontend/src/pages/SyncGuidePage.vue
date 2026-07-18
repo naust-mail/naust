@@ -1,21 +1,20 @@
 <script setup lang="ts">
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Card from '@/components/ui/Card.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
 import Code from '@/components/ui/Code.vue'
 import Table from '@/components/ui/Table.vue'
 import TableRow from '@/components/ui/TableRow.vue'
-import { useConfigStore } from '@/stores/config'
+import { useAuthStore } from '@/stores/auth'
 
-const config = useConfigStore()
+const auth = useAuthStore()
 
 type SettingRow = [string, string]
 
 const imapRows: SettingRow[] = [
-  ['IMAP server', config.hostname],
+  ['IMAP server', auth.hostname],
   ['IMAP port', '993 (SSL/TLS)'],
-  ['SMTP server', config.hostname],
+  ['SMTP server', auth.hostname],
   ['SMTP port', '465 (SSL/TLS)'],
   ['SMTP port', '587 (STARTTLS)'],
   ['Username', 'Your full email address'],
@@ -23,19 +22,18 @@ const imapRows: SettingRow[] = [
 ]
 
 const caldavRows: SettingRow[] = [
-  ['Server URL', `https://${config.hostname}/radicale/`],
+  ['Server URL', `https://${auth.hostname}/radicale/`],
   ['Username', 'Your full email address'],
   ['Password', 'Your mail password'],
 ]
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="Sync to Devices" description="Sync your calendar and contacts with your phone or desktop app." />
 
     <!-- IMAP / SMTP -->
     <SectionHeader title="Email (IMAP / SMTP)" />
-    <Card class="p-5 mb-6">
+    <Card padding="md" class="mb-6">
       <p class="text-sm text-muted mb-3">
         Configure any mail client using these settings. Autoconfig and autodiscover are
         supported - most clients can configure themselves with just your email address and password.
@@ -52,7 +50,7 @@ const caldavRows: SettingRow[] = [
 
     <!-- CalDAV / CardDAV -->
     <SectionHeader title="Contacts &amp; Calendar (CalDAV / CardDAV)" />
-    <Card class="p-5 mb-6">
+    <Card padding="md" class="mb-6">
       <p class="text-sm text-muted mb-3">
         Contacts and calendars are served by <a href="https://radicale.org/" target="_blank" rel="noopener" class="underline underline-offset-2">Radicale</a>.
         Use these settings in iOS, Android, Thunderbird, or any CalDAV/CardDAV client.
@@ -71,13 +69,13 @@ const caldavRows: SettingRow[] = [
         CalDAV and CardDAV autodiscovery is configured via
         <Code>/.well-known/caldav</Code> and
         <Code>/.well-known/carddav</Code>.
-        Enter just <span class="font-mono">{{ config.hostname }}</span> as the server in clients that support it.
+        Enter just <span class="font-mono">{{ auth.hostname }}</span> as the server in clients that support it.
       </p>
     </Card>
 
     <!-- Autodiscover -->
     <SectionHeader title="Autodiscover" />
-    <Card class="p-5 mb-6">
+    <Card padding="md" class="mb-6">
       <p class="text-sm text-muted mb-3">
         Outlook, iOS, and most modern mail clients can configure themselves automatically.
         Enter your email address and password - no manual server settings needed.
@@ -87,22 +85,22 @@ const caldavRows: SettingRow[] = [
           <span class="text-xs text-faint uppercase tracking-wide">Outlook (autodiscover)</span>
           <div>
             <a
-              :href="`https://${config.hostname}/autodiscover/autodiscover.xml`"
+              :href="`https://${auth.hostname}/autodiscover/autodiscover.xml`"
               target="_blank"
               rel="noopener"
               class="text-sm font-medium underline underline-offset-2 font-mono"
-            >https://{{ config.hostname }}/autodiscover/autodiscover.xml</a>
+            >https://{{ auth.hostname }}/autodiscover/autodiscover.xml</a>
           </div>
         </div>
         <div class="pt-1">
           <span class="text-xs text-faint uppercase tracking-wide">Thunderbird (autoconfig)</span>
           <div>
             <a
-              :href="`https://${config.hostname}/.well-known/autoconfig/mail/config-v1.1.xml`"
+              :href="`https://${auth.hostname}/.well-known/autoconfig/mail/config-v1.1.xml`"
               target="_blank"
               rel="noopener"
               class="text-sm font-medium underline underline-offset-2 font-mono"
-            >https://{{ config.hostname }}/.well-known/autoconfig/mail/config-v1.1.xml</a>
+            >https://{{ auth.hostname }}/.well-known/autoconfig/mail/config-v1.1.xml</a>
           </div>
         </div>
       </div>
@@ -110,18 +108,17 @@ const caldavRows: SettingRow[] = [
 
     <!-- Webmail -->
     <SectionHeader title="Webmail" />
-    <Card class="p-5">
+    <Card padding="md">
       <p class="text-sm text-muted mb-3">
         Access your email from a browser without installing a client.
       </p>
       <a
-        :href="`https://${config.hostname}/mail`"
+        :href="`https://${auth.hostname}/mail`"
         target="_blank"
         rel="noopener"
         class="text-sm font-medium underline underline-offset-2"
       >
-        https://{{ config.hostname }}/mail
+        https://{{ auth.hostname }}/mail
       </a>
     </Card>
-  </AppLayout>
 </template>

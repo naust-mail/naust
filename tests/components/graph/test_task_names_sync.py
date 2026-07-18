@@ -12,7 +12,6 @@ without updating the constant, this test fails immediately.
 
 import inspect
 
-import pytest
 
 import components.task_names as _task_names
 from tests.components._helpers import build_graph_full
@@ -23,7 +22,7 @@ from tests.components.conftest import make_env, all_task_names
 _CONFIGS = [
 	("rspamd+baremetal", "baremetal", {"SPAM_FILTER": "rspamd", "ENABLE_CLAMAV": "true"}),
 	("spamassassin+baremetal", "baremetal", {"SPAM_FILTER": "spamassassin", "ENABLE_CLAMAV": "true"}),
-	# duplicity activates the MANAGEMENT_VIRTUALENV cross-component dep
+	# duplicity: self-contained backend, exercised here for graph coverage
 	("duplicity+baremetal", "baremetal", {"BACKUP_TOOL": "duplicity"}),
 ]
 

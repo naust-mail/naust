@@ -1,3 +1,3 @@
-from .config import get_backup_config, write_backup_config, backup_set_custom, get_passphrase, get_target_type
-from .status import backup_status, should_force_full, list_target_files
-from .actions import perform_backup, verify_backup, restore_backup, run_duplicity_verification, run_duplicity_restore, print_duplicity_command
+from .config import get_backup_config as get_backup_config, write_backup_config as write_backup_config, backup_set_custom as backup_set_custom, get_passphrase as get_passphrase, get_target_type as get_target_type
+from .status import backup_status as backup_status, should_force_full as should_force_full, list_target_files as list_target_files
+from .actions import perform_backup as perform_backup, verify_backup as verify_backup, restore_backup as restore_backup, run_duplicity_verification as run_duplicity_verification, run_duplicity_restore as run_duplicity_restore, print_duplicity_command as print_duplicity_command

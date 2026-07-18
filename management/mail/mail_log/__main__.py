@@ -24,7 +24,7 @@ if __name__ == "__main__":
 	except FileNotFoundError:
 		env_vars = {}
 
-	parser = argparse.ArgumentParser(description="Scan the mail log files for interesting data. By default, this script shows today's incoming and outgoing mail statistics. https://github.com/boomboompower/mailinabox", add_help=False)
+	parser = argparse.ArgumentParser(description="Scan the mail log files for interesting data. By default, this script shows today's incoming and outgoing mail statistics. https://github.com/naust-mail/naust", add_help=False)
 
 	# Switches to determine what to parse and what to ignore
 

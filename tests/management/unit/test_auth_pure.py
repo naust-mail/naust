@@ -1,5 +1,4 @@
 import base64
-import pytest
 
 from auth.auth import parse_http_authorization_basic as _parse_basic
 

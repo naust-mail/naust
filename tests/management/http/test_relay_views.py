@@ -10,9 +10,7 @@
 # the control-plane socket. Both are mocked so no system processes are touched.
 # DNS update (do_dns_update) is also mocked.
 
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import patch
 
 
 _APPLY_RELAY = "core.views.relay_views._apply_relay_config"

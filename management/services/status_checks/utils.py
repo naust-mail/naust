@@ -6,7 +6,7 @@ import threading
 
 import dns.resolver
 
-from core.utils import shell, sort_domains, load_env_vars_from_file, load_settings, get_ssh_port, get_ssh_config_value
+from core.utils import shell, get_ssh_port
 
 # DNS query cache - thread-safe with TTL for security
 _dns_cache = {}
@@ -65,8 +65,7 @@ def query_dns(qname, rtype, nxdomain='[Not Set]', at=None, as_list=False):
 			cached_result, cached_time = _dns_cache[cache_key]
 			if _is_cache_entry_valid(cached_time):
 				return cached_result
-			else:
-				del _dns_cache[cache_key]
+			del _dns_cache[cache_key]
 
 	# Make the qname absolute by appending a period. Without this, dns.resolver.query
 	# will fall back a failed lookup to a second query with this machine's hostname
@@ -122,9 +121,9 @@ def query_dns(qname, rtype, nxdomain='[Not Set]', at=None, as_list=False):
 
 
 def get_services(env):
-	# Service host addresses come from env (set via /etc/mailinabox.conf).
+	# Service host addresses come from env (set via /etc/naust.conf).
 	# On bare metal everything defaults to 127.0.0.1; in Docker these point
-	# to the container service names written by write_mailinabox_conf.
+	# to the container service names written by write_naust_conf.
 	mail_host = env.get('MAIL_HOST', '127.0.0.1')
 	dns_host = env.get('DNS_HOST', '127.0.0.1')
 	webmail_host = env.get('WEBMAIL_HOST', '127.0.0.1')
@@ -136,7 +135,7 @@ def get_services(env):
 	services = [
 		{"name": "Local DNS (unbound)", "port": 53, "public": False, "host": dns_host},
 		{"name": "Dovecot LMTP LDA", "port": 10026, "public": False, "host": mail_host},
-		{"name": "Mail-in-a-Box Management Daemon", "port": 10222, "public": False},
+		{"name": "Naust Management Daemon", "port": 10222, "public": False},
 		{"name": "SSH Login (ssh)", "port": get_ssh_port(), "public": True},
 		{"name": "Public DNS (nsd4)", "port": 53, "public": True, "host": dns_host},
 		{"name": "Incoming Mail (SMTP/postfix)", "port": 25, "public": True, "host": mail_host},
@@ -162,8 +161,8 @@ def get_services(env):
 			{"name": "OpenDMARC", "port": 8893, "public": False, "host": mail_host},
 		]
 
-	if env.get("WEBMAIL_CLIENT", "oxi") == "oxi":
-		services.append({"name": "oxi.email Webmail (oxi-email)", "port": 3001, "public": False, "host": webmail_host})
+	if env.get("WEBMAIL_CLIENT", "rav") == "rav":
+		services.append({"name": "rav Webmail (rav)", "port": 3001, "public": False, "host": webmail_host})
 	return services
 
 
@@ -204,7 +203,7 @@ def is_reboot_needed_due_to_package_installation():
 	return os.path.exists("/var/run/reboot-required")
 
 
-_VERSION_FILE = "/usr/local/share/mailinabox/version"
+_VERSION_FILE = "/usr/local/share/naust/version"
 
 
 def what_version_is_this(env):
@@ -215,18 +214,18 @@ def what_version_is_this(env):
 			v = f.read().strip()
 		if v:
 			return v
-	miab_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-	return shell("check_output", ["/usr/bin/git", "rev-parse", "HEAD"], env={"GIT_DIR": os.path.join(miab_dir, '.git')}).strip()
+	naust_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+	return shell("check_output", ["/usr/bin/git", "rev-parse", "HEAD"], env={"GIT_DIR": os.path.join(naust_dir, '.git')}).strip()
 
 
-def get_latest_miab_version():
+def get_latest_naust_version():
 	# Fetches the latest commit SHA on main from the GitHub API.
 	import json
 	from urllib.request import urlopen, Request, HTTPError, URLError
 
 	try:
 		req = Request(
-			"https://api.github.com/repos/boomboompower/mailinabox/commits/main",
+			"https://api.github.com/repos/naust-mail/naust/commits/main",
 			headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
 		)
 		data = json.loads(urlopen(req, timeout=5).read())
@@ -248,7 +247,7 @@ def evaluate_spamhaus_code(zen):
 	if zen == "127.255.255.252":
 		return "warning", "Incorrect spamhaus query. Could not determine blacklist status."
 	if zen == "127.255.255.254":
-		return "warning", "Mail-in-a-Box is configured to use a public DNS server. This is not supported by spamhaus. Could not determine blacklist status."
+		return "warning", "Naust is configured to use a public DNS server. This is not supported by spamhaus. Could not determine blacklist status."
 	if zen == "127.255.255.255":
 		return "warning", "Too many queries have been performed on the spamhaus server. Could not determine blacklist status."
 	return "error", f"Listed in the Spamhaus block list (code {zen}), which may prevent recipients from receiving your mail."
@@ -280,23 +279,20 @@ def check_service_reachable(service, env):
 		if _try_connect(env["PUBLIC_IP"], service["port"]):
 			if not env.get("PUBLIC_IPV6") or service.get("ipv6") is False or _try_connect(env["PUBLIC_IPV6"], service["port"]):
 				return True, None
-			elif service["port"] != 53 and _try_connect(env["PRIVATE_IPV6"], service["port"]):
+			if service["port"] != 53 and _try_connect(env["PRIVATE_IPV6"], service["port"]):
 				return False, "%s is running (and available over IPv4 and the local IPv6 address), but it is not publicly accessible at %s:%d." % (service['name'], env['PUBLIC_IPV6'], service['port'])
-			else:
-				return False, "%s is running and available over IPv4 but is not accessible over IPv6 at %s port %d." % (service['name'], env['PUBLIC_IPV6'], service['port'])
-		elif service["port"] != 53 and _try_connect(service.get('host', '127.0.0.1'), service["port"]):
+			return False, "%s is running and available over IPv4 but is not accessible over IPv6 at %s port %d." % (service['name'], env['PUBLIC_IPV6'], service['port'])
+		if service["port"] != 53 and _try_connect(service.get('host', '127.0.0.1'), service["port"]):
 			return False, "%s is running but is not publicly accessible at %s:%d." % (service['name'], env['PUBLIC_IP'], service['port'])
-		else:
-			msg = "%s is not running (port %d)." % (service['name'], service['port'])
-			if service["port"] in {80, 443}:
-				detail = shell('check_output', ['nginx', '-t'], capture_stderr=True, trap=True)[1].strip()
-				if detail:
-					msg += " " + detail
-			return False, msg
-	elif _try_connect(service.get('host', '127.0.0.1'), service["port"]):
+		msg = "%s is not running (port %d)." % (service['name'], service['port'])
+		if service["port"] in {80, 443}:
+			detail = shell('check_output', ['nginx', '-t'], capture_stderr=True, trap=True)[1].strip()
+			if detail:
+				msg += " " + detail
+		return False, msg
+	if _try_connect(service.get('host', '127.0.0.1'), service["port"]):
 		return True, None
-	else:
-		return False, "%s is not running (port %d)." % (service['name'], service['port'])
+	return False, "%s is not running (port %d)." % (service['name'], service['port'])
 
 
 def alias_exists_message(alias_name, alias, env):

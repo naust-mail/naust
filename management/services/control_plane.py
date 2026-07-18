@@ -17,7 +17,7 @@ Socket paths: STORAGE_ROOT/sockets/<role>.sock
   filebrowser.sock -> filebrowser
 
 On bare metal, service lifecycle is delegated to the privileged helper
-(helperd, daemon/cmd/helperd) over /run/mailinabox/helper.sock when it is
+(helperd, daemon/cmd/helperd) over /run/naust/helper.sock when it is
 installed, so this process does not need root for it. The direct
 subprocess path remains only for installs without the helper.
 
@@ -32,7 +32,7 @@ from pathlib import Path
 
 RUNTIME = os.environ.get("RUNTIME", "baremetal")
 
-HELPER_SOCKET = os.environ.get("MIAB_HELPER_SOCKET", "/run/mailinabox/helper.sock")
+HELPER_SOCKET = os.environ.get("NAUST_HELPER_SOCKET", "/run/naust/helper.sock")
 
 # Maps service name to the socket role that owns it.
 _SERVICE_SOCKET: dict[str, str] = {
@@ -90,11 +90,13 @@ def _send(service: str, action: str) -> None:
 		raise RuntimeError(f"control_plane: {service} {action}: {response}")
 
 
-def _helper_send(intent: str, args: dict[str, str], timeout: float = 120) -> None:
+def _helper_send(intent: str, args: dict[str, str], timeout: float = 120) -> str:
 	"""Send one intent to the privileged helper and raise on failure.
 
 	Wire protocol: one JSON line per request, one JSON line back
-	({"ok": true} or {"ok": false, "error": "..."}).
+	({"ok": true, "result": "..."} or {"ok": false, "error": "..."}).
+	Returns the result string (command output for host.* intents, empty
+	for everything else).
 	"""
 	sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 	sock.settimeout(timeout)
@@ -112,6 +114,7 @@ def _helper_send(intent: str, args: dict[str, str], timeout: float = 120) -> Non
 	resp = json.loads(buf.decode())
 	if not resp.get("ok"):
 		raise RuntimeError(f"helper: {intent}: {resp.get('error', 'unknown error')}")
+	return resp.get("result", "")
 
 
 def _run_bare_metal(service: str, action: str) -> None:
@@ -173,3 +176,70 @@ def disable(service: str) -> None:
 		_helper_send("service.disable", {"service": service})
 		return
 	subprocess.run(["systemctl", "disable", service], check=True)
+
+
+# ── Privileged file/config/host operations ────────────────────────────────────
+# Same pattern as service lifecycle: delegate to the helper when its socket
+# exists, otherwise perform the operation directly (pre-helper installs and
+# Docker, where the management container does these itself or not at all).
+
+# Paths for config_write targets when no helper is present. Must stay in
+# sync with configTargets in daemon/internal/helper/allowlists.go.
+_CONFIG_TARGETS = {
+	"nginx_local": "/etc/nginx/conf.d/local.conf",
+}
+
+
+def config_write(target: str, content: str) -> None:
+	"""Write a named config file. Target names are a closed set; callers
+	never pass paths."""
+	if RUNTIME != "docker" and os.path.exists(HELPER_SOCKET):
+		_helper_send("config.write", {"target": target, "content": content})
+		return
+	path = _CONFIG_TARGETS[target]
+	tmp = path + ".tmp"
+	Path(tmp).write_text(content, encoding="utf-8")
+	os.replace(tmp, path)
+
+
+def postfix_set(settings: dict[str, str]) -> None:
+	"""Set Postfix main.cf parameters (helper allowlist restricts keys)."""
+	if RUNTIME != "docker" and os.path.exists(HELPER_SOCKET):
+		for key, value in settings.items():
+			_helper_send("postfix.set", {"key": key, "value": value})
+		return
+	subprocess.run(
+		["postconf", "-e"] + [f"{key}={value}" for key, value in settings.items()],
+		check=True,
+	)
+
+
+def apt_update() -> str:
+	"""Refresh the apt package index. Returns command output."""
+	if RUNTIME != "docker" and os.path.exists(HELPER_SOCKET):
+		return _helper_send("host.apt_update", {}, timeout=630)
+	result = subprocess.run(["/usr/bin/apt-get", "-qq", "update"], check=True, capture_output=True, text=True)
+	return result.stdout
+
+
+def apt_upgrade() -> str:
+	"""Upgrade installed packages. Returns command output."""
+	if RUNTIME != "docker" and os.path.exists(HELPER_SOCKET):
+		return _helper_send("host.apt_upgrade", {}, timeout=1230)
+	result = subprocess.run(
+		["/usr/bin/apt-get", "-y", "upgrade"],
+		check=True,
+		capture_output=True,
+		text=True,
+		env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
+	)
+	return result.stdout
+
+
+def host_reboot() -> str:
+	"""Reboot the host. Returns command output (usually nothing arrives
+	before the daemon itself goes down with the host)."""
+	if RUNTIME != "docker" and os.path.exists(HELPER_SOCKET):
+		return _helper_send("host.reboot", {})
+	result = subprocess.run(["/sbin/shutdown", "-r", "now"], check=True, capture_output=True, text=True)
+	return result.stdout + result.stderr

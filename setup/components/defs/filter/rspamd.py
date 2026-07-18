@@ -14,7 +14,8 @@ Steps:
   postfix-milters       - set smtpd_milters, virtual_transport, smtpd_recipient_restrictions in main.cf [dep: postfix:spam-filter]
   disable-legacy        - stop + disable spampd, opendkim, opendmarc, postgrey
   redis-enable          - systemctl enable redis-server (persists across reboots)
-  dovecot-spam-learning - Dovecot imapsieve config + rspamc pipe scripts for Bayes training
+  dovecot-spam-learning - version-specific Dovecot spam-learning plugin + rspamc pipe scripts
+                          [dep: dovecot:version - 2.3 needs dovecot-antispam, 2.4 uses imapsieve]
 """
 
 import os
@@ -22,16 +23,36 @@ import subprocess
 
 from doit.tools import config_changed
 
-from ... import artifacts
+from ... import SETUP_DIR, artifacts
 from ...component import Component
-from ...task_names import POSTFIX_SPAM_FILTER
-from .shared import setup_dovecot_imapsieve
+from ...task_names import DOVECOT_VERSION, POSTFIX_SPAM_FILTER
+from .shared import enable_antispam_plugin, setup_dovecot_antispam_pipe, setup_dovecot_imapsieve
+
+# Both dialects live under this dir; hashed whole so editing either invalidates
+# the stamp regardless of which branch is live on this box.
+_TPL_DIR = os.path.join(SETUP_DIR, "conf", "filter")
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
+
+def _dovecot_antispam_needed() -> bool:
+	"""dovecot-antispam exists only for Dovecot 2.3 (Ubuntu 24.04 and
+	older); the 2.4 path uses imapsieve and the package is absent from
+	the 26.04 archive. The distro fixes the Dovecot major version, so
+	the batched install phase can know this before any package exists."""
+	try:
+		with open("/etc/os-release", encoding="utf-8") as fh:
+			for line in fh:
+				if line.startswith("VERSION_ID="):
+					return float(line.split("=", 1)[1].strip().strip('"')) < 25
+	except (OSError, ValueError):
+		pass
+	return True
+
+
 COMPONENT = Component(
 	name="rspamd",
-	packages=["rspamd", "redis-server"],
+	packages=["rspamd", "redis-server"] + (["dovecot-antispam"] if _dovecot_antispam_needed() else []),
 	services=["rspamd", "redis-server"],
 	docker_services=["rspamd", "redis-server"],
 	enabled=lambda env: env.get("SPAM_FILTER", "rspamd") == "rspamd",
@@ -41,10 +62,25 @@ COMPONENT = Component(
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	dkim_dir = os.path.join(storage_root, "mail", "dkim")
 	key_path = os.path.join(dkim_dir, "mail.private")
+
+	# Detect the Dovecot version (pure read) so the spam-learning stamp
+	# captures which plugin branch is live on this box.
+	ver_result = subprocess.run(["dovecot", "--version"], capture_output=True, text=True, check=False)
+	dovecot_version = ver_result.stdout.split()[0] if ver_result.stdout.strip() else "2.3"
+
+	# Both plugin branches stamped so editing either branch invalidates, plus
+	# the template dir hash since the config text itself lives outside the
+	# functions now.
+	plugin_stamp = "|".join([
+		dovecot_version,
+		artifacts.fn_stamp(_dovecot_spam_learning_24),
+		artifacts.fn_stamp(_dovecot_spam_learning_23),
+		artifacts.hash_files(_TPL_DIR),
+	])
 
 	return [
 		{
@@ -94,10 +130,13 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 		},
 		{
 			"name": "dovecot-spam-learning",
-			# Writes 99-local-spam-learning.conf, sieve scripts, and rspamc pipe
-			# scripts. fn_stamp covers both setup_dovecot_imapsieve and this function.
-			"uptodate": [config_changed(artifacts.fn_stamp(_dovecot_spam_learning))],
-			"actions": [(_dovecot_spam_learning,)],
+			# Writes 99-local-spam-learning.conf, sieve/plugin config, and rspamc
+			# pipe scripts. dovecot-antispam (2.3 path) is in COMPONENT.packages,
+			# installed by the batch phase before any task runs. Dep on
+			# dovecot:version ensures the right Dovecot is configured first.
+			"uptodate": [config_changed(plugin_stamp)],
+			"task_dep": [DOVECOT_VERSION],
+			"actions": [(_dovecot_spam_learning, [dovecot_version])],
 		},
 	]
 
@@ -114,6 +153,7 @@ def _dkim_key(dkim_dir: str, key_path: str) -> None:
 	"""
 	os.makedirs(dkim_dir, exist_ok=True)
 	txt_path = os.path.join(dkim_dir, "mail.txt")
+	print("Generating the DKIM signing key...", flush=True)
 	result = subprocess.run(
 		["rspamadm", "dkim_keygen", "-s", "mail", "-b", "2048", "-k", key_path],
 		capture_output=True,
@@ -156,14 +196,14 @@ def _config(storage_root: str) -> None:
 	# DKIM signing for outbound mail. same key location as OpenDKIM path.
 	artifacts.write_file(
 		"/etc/rspamd/local.d/dkim_signing.conf",
-		f"allow_username_mismatch = true;\nuse_domain = \"envelope\";\npath = \"{storage_root}/mail/dkim/${{selector}}.private\";\nselector = \"mail\";\nsign_authenticated = true;\nsign_local = true;\n",
+		f'allow_username_mismatch = true;\nuse_domain = "envelope";\npath = "{storage_root}/mail/dkim/${{selector}}.private";\nselector = "mail";\nsign_authenticated = true;\nsign_local = true;\n',
 	)
 
 	# Greylisting: short 60s timeout deters bots that don't retry.
 	# DKIM_ALLOW whitelist skips greylisting for mail with a valid DKIM signature.
 	artifacts.write_file(
 		"/etc/rspamd/local.d/greylisting.conf",
-		"enabled = true;\ntimeout = 60;\nexpire = 86400;\nwhitelist_symbols = [\"DKIM_ALLOW\"];\n",
+		'enabled = true;\ntimeout = 60;\nexpire = 86400;\nwhitelist_symbols = ["DKIM_ALLOW"];\n',
 	)
 
 	# DMARC verification. No outbound reports - not a reporting MTA.
@@ -235,8 +275,16 @@ def _redis_enable() -> None:
 	subprocess.run(["systemctl", "enable", "redis-server"], check=True)
 
 
-def _dovecot_spam_learning() -> None:
-	"""Set up Dovecot imapsieve spam learning via rspamc.
+def _dovecot_spam_learning(dovecot_version: str) -> None:
+	"""Dispatch to the correct Dovecot spam-learning plugin for the installed version."""
+	if dovecot_version.startswith("2.4."):
+		_dovecot_spam_learning_24()
+	else:
+		_dovecot_spam_learning_23()
+
+
+def _dovecot_spam_learning_24() -> None:
+	"""Set up Dovecot 2.4 imapsieve spam learning via rspamc.
 
 	Writes the shared Dovecot imapsieve config and sieve scripts, then
 	writes rspamc pipe scripts that submit messages to the local rspamd
@@ -244,7 +292,25 @@ def _dovecot_spam_learning() -> None:
 	rspamd stores Bayes state in Redis, not on disk.
 	"""
 	setup_dovecot_imapsieve("rspamc-learn-spam.sh", "rspamc-learn-ham.sh")
+	_write_rspamc_scripts()
 
+
+def _dovecot_spam_learning_23() -> None:
+	"""Dovecot 2.3 spam learning via the third-party dovecot-antispam plugin.
+
+	Sieve-based learning (imapsieve) is not available in 2.3. antispam_backend=pipe
+	calls rspamc-learn-{spam,ham}.sh on Spam/Not-Spam moves. 2.4 uses imapsieve
+	instead. No mail_access_groups change is needed - rspamd stores Bayes state
+	in Redis, not on disk (unlike the SpamAssassin path, which needs group access
+	to on-disk bayes files).
+	"""
+	enable_antispam_plugin()
+	setup_dovecot_antispam_pipe("rspamc-learn-spam.sh", "rspamc-learn-ham.sh")
+	_write_rspamc_scripts()
+
+
+def _write_rspamc_scripts() -> None:
+	"""Write the rspamc pipe scripts shared by both the 2.3 and 2.4 plugin paths."""
 	artifacts.write_file(
 		"/usr/local/bin/rspamc-learn-spam.sh",
 		"#!/bin/bash\nexec /usr/bin/rspamc learn_spam\n",

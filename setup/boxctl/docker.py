@@ -7,7 +7,7 @@ from .questions import validate_hostname, validate_ipv4, validate_ipv6
 # ── Steps ─────────────────────────────────────────────────────────────────────
 
 
-def step_hostname(args, answers):
+def step_hostname(_args, answers):
 	current = answers.get("PRIMARY_HOSTNAME", "")
 	return text_prompt(
 		"What hostname will this mail server use?",
@@ -17,7 +17,7 @@ def step_hostname(args, answers):
 	)
 
 
-def step_public_ip(args, answers):
+def step_public_ip(_args, answers):
 	current = answers.get("PUBLIC_IP", "")
 	return text_prompt(
 		"What is the public IPv4 address of this server?",
@@ -27,7 +27,7 @@ def step_public_ip(args, answers):
 	)
 
 
-def step_public_ipv6(args, answers):
+def step_public_ipv6(_args, answers):
 	current = answers.get("PUBLIC_IPV6", "")
 	options = [
 		("None", "Most setups work fine with IPv4 only.", ""),
@@ -43,7 +43,7 @@ def step_public_ipv6(args, answers):
 	)
 
 
-def step_dns_mode(args, answers):
+def step_dns_mode(_args, answers):
 	current = answers.get("DNS_MODE")
 	options = [
 		("Self-hosted DNS", "This box is the authoritative nameserver for your domain.", "self"),
@@ -58,22 +58,22 @@ def step_dns_mode(args, answers):
 	)
 
 
-def step_webmail(args, answers):
+def step_webmail(_args, answers):
 	current = answers.get("WEBMAIL_CLIENT")
 	options = [
-		("oxi.email", "Rust-based webmail client. Adds the 'oxi' profile.", "oxi"),
+		("rav", "Rust-based webmail client. Adds the 'rav' profile.", "rav"),
 		("None (external clients)", "No webmail - use Thunderbird, Apple Mail, etc.", "none"),
 	]
 	return select_prompt(
 		"Which webmail client would you like to run?",
 		"Can be changed later by editing .env and rebuilding.",
 		options,
-		current or "oxi",
+		current or "rav",
 		current is not None,
 	)
 
 
-def step_filebrowser(args, answers):
+def step_filebrowser(_args, answers):
 	current = answers.get("ENABLE_FILEBROWSER")
 	options = [
 		("Yes", "Web-based file manager at /files. Adds the 'filebrowser' profile.", "true"),
@@ -88,7 +88,7 @@ def step_filebrowser(args, answers):
 	)
 
 
-def step_radicale(args, answers):
+def step_radicale(_args, answers):
 	current = answers.get("ENABLE_RADICALE")
 	options = [
 		("Yes", "CalDAV/CardDAV sync at /radicale. Adds the 'radicale' profile.", "true"),
@@ -103,7 +103,7 @@ def step_radicale(args, answers):
 	)
 
 
-def step_monitoring(args, answers):
+def step_monitoring(_args, answers):
 	current = answers.get("_MONITORING")
 	options = [
 		("Yes", "Munin monitoring dashboard. Adds the 'monitoring' profile.", "true"),
@@ -118,7 +118,7 @@ def step_monitoring(args, answers):
 	)
 
 
-def step_backup_tool(args, answers):
+def step_backup_tool(_args, answers):
 	current = answers.get("BACKUP_TOOL")
 	options = [
 		("restic", "Faster, deduplicating backups. Recommended for new installs.", "restic"),
@@ -133,7 +133,7 @@ def step_backup_tool(args, answers):
 	)
 
 
-def step_ports(args, answers):
+def step_ports(_args, answers):
 	current = answers.get("_PORT_PROFILE")
 	options = [
 		("Development", "Safe local ports: HTTP 8080, HTTPS 8443, SMTP 2525, DNS 5354. No root required.", "dev"),
@@ -169,7 +169,7 @@ VALUE_DISPLAY = {
 	"DNS_MODE": {"self": "Self-hosted", "external": "External"},
 	"ENABLE_FILEBROWSER": {"true": "Yes", "false": "No"},
 	"ENABLE_RADICALE": {"true": "Yes", "false": "No"},
-	"WEBMAIL_CLIENT": {"oxi": "oxi.email", "none": "None (external clients)"},
+	"WEBMAIL_CLIENT": {"rav": "rav", "none": "None (external clients)"},
 	"_MONITORING": {"true": "Yes", "false": "No"},
 	"BACKUP_TOOL": {"restic": "restic", "duplicity": "duplicity"},
 	"_PORT_PROFILE": {"dev": "Development", "prod": "Production"},
@@ -181,8 +181,8 @@ VALUE_DISPLAY = {
 def build_compose_command(answers):
 	"""Return the docker compose command string for the given answers."""
 	profiles = []
-	if answers.get("WEBMAIL_CLIENT") == "oxi":
-		profiles.append("oxi")
+	if answers.get("WEBMAIL_CLIENT") == "rav":
+		profiles.append("rav")
 	if answers.get("ENABLE_FILEBROWSER") == "true":
 		profiles.append("filebrowser")
 	if answers.get("ENABLE_RADICALE") == "true":
@@ -216,9 +216,8 @@ def write_env(path, answers, existing=None):
 	env_vars["DOVECOT_IMAP_BIND"] = "0.0.0.0"
 
 	tmp = path + ".tmp"
-	with open(tmp, "w") as f:
-		for k, v in env_vars.items():
-			f.write(f"{k}={v}\n")
+	with open(tmp, "w", encoding="utf-8") as f:
+		f.writelines(f"{k}={v}\n" for k, v in env_vars.items())
 	os.replace(tmp, path)
 
 
@@ -229,7 +228,7 @@ def run(env_path):
 	existing = load_conf(env_path)
 
 	clear()
-	print(f"\n  {bold('Mail-in-a-Box - Docker Setup')}")
+	print(f"\n  {bold('Naust - Docker Setup')}")
 	if existing:
 		print(f"  {gray_desc(f'Loaded existing config from {env_path}')}")
 	print(f"  {gray_desc('Configure your Docker deployment.')}\n")
@@ -241,6 +240,6 @@ def run(env_path):
 
 	clear()
 	print(f"\n  {green('✓')} {bold('Configuration saved to')} {env_path}\n")
-	print(f"  {bold('Run this command to start Mail-in-a-Box:')}\n")
+	print(f"  {bold('Run this command to start Naust:')}\n")
 	print(f"  {lavender(command)}\n")
 	print(f"  {gray_desc('Re-run at any time: python3 setup/boxctl docker')}\n")

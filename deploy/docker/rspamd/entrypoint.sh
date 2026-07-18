@@ -5,22 +5,22 @@
 
 set -euo pipefail
 
-MIAB=/opt/mailinabox
-source "$MIAB/deploy/docker/common-entrypoint.sh"
+NAUST=/opt/naust
+source "$NAUST/deploy/docker/common-entrypoint.sh"
 
 install_systemctl_stub
-write_mailinabox_conf
+write_naust_conf
 
 export RUNTIME=docker
 
-cd "$MIAB"
+cd "$NAUST"
 
 export LANGUAGE=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 export LC_TYPE=en_US.UTF-8
 
-source /etc/mailinabox.conf
+source /etc/naust.conf
 mkdir -p "$STORAGE_ROOT"
 
 echo "Configuring Rspamd..."

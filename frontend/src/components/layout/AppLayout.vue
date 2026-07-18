@@ -2,11 +2,11 @@
 import AppSidebar from './AppSidebar.vue'
 import AppMobileDrawer from './AppMobileDrawer.vue'
 import { useUiStore } from '@/stores/ui'
-import { useConfigStore } from '@/stores/config'
+import { useAuthStore } from '@/stores/auth'
 import { Menu } from 'lucide-vue-next'
 
 const ui = useUiStore()
-const config = useConfigStore()
+const auth = useAuthStore()
 </script>
 
 <template>
@@ -28,12 +28,27 @@ const config = useConfigStore()
         >
           <Menu class="size-5" />
         </button>
-        <span class="text-sm font-medium">{{ config.hostname || 'Mail-in-a-Box' }}</span>
+        <span class="text-sm font-medium">{{ auth.hostname || 'Naust' }}</span>
       </div>
 
       <div class="p-6">
-        <div class="mx-auto w-full max-w-5xl page">
-          <slot />
+        <div class="mx-auto w-full max-w-5xl page relative overflow-hidden">
+          <!-- This router-view is nested INSIDE AppLayout's own template - it
+               only resolves AppLayout's child page (UsersPage, etc.), never
+               AppLayout itself. Transitioning its output can't remount
+               AppLayout or the sidebar above; that's resolved once by the
+               outer router-view in App.vue, which is untouched. -->
+          <router-view v-slot="{ Component, route }">
+            <Transition name="crossfade">
+              <!-- Transition needs a single-root direct child; pages have
+                   multi-root templates (PageHeader/AsyncState/Dialogs as
+                   siblings), so the key and the animated element live on
+                   this plain div, not on <component> itself. -->
+              <div :key="route.path">
+                <component :is="Component" />
+              </div>
+            </Transition>
+          </router-view>
         </div>
       </div>
     </div>

@@ -1,7 +1,6 @@
 """Tests for the service name validation regex used in control-socket-server.py."""
 
 import re
-import pytest
 
 # Regex taken directly from deploy/docker/control-socket-server.py line 59.
 _SERVICE_RE = r"[A-Za-z0-9._-]+"

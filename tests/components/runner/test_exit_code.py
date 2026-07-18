@@ -7,7 +7,7 @@ import os
 import pytest
 from unittest.mock import patch
 
-from components.runner import _run_doit, STATE_DB
+from components.runner import _run_doit  # noqa: PLC2701
 
 
 def test_nonzero_exit_on_bad_dep(tmp_path):
@@ -15,8 +15,7 @@ def test_nonzero_exit_on_bad_dep(tmp_path):
 	fake_db = str(tmp_path / "setup-state.db")
 	os.makedirs(str(tmp_path), exist_ok=True)
 
-	with patch("components.runner.STATE_DB", fake_db):
-		with pytest.raises(SystemExit) as exc_info:
-			_run_doit({"fake_comp": tasks})
+	with patch("components.runner.STATE_DB", fake_db), pytest.raises(SystemExit) as exc_info:
+		_run_doit({"fake_comp": tasks})
 
 	assert exc_info.value.code != 0

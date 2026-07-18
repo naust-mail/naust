@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { Globe, Plus, Copy } from 'lucide-vue-next'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -21,12 +20,16 @@ import Select from '@/components/ui/Select.vue'
 import Badge from '@/components/ui/Badge.vue'
 import TableHead from '@/components/ui/TableHead.vue'
 import Th from '@/components/ui/Th.vue'
-import { useApi } from '@/composables/useApi'
-import type { DnsRecord } from '@/types'
+import { api, ApiError } from '@/api/client'
+import type {
+  CreateDNSRecordRequest,
+  DNSRecord,
+  DNSRecordsResponse,
+  DNSZonesResponse,
+  SecondaryNameservers,
+} from '@/api/types.gen'
 
-const api = useApi()
-
-const records = ref<DnsRecord[]>([])
+const records = ref<DNSRecord[]>([])
 const zones = ref<string[]>([])
 const loading = ref(true)
 const loadError = ref(false)
@@ -49,10 +52,11 @@ async function copyValue(key: string, value: string): Promise<void> {
 const saving = ref(false)
 const sheetOpen = ref(false)
 const deleteOpen = ref(false)
-const pendingDelete = ref<DnsRecord | null>(null)
+const pendingDelete = ref<DNSRecord | null>(null)
 
 // Secondary nameserver
 const secondaryHostnames = ref('')
+const secondaryLoading = ref(true)
 const savingSecondary = ref(false)
 
 // Add form
@@ -82,18 +86,17 @@ const qname = computed(() => {
 })
 
 async function loadZones(): Promise<void> {
-  const res = await api.get('/admin/dns/zones')
-  const data: string[] = await res.json()
-  zones.value = data
-  if (data.length && !fZone.value) fZone.value = data[0]
+  const resp = await api.get<DNSZonesResponse>('/api/dns/zones')
+  zones.value = resp.zones ?? []
+  if (zones.value.length && !fZone.value) fZone.value = zones.value[0]
 }
 
 async function loadRecords(): Promise<void> {
   loading.value = true
   loadError.value = false
   try {
-    const res = await api.get('/admin/dns/custom')
-    records.value = await res.json()
+    const resp = await api.get<DNSRecordsResponse>('/api/dns/custom')
+    records.value = resp.records ?? []
   } catch {
     loadError.value = true
     toast.error('Failed to load DNS records.')
@@ -103,33 +106,38 @@ async function loadRecords(): Promise<void> {
 }
 
 async function loadSecondary(): Promise<void> {
-  const res = await api.get('/admin/dns/secondary-nameserver')
-  const data: { hostnames: string[] } = await res.json()
-  secondaryHostnames.value = data.hostnames.join(' ')
+  secondaryLoading.value = true
+  try {
+    const resp = await api.get<SecondaryNameservers>('/api/dns/secondary-nameserver')
+    secondaryHostnames.value = (resp.hostnames ?? []).join(' ')
+  } finally {
+    secondaryLoading.value = false
+  }
 }
 
 async function addRecord(): Promise<void> {
   if (!qname.value || !fValue.value || saving.value) return
   saving.value = true
   try {
-    // Value sent as raw text - daemon reads request.stream directly
-    const res = await api.post(
-      `/admin/dns/custom/${encodeURIComponent(qname.value)}/${fRtype.value}`,
-      fValue.value,
-    )
-    const text = await res.text()
-    if (!res.ok) { toast.error(text); return }
-    toast.success(text || 'Record added.')
+    const req: CreateDNSRecordRequest = {
+      qname: qname.value,
+      rtype: fRtype.value,
+      value: fValue.value,
+    }
+    await api.post('/api/dns/custom', req)
+    toast.success('Record added.')
     sheetOpen.value = false
     fSubdomain.value = ''
     fValue.value = ''
     await loadRecords()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to add record.')
   } finally {
     saving.value = false
   }
 }
 
-function confirmDelete(record: DnsRecord): void {
+function confirmDelete(record: DNSRecord): void {
   pendingDelete.value = record
   deleteOpen.value = true
 }
@@ -139,15 +147,14 @@ async function doDelete(): Promise<void> {
   saving.value = true
   try {
     const { qname: q, rtype, value } = pendingDelete.value
-    const res = await api.del(
-      `/admin/dns/custom/${encodeURIComponent(q)}/${rtype}`,
-      value,
+    await api.del(
+      `/api/dns/custom/${encodeURIComponent(q)}/${rtype}?value=${encodeURIComponent(value)}`,
     )
-    const text = await res.text()
-    if (!res.ok) { toast.error(text); return }
-    toast.success(text || 'Record deleted.')
+    toast.success('Record deleted.')
     deleteOpen.value = false
     await loadRecords()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to delete record.')
   } finally {
     saving.value = false
   }
@@ -156,12 +163,13 @@ async function doDelete(): Promise<void> {
 async function saveSecondary(): Promise<void> {
   savingSecondary.value = true
   try {
-    const res = await api.post('/admin/dns/secondary-nameserver', {
-      hostnames: secondaryHostnames.value,
-    })
-    const text = await res.text()
-    if (!res.ok) { toast.error(text); return }
-    toast.success(text || 'Secondary nameserver updated.')
+    const req: SecondaryNameservers = {
+      hostnames: secondaryHostnames.value.split(/[\s,]+/).filter(s => s.length > 0),
+    }
+    await api.put('/api/dns/secondary-nameserver', req)
+    toast.success('Secondary nameserver updated.')
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to update secondary nameserver.')
   } finally {
     savingSecondary.value = false
   }
@@ -173,7 +181,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="Custom DNS" description="Add DNS records that this box does not create automatically.">
       <template #actions>
         <Button size="sm" @click="sheetOpen = true"><Plus class="size-3.5" />Add Record</Button>
@@ -189,7 +196,7 @@ onMounted(async () => {
             <Th>Name</Th>
             <Th>Type</Th>
             <Th>Value</Th>
-            <th scope="col" class="px-4 py-3"></th>
+            <Th />
           </TableHead>
           <tbody>
             <TableRow v-for="i in 3" :key="i">
@@ -203,7 +210,7 @@ onMounted(async () => {
       </template>
 
       <template #empty>
-        <EmptyState title="No custom DNS records" description="Add a record to override or extend this box's DNS.">
+        <EmptyState bordered title="No custom DNS records" description="Add a record to override or extend this box's DNS.">
           <template #icon><Globe /></template>
           <template #action><Button @click="sheetOpen = true">Add Record</Button></template>
         </EmptyState>
@@ -215,7 +222,7 @@ onMounted(async () => {
           <Th>Name</Th>
           <Th>Type</Th>
           <Th>Value</Th>
-          <th scope="col" class="px-4 py-3"></th>
+          <Th />
         </TableHead>
         <tbody>
           <template v-for="record in records" :key="`${record.qname}/${record.rtype}/${record.value}`">
@@ -230,14 +237,14 @@ onMounted(async () => {
                 <div class="font-mono text-sm text-muted max-w-[280px] truncate" :title="record.value">{{ record.value }}</div>
               </td>
               <td class="px-4 py-3 text-right">
-                <Button variant="ghost" size="sm" @click.stop="confirmDelete(record)">Delete</Button>
+                <Button variant="secondary" size="sm" @click.stop="confirmDelete(record)">Delete</Button>
               </td>
             </TableRow>
             <tr v-if="expandedKey === `${record.qname}/${record.rtype}/${record.value}`" class="border-b border-border">
               <td colspan="4" class="bg-sidebar px-4 py-3">
                 <div class="flex items-start gap-3">
                   <Code block wrap class="flex-1 min-w-0">{{ record.value }}</Code>
-                  <Button variant="ghost" size="sm" class="shrink-0 mt-1" @click.stop="copyValue(`${record.qname}/${record.rtype}/${record.value}`, record.value)">
+                  <Button variant="secondary" size="sm" class="shrink-0 mt-1" @click.stop="copyValue(`${record.qname}/${record.rtype}/${record.value}`, record.value)">
                     <Copy class="size-3" />{{ copiedKey === `${record.qname}/${record.rtype}/${record.value}` ? 'Copied!' : 'Copy' }}
                   </Button>
                 </div>
@@ -249,12 +256,16 @@ onMounted(async () => {
     </AsyncState>
 
     <!-- Secondary nameserver -->
-    <Card class="p-5 mt-6">
+    <Card padding="md" class="mt-6">
       <SectionHeader title="Secondary Nameserver" />
       <p class="text-sm text-muted mb-3">
         Space-separated list of secondary nameserver hostnames.
       </p>
-      <div class="flex gap-2">
+      <div v-if="secondaryLoading" class="flex gap-2">
+        <Skeleton class="h-9 w-full max-w-sm" />
+        <Skeleton class="h-9 w-16" />
+      </div>
+      <div v-else class="flex gap-2">
         <Input v-model="secondaryHostnames" placeholder="ns2.yourdomain.com" class="max-w-sm" aria-label="Secondary nameserver hostnames" />
         <Button :disabled="savingSecondary" @click="saveSecondary">
           {{ savingSecondary ? 'Saving...' : 'Save' }}
@@ -305,5 +316,4 @@ onMounted(async () => {
         </Button>
       </template>
     </Dialog>
-  </AppLayout>
 </template>

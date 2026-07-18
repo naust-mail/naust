@@ -3,9 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { Download, Copy, Check, ChevronRight } from 'lucide-vue-next'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
 import Badge from '@/components/ui/Badge.vue'
 import Select from '@/components/ui/Select.vue'
 import Table from '@/components/ui/Table.vue'
@@ -14,13 +14,10 @@ import Code from '@/components/ui/Code.vue'
 import TableHead from '@/components/ui/TableHead.vue'
 import Th from '@/components/ui/Th.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
-import { useApi } from '@/composables/useApi'
-import type { ExternalDnsEntry } from '@/types'
+import { api } from '@/api/client'
+import type { ExternalDNSRecord, ExternalDNSResponse } from '@/api/types.gen'
 
-const api = useApi()
-
-// /dns/dump returns [[zoneName, records[]], ...]
-type ZoneData = [string, ExternalDnsEntry[]]
+type ZoneData = [string, ExternalDNSRecord[]]
 
 const zones = ref<ZoneData[]>([])
 const dnsZones = ref<string[]>([])
@@ -32,12 +29,12 @@ const copiedKey = ref<string | null>(null)
 const filterTab = ref<'required' | 'recommended' | 'all'>('required')
 const hardeningOpen = ref<Record<string, boolean>>({})
 
-function coreRecords(records: ExternalDnsEntry[]): ExternalDnsEntry[] {
+function coreRecords(records: ExternalDNSRecord[]): ExternalDNSRecord[] {
   if (filterTab.value !== 'recommended') return records
   return records.filter(r => r.category !== 'hardening')
 }
 
-function hardeningRecords(records: ExternalDnsEntry[]): ExternalDnsEntry[] {
+function hardeningRecords(records: ExternalDNSRecord[]): ExternalDNSRecord[] {
   return records.filter(r => r.category === 'hardening')
 }
 
@@ -54,9 +51,9 @@ const counts = computed(() => ({
 }))
 
 const TYPE_ORDER: Record<string, number> = { A: 0, AAAA: 1, MX: 2, TXT: 3, TLSA: 4, SSHFP: 5 }
-const sortByType = (records: ExternalDnsEntry[]) =>
+const sortByType = (records: ExternalDNSRecord[]) =>
   [...records].sort((a, b) =>
-    (TYPE_ORDER[a.rtype] ?? 9) - (TYPE_ORDER[b.rtype] ?? 9) || a.qname.localeCompare(b.qname)
+    (TYPE_ORDER[a.type] ?? 9) - (TYPE_ORDER[b.type] ?? 9) || a.qname.localeCompare(b.qname)
   )
 
 const filteredZones = computed<ZoneData[]>(() =>
@@ -72,8 +69,8 @@ const filteredZones = computed<ZoneData[]>(() =>
     .filter(([, records]) => records.length > 0)
 )
 
-function recordSummary(r: ExternalDnsEntry): string {
-  switch (r.rtype) {
+function recordSummary(r: ExternalDNSRecord): string {
+  switch (r.type) {
     case 'A':
       if (r.qname.startsWith('autoconfig.'))  return 'Lets email apps find this server automatically'
       if (r.qname.startsWith('autodiscover.')) return 'Lets Outlook and compatible clients find this server'
@@ -101,12 +98,12 @@ function recordSummary(r: ExternalDnsEntry): string {
     case 'SSHFP':
       return 'Verifiable SSH fingerprint for this server'
     default:
-      return `${r.rtype} record`
+      return `${r.type} record`
   }
 }
 
-function recordExplanation(r: ExternalDnsEntry): string {
-  switch (r.rtype) {
+function recordExplanation(r: ExternalDNSRecord): string {
+  switch (r.type) {
     case 'A':    return `Resolves ${r.qname} to the server's IP address.`
     case 'AAAA': return `Resolves ${r.qname} to the server's IPv6 address. Not required for mail delivery.`
     case 'MX':
@@ -148,12 +145,9 @@ async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
   try {
-    const [dumpRes, zonesRes] = await Promise.all([
-      api.get('/admin/dns/dump'),
-      api.get('/admin/dns/zones'),
-    ])
-    zones.value = await dumpRes.json()
-    dnsZones.value = await zonesRes.json()
+    const resp = await api.get<ExternalDNSResponse>('/api/dns/external')
+    zones.value = (resp.zones ?? []).map(z => [z.zone, z.records ?? []])
+    dnsZones.value = (resp.zones ?? []).map(z => z.zone)
     if (dnsZones.value.length) selectedZone.value = dnsZones.value[0]
   } catch {
     loadError.value = true
@@ -163,11 +157,14 @@ async function load(): Promise<void> {
   }
 }
 
-async function downloadZonefile(): Promise<void> {
+// Rendered client-side from the loaded records: they are exactly the
+// desired record set, so no separate server endpoint is needed.
+function downloadZonefile(): void {
   if (!selectedZone.value) return
-  const res = await api.get(`/admin/dns/zonefile/${encodeURIComponent(selectedZone.value)}`)
-  const text = await res.text()
-  const blob = new Blob([text], { type: 'text/plain' })
+  const zone = zones.value.find(([name]) => name === selectedZone.value)
+  if (!zone) return
+  const lines = zone[1].map(r => `${r.qname}.\tIN\t${r.type}\t${r.value}`)
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -181,7 +178,6 @@ onMounted(load)
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="External DNS" description="Required DNS records if another provider controls your domain's nameservers.">
       <template #actions>
         <div class="flex items-center gap-2">
@@ -232,7 +228,7 @@ onMounted(load)
       </div>
 
       <div v-for="[zoneName, zoneRecords] in filteredZones" :key="zoneName" class="mb-8">
-        <h2 class="text-base font-semibold mb-3">{{ zoneName }}</h2>
+        <SectionHeader :title="zoneName" />
         <Table class="table-fixed">
           <TableHead>
             <Th class="w-[25%]">Name</Th>
@@ -241,8 +237,8 @@ onMounted(load)
             <Th class="w-[5%]"></Th>
           </TableHead>
           <tbody>
-            <template v-for="record in coreRecords(zoneRecords)" :key="`${record.qname}/${record.rtype}`">
-              <TableRow clickable @click="toggleExpand(`${record.qname}/${record.rtype}`)">
+            <template v-for="record in coreRecords(zoneRecords)" :key="`${record.qname}/${record.type}`">
+              <TableRow clickable @click="toggleExpand(`${record.qname}/${record.type}`)">
                 <td class="px-4 py-3 max-w-0 overflow-hidden">
                   <div class="font-mono text-xs truncate" :title="record.qname">{{ record.qname }}</div>
                 </td>
@@ -250,17 +246,17 @@ onMounted(load)
                   <span class="text-xs text-muted">{{ recordSummary(record) }}</span>
                 </td>
                 <td class="px-4 py-3">
-                  <Badge variant="default" class="font-mono">{{ record.rtype }}</Badge>
+                  <Badge variant="default" class="font-mono">{{ record.type }}</Badge>
                 </td>
                 <td class="px-4 py-3 text-right">
-                  <Button variant="ghost" size="icon" class="text-faint" @click.stop="copyValue(`${record.qname}/${record.rtype}`, record.value)" aria-label="Copy value">
-                    <Check v-if="copiedKey === `${record.qname}/${record.rtype}`" class="size-3.5 text-emerald-400" />
+                  <Button variant="secondary" size="icon" class="text-faint" @click.stop="copyValue(`${record.qname}/${record.type}`, record.value)" aria-label="Copy value">
+                    <Check v-if="copiedKey === `${record.qname}/${record.type}`" class="size-3.5 text-success" />
                     <Copy v-else class="size-3.5" />
                   </Button>
                 </td>
               </TableRow>
 
-              <tr v-if="expandedKey === `${record.qname}/${record.rtype}`" class="border-b border-border">
+              <tr v-if="expandedKey === `${record.qname}/${record.type}`" class="border-b border-border">
                 <td colspan="4" class="bg-sidebar px-4 py-3">
                   <Code block wrap>{{ record.value }}</Code>
                   <p v-if="recordExplanation(record)" class="text-xs text-muted mt-2">{{ recordExplanation(record) }}</p>
@@ -279,8 +275,8 @@ onMounted(load)
                 </td>
               </tr>
               <template v-if="hardeningOpen[zoneName]">
-                <template v-for="record in hardeningRecords(zoneRecords)" :key="`${record.qname}/${record.rtype}`">
-                  <TableRow clickable @click="toggleExpand(`${record.qname}/${record.rtype}`)">
+                <template v-for="record in hardeningRecords(zoneRecords)" :key="`${record.qname}/${record.type}`">
+                  <TableRow clickable @click="toggleExpand(`${record.qname}/${record.type}`)">
                     <td class="px-4 py-3 max-w-0 overflow-hidden">
                       <div class="font-mono text-xs truncate" :title="record.qname">{{ record.qname }}</div>
                     </td>
@@ -288,17 +284,17 @@ onMounted(load)
                       <span class="text-xs text-muted">{{ recordSummary(record) }}</span>
                     </td>
                     <td class="px-4 py-3">
-                      <Badge variant="default" class="font-mono">{{ record.rtype }}</Badge>
+                      <Badge variant="default" class="font-mono">{{ record.type }}</Badge>
                     </td>
                     <td class="px-4 py-3 text-right">
-                      <Button variant="ghost" size="icon" class="text-faint" @click.stop="copyValue(`${record.qname}/${record.rtype}`, record.value)" aria-label="Copy value">
-                        <Check v-if="copiedKey === `${record.qname}/${record.rtype}`" class="size-3.5 text-emerald-400" />
+                      <Button variant="secondary" size="icon" class="text-faint" @click.stop="copyValue(`${record.qname}/${record.type}`, record.value)" aria-label="Copy value">
+                        <Check v-if="copiedKey === `${record.qname}/${record.type}`" class="size-3.5 text-success" />
                         <Copy v-else class="size-3.5" />
                       </Button>
                     </td>
                   </TableRow>
 
-                  <tr v-if="expandedKey === `${record.qname}/${record.rtype}`" class="border-b border-border">
+                  <tr v-if="expandedKey === `${record.qname}/${record.type}`" class="border-b border-border">
                     <td colspan="4" class="bg-sidebar px-4 py-3">
                       <Code block wrap>{{ record.value }}</Code>
                       <p v-if="recordExplanation(record)" class="text-xs text-muted mt-2">{{ recordExplanation(record) }}</p>
@@ -311,6 +307,5 @@ onMounted(load)
         </Table>
       </div>
     </AsyncState>
-  </AppLayout>
 </template>
 

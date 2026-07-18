@@ -35,7 +35,7 @@ COMPONENT = Component(
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	dkim_dir = os.path.join(storage_root, "mail", "dkim")
 	key_path = os.path.join(dkim_dir, "mail.private")
@@ -122,7 +122,7 @@ def _opendkim_config() -> None:
 	# daemon has written the actual key/signing entries.
 	for f in ["/etc/opendkim/KeyTable", "/etc/opendkim/SigningTable"]:
 		if not os.path.exists(f):
-			open(f, "a").close()
+			open(f, "a", encoding="utf-8").close()
 
 	# Append only if not already configured (guard prevents duplicate entries).
 	result = subprocess.run(
@@ -130,7 +130,7 @@ def _opendkim_config() -> None:
 		check=False,
 	)
 	if result.returncode != 0:
-		with open("/etc/opendkim.conf", "a") as fh:
+		with open("/etc/opendkim.conf", "a", encoding="utf-8") as fh:
 			fh.write(
 				"Canonicalization\t\trelaxed/simple\n"
 				"MinimumKeyBits          1024\n"

@@ -1,0 +1,62 @@
+# Unprivileged management daemon (control plane). Owns user/alias/DNS/
+# TLS/backup state and serves the admin API on loopback; every privileged
+# action goes through the helper daemon's fixed intent menu over its
+# socket, never through this process.
+#
+# Installed by the managerd setup component with ${STORAGE_ROOT}
+# substituted; the binary is installed to /usr/local/lib/naust/
+# (never run from the repo checkout).
+
+[Unit]
+Description=Naust management daemon
+After=network.target naust-helper.service
+Wants=naust-helper.service
+
+[Service]
+Type=simple
+User=naust
+Group=naust
+ExecStart=/usr/local/lib/naust/managerd
+Restart=on-failure
+RestartSec=2
+
+# restic/duplicity subprocesses want a writable HOME for caches and
+# gnupg state; StateDirectory provides one that survives hardening.
+StateDirectory=naust-managerd
+Environment=HOME=/var/lib/naust-managerd
+Environment=XDG_CACHE_HOME=/var/lib/naust-managerd/cache
+
+# Hardening. The daemon is intentionally unprivileged: everything it may
+# write is listed here; anything else it needs done goes via helperd.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=${STORAGE_ROOT}/control
+ReadWritePaths=${STORAGE_ROOT}/mail/materialized
+ReadWritePaths=${STORAGE_ROOT}/mail/relay
+ReadWritePaths=${STORAGE_ROOT}/ssl
+ReadWritePaths=${STORAGE_ROOT}/backup
+ReadWritePaths=${STORAGE_ROOT}/dns/dnssec
+ReadWritePaths=/etc/nsd/zones /etc/nsd/nsd.conf.d
+ReadWritePaths=/var/lib/naust
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# AF_NETLINK is required for getifaddrs(3), which glibc uses internally
+# via an AF_NETLINK socket to enumerate network interfaces. Without it,
+# any subprocess this daemon spawns that calls getifaddrs() (postmap,
+# postqueue - both do, even for jobs that don't need interface info)
+# fails outright with "Address family not supported by protocol", which
+# looks like a Postfix/kernel bug but is actually this seccomp filter
+# rejecting the socket() call. Confirmed on a real box: postmap/postqueue
+# work fine run interactively as root, but fail consistently every time
+# managerd spawns them, with an inet_interfaces value making no
+# difference either way - isolating the cause to this list, not Postfix
+# config.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

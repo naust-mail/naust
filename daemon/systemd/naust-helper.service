@@ -1,0 +1,47 @@
+# Privileged helper for the Naust management daemon.
+# Executes a fixed menu of privileged operations on behalf of the
+# unprivileged manager over /run/naust/helper.sock.
+#
+# Installed to /etc/systemd/system/ by setup; the binary is installed to
+# /usr/local/lib/naust/ (never run from the repo checkout).
+
+[Unit]
+Description=Naust privileged helper
+After=network.target
+
+[Service]
+Type=simple
+User=root
+# Group owns RuntimeDirectory: /run/naust must be traversable by the
+# manager (socket group members), not just root.
+Group=naust
+ExecStart=/usr/local/lib/naust/helperd -socket /run/naust/helper.sock -socket-group naust
+RuntimeDirectory=naust
+RuntimeDirectoryMode=0750
+Restart=on-failure
+RestartSec=2
+
+# Hardening. ProtectSystem is deliberately NOT set: host.apt_upgrade
+# writes across /usr and /etc via dpkg. Revisit if apt moves to a
+# transient systemd-run unit (open question in helper-intent-menu.md).
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+# mailcrypt.keygen runs `doveadm mailbox cryptokey generate`, which writes
+# an initial index file into the user's mailbox to store the new key -
+# the only helperd intent that touches mail storage. STORAGE_ROOT
+# defaults under /home (e.g. /home/user-data), which ProtectHome=read-only
+# otherwise blocks entirely. Confirmed on a real box: doveadm failed with
+# "Read-only file system" on dovecot.index.log until this was added.
+# Narrowly scoped to the mailboxes tree, not all of STORAGE_ROOT.
+ReadWritePaths=${STORAGE_ROOT}/mail/mailboxes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

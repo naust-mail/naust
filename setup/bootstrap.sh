@@ -2,7 +2,7 @@
 #########################################################
 # This script is intended to be run like this:
 #
-#   curl https://mailinabox.email/setup.sh | sudo bash
+#   curl https://naust.email/setup.sh | sudo bash
 #
 #########################################################
 
@@ -26,7 +26,7 @@ if [ -z "$TAG" ]; then
 		echo
 		TAG=main
 	else
-		echo "Mail-in-a-Box supports Ubuntu 26.04 (recommended), 24.04, and 22.04."
+		echo "Naust supports Ubuntu 26.04 (recommended), 24.04, and 22.04."
 		echo "You are running: $UBUNTU_VERSION"
 		exit 1
 	fi
@@ -38,8 +38,8 @@ if [[ $EUID -ne 0 ]]; then
 	exit 1
 fi
 
-# Clone the Mail-in-a-Box repository if it doesn't exist.
-if [ ! -d "$HOME/mailinabox" ]; then
+# Clone the Naust repository if it doesn't exist.
+if [ ! -d "$HOME/naust" ]; then
 	if [ ! -f /usr/bin/git ]; then
 		echo "Installing git . . ."
 		apt-get -q -q update
@@ -48,25 +48,25 @@ if [ ! -d "$HOME/mailinabox" ]; then
 	fi
 
 	if [ "$SOURCE" == "" ]; then
-		SOURCE=https://github.com/boomboompower/mailinabox
+		SOURCE=https://github.com/naust-mail/naust
 	fi
 
-	echo "Downloading Mail-in-a-Box $TAG. . ."
+	echo "Downloading Naust $TAG. . ."
 	git clone \
 		-b "$TAG" --depth 1 \
 		"$SOURCE" \
-		"$HOME/mailinabox" \
+		"$HOME/naust" \
 		< /dev/null 2> /dev/null
 
 	echo
 fi
 
 # Change directory to it.
-cd "$HOME/mailinabox" || exit
+cd "$HOME/naust" || exit
 
 # Update it.
 if [ "$TAG" != "$(git describe --always)" ]; then
-	echo "Updating Mail-in-a-Box to $TAG . . ."
+	echo "Updating Naust to $TAG . . ."
 	git fetch --depth 1 --force --prune origin tag "$TAG"
 	if ! git checkout -q "$TAG"; then
 		echo "Update failed. Did you modify something in $PWD?"

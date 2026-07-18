@@ -19,7 +19,7 @@ bp.before_request(require_admin)
 
 # Shared on-disk cache path - same file the nightly cron writes, so GET /system/status
 # is instant on first visit after the cron has run.
-_STATUS_CACHE_FILE = "/var/cache/mailinabox/status_checks.json"
+_STATUS_CACHE_FILE = "/var/cache/naust/status_checks.json"
 
 
 def _load_cache_from_disk():
@@ -115,10 +115,10 @@ def system_version():
 
 @bp.route('/latest-upstream-version', methods=["POST"])
 def system_latest_upstream_version():
-	from services.status_checks import get_latest_miab_version
+	from services.status_checks import get_latest_naust_version
 
 	try:
-		return get_latest_miab_version()
+		return get_latest_naust_version()
 	except Exception as e:
 		return (sanitize_error_message(str(e)), 500)
 
@@ -178,8 +178,10 @@ def do_updates():
 
 	if not shutil.which("apt-get"):
 		return ("Package management is not available in this environment.", 501)
-	utils.shell("check_call", ["/usr/bin/apt-get", "-qq", "update"])
-	return utils.shell("check_output", ["/usr/bin/apt-get", "-y", "upgrade"], env={"DEBIAN_FRONTEND": "noninteractive"})
+	from services.control_plane import apt_update, apt_upgrade
+
+	apt_update()
+	return apt_upgrade()
 
 
 @bp.route('/reboot', methods=["GET"])
@@ -202,7 +204,9 @@ def do_reboot():
 	from services.status_checks import is_reboot_needed_due_to_package_installation
 
 	if is_reboot_needed_due_to_package_installation():
-		return utils.shell("check_output", ["/sbin/shutdown", "-r", "now"], capture_stderr=True)
+		from services.control_plane import host_reboot
+
+		return host_reboot()
 	return "No reboot is required, so it is not allowed."
 
 

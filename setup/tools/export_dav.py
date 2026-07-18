@@ -3,11 +3,11 @@
 Export CalDAV/CardDAV data for all users to a directory of standard vCard and iCal files.
 
 Supports two storage backends:
-  - oxi (default): reads per-user SQLite databases from $OXI_DATA_DIR
+  - rav (default): reads per-user SQLite databases from $RAV_DATA_DIR
   - multifilesystem: copies files from /var/lib/radicale/collections/
 
 Usage:
-  sudo python3 setup/tools/export_dav.py [--output DIR] [--storage oxi|files]
+  sudo python3 setup/tools/export_dav.py [--output DIR] [--storage rav|files]
 
 Output layout:
   <DIR>/
@@ -18,22 +18,22 @@ Output layout:
 The output files can be imported directly into Nextcloud via its web interface
 under Contacts > Import and Calendar > Import.
 
-Run as root - the oxi database files are owned by www-data.
+Run as root - the rav database files are owned by www-data.
 """
 
 import argparse
 import hashlib
 import os
-import shutil
+import pathlib
 import sqlite3
 import sys
 from datetime import datetime, timezone
 
-_PRODID = "-//MIAB//oxi.email//EN"
+_PRODID = "-//NAUST//rav//EN"
 
 
 # ---------------------------------------------------------------------------
-# Helpers (duplicated from radicale_miab/storage.py to keep this standalone)
+# Helpers (duplicated from radicale_naust/storage.py to keep this standalone)
 # ---------------------------------------------------------------------------
 
 
@@ -83,8 +83,7 @@ def _contact_to_vcard(row: sqlite3.Row) -> str:
 		first = _vcard_escape(parts[0]) if len(parts) > 1 else _vcard_escape(name)
 		lines.append(f"N:{last};{first};;;")
 	else:
-		lines.append(f"FN:{email}")
-		lines.append("N:;;;;")
+		lines.extend((f"FN:{email}", "N:;;;;"))
 	if email:
 		lines.append(f"EMAIL;TYPE=INTERNET:{_vcard_escape(email)}")
 	if row["company"]:
@@ -92,8 +91,7 @@ def _contact_to_vcard(row: sqlite3.Row) -> str:
 	if row["notes"]:
 		lines.append(_fold(f"NOTE:{_vcard_escape(row['notes'])}"))
 	rev = (row["updated_at"] or "").replace(" ", "T").rstrip("Z") + "Z"
-	lines.append(f"REV:{rev}")
-	lines.append("END:VCARD")
+	lines.extend((f"REV:{rev}", "END:VCARD"))
 	return "\r\n".join(lines) + "\r\n"
 
 
@@ -132,12 +130,12 @@ def _event_to_ical(row: sqlite3.Row) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Export: oxi SQLite backend
+# Export: rav SQLite backend
 # ---------------------------------------------------------------------------
 
 
-def _export_oxi(oxi_data_dir: str, users_db: str, output_dir: str) -> None:
-	"""Export from oxi per-user SQLite databases."""
+def _export_rav(rav_data_dir: str, users_db: str, output_dir: str) -> None:
+	"""Export from rav per-user SQLite databases."""
 	# Get all known email addresses from the users database.
 	conn = sqlite3.connect(users_db)
 	conn.row_factory = sqlite3.Row
@@ -146,9 +144,9 @@ def _export_oxi(oxi_data_dir: str, users_db: str, output_dir: str) -> None:
 
 	exported = 0
 	for email in emails:
-		db_path = os.path.join(oxi_data_dir, _hash_email(email), "db.sqlite")
+		db_path = os.path.join(rav_data_dir, _hash_email(email), "db.sqlite")
 		if not os.path.exists(db_path):
-			print(f"  skip {email}: no oxi database (user has never logged into oxi)")
+			print(f"  skip {email}: no rav database (user has never logged into rav)")
 			continue
 
 		db = sqlite3.connect(db_path)
@@ -163,8 +161,7 @@ def _export_oxi(oxi_data_dir: str, users_db: str, output_dir: str) -> None:
 			if rows:
 				vcf_path = os.path.join(user_dir, "contacts.vcf")
 				with open(vcf_path, "w", encoding="utf-8") as f:
-					for row in rows:
-						f.write(_contact_to_vcard(row))
+					f.writelines(_contact_to_vcard(row) for row in rows)
 				print(f"  {email}: {len(rows)} contact(s)")
 		except sqlite3.OperationalError:
 			pass  # table doesn't exist yet for this user
@@ -175,8 +172,7 @@ def _export_oxi(oxi_data_dir: str, users_db: str, output_dir: str) -> None:
 			if rows:
 				ics_path = os.path.join(user_dir, "calendar.ics")
 				with open(ics_path, "w", encoding="utf-8") as f:
-					for row in rows:
-						f.write(_event_to_ical(row))
+					f.writelines(_event_to_ical(row) for row in rows)
 				print(f"  {email}: {len(rows)} calendar event(s)")
 		except sqlite3.OperationalError:
 			pass
@@ -216,9 +212,7 @@ def _export_files(radicale_collections_dir: str, output_dir: str) -> None:
 			if vcf_files:
 				vcf_out = os.path.join(user_dir, "contacts.vcf")
 				with open(vcf_out, "w", encoding="utf-8") as out:
-					for vcf in vcf_files:
-						with open(vcf.path, encoding="utf-8") as f:
-							out.write(f.read())
+					out.writelines(pathlib.Path(vcf.path).read_text(encoding="utf-8") for vcf in vcf_files)
 				print(f"  {email}: {len(vcf_files)} contact(s)")
 
 		if os.path.isdir(calendar_dir):
@@ -226,9 +220,7 @@ def _export_files(radicale_collections_dir: str, output_dir: str) -> None:
 			if ics_files:
 				ics_out = os.path.join(user_dir, "calendar.ics")
 				with open(ics_out, "w", encoding="utf-8") as out:
-					for ics in ics_files:
-						with open(ics.path, encoding="utf-8") as f:
-							out.write(f.read())
+					out.writelines(pathlib.Path(ics.path).read_text(encoding="utf-8") for ics in ics_files)
 				print(f"  {email}: {len(ics_files)} calendar event(s)")
 
 		exported += 1
@@ -243,9 +235,9 @@ def _export_files(radicale_collections_dir: str, output_dir: str) -> None:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-	parser.add_argument("--output", default="/tmp/dav-export", help="Directory to write export files to (default: /tmp/dav-export)")
-	parser.add_argument("--storage", choices=["oxi", "files"], default="oxi", help="Storage backend: oxi (default) or files (multifilesystem)")
-	parser.add_argument("--oxi-data-dir", default="/home/user-data/oxi", help="Path to oxi data directory (default: /home/user-data/oxi)")
+	parser.add_argument("--output", default="/tmp/dav-export", help="Directory to write export files to (default: /tmp/dav-export)")  # noqa: S108 - discoverable default export destination for the operator, not a scratch file
+	parser.add_argument("--storage", choices=["rav", "files"], default="rav", help="Storage backend: rav (default) or files (multifilesystem)")
+	parser.add_argument("--rav-data-dir", default="/home/user-data/rav", help="Path to rav data directory (default: /home/user-data/rav)")
 	parser.add_argument("--users-db", default="/home/user-data/mail/db/users.sqlite", help="Path to the users SQLite database")
 	parser.add_argument("--radicale-dir", default="/var/lib/radicale/collections", help="Path to Radicale multifilesystem collections directory")
 	args = parser.parse_args()
@@ -257,8 +249,8 @@ def main() -> None:
 	os.makedirs(args.output)
 	print(f"Exporting to {args.output} (storage={args.storage})\n")
 
-	if args.storage == "oxi":
-		_export_oxi(args.oxi_data_dir, args.users_db, args.output)
+	if args.storage == "rav":
+		_export_rav(args.rav_data_dir, args.users_db, args.output)
 	else:
 		_export_files(args.radicale_dir, args.output)
 

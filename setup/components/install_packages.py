@@ -6,7 +6,7 @@ Used in Dockerfiles at build time so packages are baked into the image:
     RUN python3 -m components.install_packages dns ssl
 
 Only reads COMPONENT.packages - does not call make_tasks() and does not
-require /etc/mailinabox.conf. At build time RUNTIME is unset so
+require /etc/naust.conf. At build time RUNTIME is unset so
 packages.ensure_installed() runs apt normally. At container runtime
 RUNTIME=docker so ensure_installed() is a no-op (packages already present).
 """

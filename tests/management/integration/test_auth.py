@@ -1,14 +1,14 @@
 """Integration tests for auth/auth.py - AuthService class.
 
 AuthService.init_system_api_key() reads a key file from disk. We patch that
-out with a temporary file so tests don't need /var/lib/mailinabox to exist.
+out with a temporary file so tests don't need /var/lib/naust to exist.
 """
 
-import os
 import sqlite3
 from unittest.mock import patch, MagicMock
 
 import pytest
+import pathlib
 
 _KICK_USERS = "mail.mailconfig.sync.kick"
 _DOVEADM = "mail.mailconfig.users.dovecot_quota_recalc"
@@ -20,8 +20,7 @@ def _make_auth_service(tmp_path):
 	import secrets as _secrets
 
 	api_key = _secrets.token_hex(32)
-	with open(key_file, "w") as f:
-		f.write(api_key)
+	pathlib.Path(key_file).write_text(api_key)
 	from auth.auth import AuthService
 
 	svc = AuthService.__new__(AuthService)
@@ -221,7 +220,8 @@ def test_session_invalidated_when_mfa_enabled(test_db, tmp_path):
 	assert svc.get_session("mfachange@example.com", key, "login", test_db) is not None
 
 	# Enable TOTP - changes get_hash_mfa_state() which changes the password_state_token.
-	import base64, secrets as _secrets
+	import base64
+	import secrets as _secrets
 	import pyotp
 
 	raw_bytes = _secrets.token_bytes(20)

@@ -1,6 +1,5 @@
 import datetime
 import gzip
-import os
 import os.path
 import re
 import shutil

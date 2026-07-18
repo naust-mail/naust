@@ -23,9 +23,8 @@ def test_dovecot_raises_without_storage_root():
 	"""dovecot.make_tasks() directly indexes env['STORAGE_ROOT']."""
 	from components.defs import dovecot
 
-	with patch("subprocess.run", return_value=_DOVECOT_FAKE):
-		with pytest.raises(KeyError):
-			dovecot.make_tasks({}, "baremetal")
+	with patch("subprocess.run", return_value=_DOVECOT_FAKE), pytest.raises(KeyError):
+		dovecot.make_tasks({}, "baremetal")
 
 
 def test_ssl_raises_without_storage_root():

@@ -63,7 +63,7 @@ def install_cert_copy_file(fn, env):
 	os.makedirs(os.path.dirname(ssl_certificate), exist_ok=True)
 	shutil.move(fn, ssl_certificate)
 	# mkstemp creates 0600 files; make the cert readable by ssl-cert group
-	# so services like oxi can verify loopback TLS without keeping a stale copy.
+	# so services like rav can verify loopback TLS without keeping a stale copy.
 	shutil.chown(ssl_certificate, group="ssl-cert")
 	os.chmod(ssl_certificate, 0o640)
 
@@ -97,7 +97,7 @@ def post_install_func(env):
 
 		cp_restart("postfix")
 		cp_restart("dovecot")
-		cp_restart("oxi-email")
+		cp_restart("rav")
 		ret.append("mail services restarted")
 
 		# The DANE TLSA record will remain valid so long as the private key

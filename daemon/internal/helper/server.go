@@ -77,13 +77,13 @@ func (s *Server) handle(conn net.Conn) {
 
 	// Execution may legitimately outlast the read deadline (apt).
 	conn.SetDeadline(time.Time{})
-	execErr := Dispatch(context.Background(), s.Deps, req)
+	result, execErr := Dispatch(context.Background(), s.Deps, req)
 
 	conn.SetDeadline(time.Now().Add(readTimeout))
 	if execErr != nil {
 		s.respond(conn, Response{OK: false, Error: execErr.Error()})
 	} else {
-		s.respond(conn, Response{OK: true})
+		s.respond(conn, Response{OK: true, Result: result})
 	}
 	s.audit(req.Intent, req.Args, uid, start, execErr)
 }

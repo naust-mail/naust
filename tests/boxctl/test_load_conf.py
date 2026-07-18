@@ -1,7 +1,5 @@
 """Tests for load_conf and write_output in setup/boxctl/runner.py."""
 
-import os
-import pytest
 from boxctl.runner import load_conf, write_output
 
 

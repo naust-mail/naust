@@ -3,17 +3,17 @@
 #
 # Provides:
 #   install_systemctl_stub  - replaces /usr/local/bin/systemctl with the stub
-#   write_mailinabox_conf   - writes /etc/mailinabox.conf from env vars
+#   write_naust_conf   - writes /etc/naust.conf from env vars
 #
 # The container entrypoint must source this file early, before sourcing any
-# MIAB setup script.
+# NAUST setup script.
 
 set -euo pipefail
 
 install_systemctl_stub() {
     # Copy the stub into PATH so every subsequent 'systemctl ...' call in the
     # setup scripts is intercepted without any code changes to those scripts.
-    cp /opt/mailinabox/deploy/docker/systemctl-stub.sh /usr/local/bin/systemctl
+    cp /opt/naust/deploy/docker/systemctl-stub.sh /usr/local/bin/systemctl
     chmod +x /usr/local/bin/systemctl
 
     # Setup scripts also write systemd unit files via envsubst before calling
@@ -42,8 +42,8 @@ link_conf_to_storage() {
     ln -sfn "$target" "$etc_path"
 }
 
-write_mailinabox_conf() {
-    # Write /etc/mailinabox.conf from environment variables.  All setup scripts
+write_naust_conf() {
+    # Write /etc/naust.conf from environment variables.  All setup scripts
     # source this file on startup; in Docker the values come from the compose
     # environment instead of the interactive questions.sh wizard.
     #
@@ -76,9 +76,12 @@ write_mailinabox_conf() {
     local webmail_host="${WEBMAIL_HOST:-127.0.0.1}"
     local filebrowser_host="${FILEBROWSER_HOST:-127.0.0.1}"
     local radicale_host="${RADICALE_HOST:-127.0.0.1}"
+    local rspamd_host="${RSPAMD_HOST:-127.0.0.1}"
+    local redis_host="${REDIS_HOST:-127.0.0.1}"
+    local nginx_host="${NGINX_HOST:-127.0.0.1}"
 
     mkdir -p /etc
-    cat > /etc/mailinabox.conf <<EOF
+    cat > /etc/naust.conf <<EOF
 STORAGE_USER=${storage_user}
 STORAGE_ROOT=${storage_root}
 PRIMARY_HOSTNAME=${PRIMARY_HOSTNAME}
@@ -89,7 +92,7 @@ PRIVATE_IPV6=${private_ipv6}
 MTA_STS_MODE=${MTA_STS_MODE:-enforce}
 ENABLE_FILEBROWSER=${ENABLE_FILEBROWSER:-false}
 ENABLE_RADICALE=${ENABLE_RADICALE:-false}
-WEBMAIL_CLIENT=${WEBMAIL_CLIENT:-oxi}
+WEBMAIL_CLIENT=${WEBMAIL_CLIENT:-rav}
 DNS_MODE=${DNS_MODE:-self}
 BACKUP_TOOL=${BACKUP_TOOL:-restic}
 SPAM_FILTER=${SPAM_FILTER:-rspamd}
@@ -99,6 +102,9 @@ MANAGEMENT_HOST=${management_host}
 WEBMAIL_HOST=${webmail_host}
 FILEBROWSER_HOST=${filebrowser_host}
 RADICALE_HOST=${radicale_host}
+RSPAMD_HOST=${rspamd_host}
+REDIS_HOST=${redis_host}
+NGINX_HOST=${nginx_host}
 EOF
 
     # On bare metal, start.sh creates the STORAGE_USER OS account before sourcing

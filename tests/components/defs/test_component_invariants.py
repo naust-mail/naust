@@ -8,7 +8,7 @@ they reach runtime: wrong package names, duplicate component names, bad types.
 import re
 import pytest
 
-from components.runner import _discover
+from components.runner import _discover  # noqa: PLC2701
 
 # Load once for all tests in this module.
 _ALL_DEFS = _discover()

@@ -8,6 +8,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import pathlib
+import contextlib
+
 
 _TOOLS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "tools"))
 _EDITCONF = os.path.join(_TOOLS_DIR, "editconf.py")
@@ -35,8 +38,7 @@ def hash_files(*paths: str) -> str:
 			entries.append((os.path.basename(path), path))
 	entries.sort()
 	for rel_path, abs_path in entries:
-		with open(abs_path, "rb") as fh:
-			digest = hashlib.sha256(fh.read()).hexdigest()
+		digest = hashlib.sha256(pathlib.Path(abs_path).read_bytes()).hexdigest()
 		h.update(f"{digest}  {rel_path}\n".encode())
 	return h.hexdigest()
 
@@ -50,26 +52,23 @@ def fetch_prebuilt(url: str, sha256: str, dest: str) -> None:
 		os.close(fd)
 		print(f"  Downloading {url}...")
 		urllib.request.urlretrieve(url, tmp)
-		actual = hashlib.sha256(open(tmp, "rb").read()).hexdigest()
+		actual = hashlib.sha256(pathlib.Path(tmp).read_bytes()).hexdigest()
 		if actual != sha256:
-			raise RuntimeError(f"Checksum mismatch for {url}\n  expected: {sha256}\n  got:      {actual}")
+			msg = f"Checksum mismatch for {url}\n  expected: {sha256}\n  got:      {actual}"
+			raise RuntimeError(msg)
 		os.makedirs(os.path.dirname(dest), exist_ok=True)
 		os.replace(tmp, dest)
 	except Exception:
-		try:
+		with contextlib.suppress(OSError):
 			os.unlink(tmp)
-		except OSError:
-			pass
 		raise
 
 
 def write_file(path: str, content: str, *, mode: int = 0o644) -> bool:
 	"""Write content to path atomically. Returns True if the file changed."""
 	encoded = content.encode()
-	if os.path.exists(path):
-		with open(path, "rb") as f:
-			if f.read() == encoded:
-				return False
+	if os.path.exists(path) and pathlib.Path(path).read_bytes() == encoded:
+		return False
 	os.makedirs(os.path.dirname(path), exist_ok=True)
 	fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path))
 	try:
@@ -82,6 +81,20 @@ def write_file(path: str, content: str, *, mode: int = 0o644) -> bool:
 		os.unlink(tmp)
 		raise
 	return True
+
+
+def render_template(path: str, subs: dict[str, str] | None = None) -> str:
+	"""Read a config template and substitute ${KEY} placeholders.
+
+	Only keys present in subs are replaced; every other character - including
+	Dovecot %{...} variables and Postfix $names - passes through untouched.
+	Plain string replacement with an explicit key list, mirroring how envsubst
+	is used for the systemd unit templates.
+	"""
+	text = pathlib.Path(path).read_text(encoding="utf-8")
+	for key, value in (subs or {}).items():
+		text = text.replace("${" + key + "}", value)
+	return text
 
 
 def editconf(
@@ -108,7 +121,7 @@ def file_hash(path: str) -> str:
 	"""md5 of a file, or empty string if missing. Used for before/after change detection."""
 	if not os.path.exists(path):
 		return ""
-	return hashlib.md5(open(path, "rb").read()).hexdigest()
+	return hashlib.md5(open(path, "rb").read()).hexdigest()  # noqa: S324 -- change-detection fingerprint, not security-sensitive
 
 
 def fn_stamp(fn: object, _seen: set | None = None) -> str:
@@ -205,7 +218,8 @@ def fn_stamp(fn: object, _seen: set | None = None) -> str:
 		elif isinstance(value, (list, dict, set)):
 			# Mutable container referenced by this function - fn_stamp cannot capture
 			# it safely. Raise so the component author uses config_changed() explicitly.
-			raise TypeError(f"fn_stamp: {fn.__qualname__} references module-level {type(value).__name__} '{name}' which fn_stamp cannot track. Use config_changed() with an explicit serialisation (e.g. config_changed(':'.join({name}))) instead.")
+			msg = f"fn_stamp: {fn.__qualname__} references module-level {type(value).__name__} '{name}' which fn_stamp cannot track. Use config_changed() with an explicit serialisation (e.g. config_changed(':'.join({name}))) instead."
+			raise TypeError(msg)
 		# Anything else (modules, classes, etc.) is intentionally skipped.
 
 	return h.hexdigest()
@@ -227,6 +241,23 @@ def ufw_limit(rule: str) -> None:
 	if os.environ.get("DISABLE_FIREWALL"):
 		return
 	subprocess.run(["ufw", "limit", rule], check=True, capture_output=True)
+
+
+def ubuntu_supports_encryption() -> bool:
+	"""Encryption at rest requires Ubuntu 26.04+ (Dovecot 2.4 with dovecot.http).
+
+	Ubuntu 22.04/24.04 use Dovecot 2.3 which lacks dovecot.http in the Lua auth
+	module, blocking mailcrypt.
+	"""
+	try:
+		with open("/etc/os-release", encoding="utf-8") as fh:
+			for line in fh:
+				if line.startswith("VERSION_ID="):
+					version = float(line.split("=", 1)[1].strip().strip('"'))
+					return version >= 26
+	except (OSError, ValueError):
+		pass
+	return False
 
 
 # Import runtime constants here so defs files only need `from .. import artifacts`.

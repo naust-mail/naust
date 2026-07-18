@@ -2,7 +2,9 @@ import datetime
 import operator
 import re
 
-import dateutil.parser, dateutil.relativedelta, dateutil.tz
+import dateutil.parser
+import dateutil.relativedelta
+import dateutil.tz
 
 from core.utils import shell
 
@@ -381,7 +383,7 @@ def list_target_files(config):
 			target_path += '/'
 		target_path = target_path.removeprefix('/')
 
-		rsync_command = ['rsync', '-e', f'/usr/bin/ssh -i /root/.ssh/id_rsa_miab -oStrictHostKeyChecking=no -oBatchMode=yes -p {port}', '--list-only', '-r', rsync_target.format(host=user_host, path=target_path)]
+		rsync_command = ['rsync', '-e', f'/usr/bin/ssh -i /root/.ssh/id_rsa_naust -oStrictHostKeyChecking=no -oBatchMode=yes -p {port}', '--list-only', '-r', rsync_target.format(host=user_host, path=target_path)]
 
 		code, listing = shell('check_output', rsync_command, trap=True, capture_stderr=True)
 		if code == 0:
@@ -400,7 +402,7 @@ def list_target_files(config):
 		elif 'Could not resolve hostname' in listing:
 			reason = f"The hostname {target.hostname} cannot be resolved."
 		else:
-			reason = "Unknown error. Please check running 'management/services/backup --verify' from mailinabox sources to debug the issue."
+			reason = "Unknown error. Please check running 'management/services/backup --verify' from naust sources to debug the issue."
 		msg = f"Connection to rsync host failed: {reason}"
 		raise ValueError(msg)
 

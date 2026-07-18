@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import { X } from 'lucide-vue-next'
+import { useModalKeyboard } from '@/composables/useModalKeyboard'
 
 const open = defineModel<boolean>()
 defineProps<{ title?: string }>()
@@ -18,6 +19,8 @@ watch(open, async (val) => {
     triggerEl = null
   }
 })
+
+useModalKeyboard(open, panelRef, () => { open.value = false })
 </script>
 
 <template>

@@ -9,7 +9,6 @@ Steps:
   motd           - suppress Ubuntu MOTD news adverts
   ntp            - enable systemd-timesyncd for clock accuracy
   no-upgrade     - suppress 'upgrade to next Ubuntu release' prompts
-  ssh-key        - generate /root/.ssh/id_rsa_miab for rsync backup
   apt-periodic   - write unattended-upgrades schedule
   ufw            - enable firewall, rate-limit SSH (skipped if DISABLE_FIREWALL)
   unbound        - local recursive DNS resolver on 127.0.0.1:53 with DNSSEC
@@ -29,6 +28,8 @@ from doit.tools import config_changed
 
 from .. import artifacts, SETUP_DIR
 from ..component import Component, DOCKER
+import pathlib
+import contextlib
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 	public_ipv6 = env.get("PUBLIC_IPV6", "")
 	storage_root = env.get("STORAGE_ROOT", "/home/user-data")
 	timezone = env.get("TIMEZONE", "")
-	webmail_client = env.get("WEBMAIL_CLIENT", "oxi")
+	webmail_client = env.get("WEBMAIL_CLIENT", "rav")
 	enable_radicale = env.get("ENABLE_RADICALE", "true")
 
 	fail2ban_stamp = f"{public_ip}:{public_ipv6}:{storage_root}:{webmail_client}:{enable_radicale}:{artifacts.hash_files(_FAIL2BAN_CONF, _FAIL2BAN_FILTER_DIR)}"
@@ -113,11 +114,6 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 			"actions": [(_no_upgrade,)],
 		},
 		{
-			"name": "ssh-key",
-			"targets": ["/root/.ssh/id_rsa_miab"],
-			"actions": [(_ssh_key,)],
-		},
-		{
 			"name": "apt-periodic",
 			"targets": ["/etc/apt/apt.conf.d/02periodic"],
 			"uptodate": [config_changed(artifacts.fn_stamp(_apt_periodic))],
@@ -125,13 +121,13 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 		},
 		{
 			"name": "unbound",
-			"targets": ["/etc/unbound/unbound.conf.d/mailinabox.conf"],
+			"targets": ["/etc/unbound/unbound.conf.d/naust.conf"],
 			"uptodate": [config_changed(artifacts.fn_stamp(_unbound))],
 			"actions": [(_unbound,)],
 		},
 		{
 			"name": "fail2ban",
-			"targets": ["/etc/fail2ban/jail.d/mailinabox.conf"],
+			"targets": ["/etc/fail2ban/jail.d/naust.conf"],
 			"uptodate": [config_changed(fail2ban_stamp)],
 			"actions": [
 				(
@@ -182,8 +178,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 def _hostname(hostname: str) -> None:
 	if not hostname:
 		return
-	with open("/etc/hostname", "w") as f:
-		f.write(hostname + "\n")
+	pathlib.Path("/etc/hostname").write_text(hostname + "\n", encoding="utf-8")
 	subprocess.run(["hostname", hostname], check=False)
 
 
@@ -196,41 +191,43 @@ def _permissions() -> None:
 
 
 def _swap() -> None:
-	"""Create a 1G swapfile if RAM < 2GB and free disk > 5GB and no swap exists."""
+	"""Create a 2G swapfile if RAM < 2GB and free disk > 6GB and no swap exists.
+
+	Sized so a small box can compile the Go daemon and the admin frontend
+	from source when no prebuilt release assets are available.
+	"""
 	# Check existing swap sources.
-	with open("/proc/swaps") as f:
+	with open("/proc/swaps", encoding="utf-8") as f:
 		if len(f.readlines()) > 1:  # header + at least one device
 			return
-	with open("/etc/fstab") as f:
-		if "swap" in f.read():
-			return
+	if "swap" in pathlib.Path("/etc/fstab").read_text(encoding="utf-8"):
+		return
 
 	# Check filesystem type - btrfs + swapfiles needs extra setup.
-	with open("/proc/mounts") as f:
-		if "btrfs" in f.read():
-			return
+	if "btrfs" in pathlib.Path("/proc/mounts").read_text(encoding="utf-8"):
+		return
 
 	# Memory and disk checks.
-	with open("/proc/meminfo") as f:
+	with open("/proc/meminfo", encoding="utf-8") as f:
 		mem_kb = int(f.readline().split()[1])  # MemTotal in kB
 	if mem_kb >= 1_900_000:
 		return
 
-	result = subprocess.run(["df", "/", "--output=avail"], capture_output=True, text=True)
+	result = subprocess.run(["df", "/", "--output=avail"], capture_output=True, text=True, check=False)
 	avail_kb = int(result.stdout.strip().splitlines()[-1])
-	if avail_kb < 5_242_880:  # 5 GB
+	if avail_kb < 6_291_456:  # 6 GB: the 2G file plus the 4G headroom the 5G check used to leave
 		return
 
-	print("Adding a 1G swap file...")
-	subprocess.run(["fallocate", "-l", "1G", "/swapfile"], check=True)
+	print("Adding a 2G swap file...")
+	subprocess.run(["fallocate", "-l", "2G", "/swapfile"], check=True)
 	os.chmod("/swapfile", 0o600)
 	subprocess.run(["mkswap", "/swapfile"], check=True, capture_output=True)
 	subprocess.run(["swapon", "/swapfile"], check=True)
 
 	# Verify it mounted, then persist.
-	result = subprocess.run(["swapon", "-s"], capture_output=True, text=True)
+	result = subprocess.run(["swapon", "-s"], capture_output=True, text=True, check=False)
 	if "/swapfile" in result.stdout:
-		with open("/etc/fstab", "a") as f:
+		with open("/etc/fstab", "a", encoding="utf-8") as f:
 			f.write("/swapfile   none    swap    sw    0   0\n")
 	else:
 		print("WARNING: swap allocation failed")
@@ -245,10 +242,8 @@ def _motd() -> None:
 	"""Disable Ubuntu MOTD news to avoid leaking server info in MOTD headers."""
 	artifacts.editconf("/etc/default/motd-news", "ENABLED=0")
 	# Remove cached news file if present.
-	try:
+	with contextlib.suppress(FileNotFoundError):
 		os.unlink("/var/cache/motd-news")
-	except FileNotFoundError:
-		pass
 
 
 def _ntp() -> None:
@@ -260,22 +255,8 @@ def _no_upgrade() -> None:
 	"""Suppress Ubuntu's 'upgrade to next release' prompts on the server."""
 	if os.path.exists("/etc/update-manager/release-upgrades"):
 		artifacts.editconf("/etc/update-manager/release-upgrades", "Prompt=never")
-		try:
+		with contextlib.suppress(FileNotFoundError):
 			os.unlink("/var/lib/ubuntu-release-upgrader/release-upgrade-available")
-		except FileNotFoundError:
-			pass
-
-
-def _ssh_key() -> None:
-	"""Generate an ed25519 key for rsync backups. Created once, never rotated."""
-	os.makedirs("/root/.ssh", mode=0o700, exist_ok=True)
-	key = "/root/.ssh/id_rsa_miab"
-	if os.path.exists(key):
-		return
-	subprocess.run(
-		["ssh-keygen", "-t", "ed25519", "-f", key, "-N", "", "-q"],
-		check=True,
-	)
 
 
 def _apt_periodic() -> None:
@@ -318,7 +299,7 @@ def _unbound() -> None:
 
 	os.makedirs("/etc/unbound/unbound.conf.d", exist_ok=True)
 	artifacts.write_file(
-		"/etc/unbound/unbound.conf.d/mailinabox.conf",
+		"/etc/unbound/unbound.conf.d/naust.conf",
 		"server:\n"
 		"    interface: 127.0.0.1\n"
 		"    port: 53\n"
@@ -368,10 +349,9 @@ def _fail2ban(
 	cypht_jail = "true" if webmail_client == "cypht" else "false"
 	roundcube_jail = "true" if webmail_client == "roundcube" else "false"
 	snappymail_jail = "true" if webmail_client == "snappymail" else "false"
-	oxi_jail = "true" if webmail_client == "oxi" else "false"
+	webmail_jail = "true" if webmail_client == "rav" else "false"
 
-	with open(_FAIL2BAN_CONF) as f:
-		content = f.read()
+	content = pathlib.Path(_FAIL2BAN_CONF).read_text(encoding="utf-8")
 
 	content = (
 		content
@@ -382,7 +362,7 @@ def _fail2ban(
 		.replace("CYPHT_JAIL_ENABLED", cypht_jail)
 		.replace("ROUNDCUBE_JAIL_ENABLED", roundcube_jail)
 		.replace("SNAPPYMAIL_JAIL_ENABLED", snappymail_jail)
-		.replace("OXI_JAIL_ENABLED", oxi_jail)
+		.replace("RAV_JAIL_ENABLED", webmail_jail)
 	)
 
 	os.makedirs("/etc/fail2ban/jail.d", exist_ok=True)
@@ -392,12 +372,10 @@ def _fail2ban(
 		"/etc/fail2ban/jail.d/defaults-debian.conf",
 		"/etc/fail2ban/jail.d/nginx-ratelimit.conf",
 	]:
-		try:
+		with contextlib.suppress(FileNotFoundError):
 			os.unlink(stale)
-		except FileNotFoundError:
-			pass
 
-	artifacts.write_file("/etc/fail2ban/jail.d/mailinabox.conf", content)
+	artifacts.write_file("/etc/fail2ban/jail.d/naust.conf", content)
 
 	# Install filter definitions.
 	os.makedirs("/etc/fail2ban/filter.d", exist_ok=True)

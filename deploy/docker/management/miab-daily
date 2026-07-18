@@ -1,3 +1,0 @@
-# Run nightly maintenance: backup, cert renewal, status checks, usage report.
-# Matches the 3am schedule used on bare metal.
-0 3 * * * root /usr/local/lib/mailinabox/run-daily-tasks.sh >> /proc/1/fd/1 2>&1

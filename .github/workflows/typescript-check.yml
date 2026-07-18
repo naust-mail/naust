@@ -1,7 +1,7 @@
 name: TypeScript check
 
-# Type-checks both the admin frontend (Vue 3 + vue-tsc) and the docs site
-# (Next.js + tsc). The Docker build intentionally skips vue-tsc to avoid a
+# Type-checks the admin frontend (Vue 3 + vue-tsc).
+# The Docker build intentionally skips vue-tsc to avoid a
 # slow type-check in the image build layer, so this workflow is the only place
 # TypeScript errors are caught before merge.
 
@@ -9,19 +9,17 @@ on:
   push:
     paths:
       - 'frontend/**'
-      - 'docs/**'
       - '.github/workflows/typescript-check.yml'
   pull_request:
     paths:
       - 'frontend/**'
-      - 'docs/**'
       - '.github/workflows/typescript-check.yml'
 
 jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
 
@@ -34,12 +32,3 @@ jobs:
           bun install --frozen-lockfile
           bunx vue-tsc --noEmit
 
-      # tsc --noEmit catches type errors; bun run build catches MDX/content issues
-      # that only surface when Next.js actually processes the pages. Both are fast
-      # enough with bun that running them in sequence is cheaper than a broken deploy.
-      - name: Check docs types and build
-        working-directory: docs
-        run: |
-          bun install --frozen-lockfile
-          bunx tsc --noEmit
-          bun run build

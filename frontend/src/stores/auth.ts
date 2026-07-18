@@ -1,32 +1,51 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { InitData, LoginApiResponse } from '@/types'
+import { api, ApiError } from '@/api/client'
+import type { LoginRequest, LoginResponse, MetaResponse, User } from '@/api/types.gen'
+
+/** Pre-auth facts stamped into boot.js by setup at install time, so
+ *  the first paint never waits on the API. /api/meta stays the source
+ *  of truth and overwrites the seed on init(). */
+type BoxBoot = { hostname?: string }
 
 export const useAuthStore = defineStore('auth', () => {
-  // Seed initial state from the __INIT__ bootstrap data injected by the server.
-  // On an authenticated page load the server validates the admin_session cookie
-  // and injects email + privileges so the app starts in the correct state
-  // without an extra round-trip. On unauthenticated loads these are absent.
-  const el = document.getElementById('__INIT__')
-  const init: Partial<InitData> = el?.textContent ? JSON.parse(el.textContent) : {}
+  const boot = (window as Window & { __BOX__?: BoxBoot }).__BOX__
+  const user = ref<User | null>(null)
+  const hostname = ref(boot?.hostname ?? '')
+  const needsBootstrap = ref(false)
+  /** True once init() has resolved; the router waits on it before the
+   *  first navigation so guards see real auth state. */
+  const ready = ref(false)
 
-  const email = ref<string | null>(init.email ?? null)
-  const privileges = ref<string[]>(init.privileges ?? [])
-  const needsBootstrap = ref<boolean>(init.needsBootstrap ?? false)
-  const monitoringTool = ref<'munin' | 'beszel' | 'netdata' | null>(init.monitoringTool ?? null)
-  const capabilities = ref<string[]>(init.capabilities ?? [])
+  /** Box-level feature flags from /api/meta ("encryption_at_rest",
+   *  "monitoring"). */
+  const capabilities = ref<string[]>([])
 
-  const isLoggedIn = computed(() => !!email.value)
-  const isAdmin = computed(() => privileges.value.includes('admin'))
+  const email = computed(() => user.value?.email ?? null)
+  const isLoggedIn = computed(() => !!user.value)
+  const isAdmin = computed(() => user.value?.role === 'admin')
 
-  /** Called by all login paths (password, password+TOTP, passkey) after the server
-   *  sets the admin_session cookie. Only metadata is stored here - the session key
-   *  lives exclusively in the HttpOnly cookie, never in JavaScript. */
-  function handleAuthSuccess(emailAddr: string, privs: string[], tool?: 'munin' | 'beszel' | 'netdata' | null, caps?: string[]): void {
-    email.value = emailAddr
-    privileges.value = privs
-    if (tool !== undefined) monitoringTool.value = tool
-    if (caps !== undefined) capabilities.value = caps
+  /** The panel's single boot request: /api/meta answers the pre-auth
+   *  facts and resolves the session cookie in one round trip (user is
+   *  null when not logged in). */
+  async function init(): Promise<void> {
+    try {
+      const meta = await api.get<MetaResponse>('/api/meta')
+      hostname.value = meta.hostname
+      needsBootstrap.value = meta.needs_bootstrap
+      user.value = meta.user
+      capabilities.value = meta.capabilities ?? []
+    } catch {
+      // Unreachable API: leave defaults, the login attempt will surface it.
+    }
+    ready.value = true
+  }
+
+  /** Called by login paths that complete outside login() (passkey,
+   *  bootstrap). The session key lives in the HttpOnly cookie the
+   *  server just set; only the user metadata is stored here. */
+  function handleAuthSuccess(u: User): void {
+    user.value = u
   }
 
   function clearBootstrap(): void {
@@ -34,43 +53,53 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearSession(): void {
-    email.value = null
-    privileges.value = []
+    user.value = null
   }
 
   async function login(
     emailAddr: string,
     password: string,
-    totpToken?: string,
-  ): Promise<'ok' | 'missing-totp-token' | string> {
-    const headers: Record<string, string> = {
-      Authorization: 'Basic ' + btoa(`${emailAddr}:${password}`),
-      'X-Requested-With': 'XMLHttpRequest',
-    }
-    if (totpToken) headers['X-Auth-Token'] = totpToken
-
-    const res = await fetch('/admin/login', { method: 'POST', headers })
-    const data: LoginApiResponse = await res.json()
-
-    if (data.status === 'ok' && data.email && data.privileges) {
-      // Server has set the admin_session cookie. Store metadata in Pinia.
-      handleAuthSuccess(data.email, data.privileges, data.monitoringTool, data.capabilities)
+    totpCode?: string,
+  ): Promise<'ok' | 'missing-totp-code' | string> {
+    const req: LoginRequest = { email: emailAddr, password }
+    if (totpCode) req.totp_code = totpCode
+    try {
+      const resp = await api.post<LoginResponse>('/api/auth/login', req)
+      user.value = resp.user
       return 'ok'
+    } catch (e) {
+      if (e instanceof ApiError) {
+        if (e.hints.includes('missing-totp-code')) return 'missing-totp-code'
+        if (e.hints.includes('use-passkey')) return 'use-passkey'
+        return e.message
+      }
+      return 'Login failed. Please try again.'
     }
-    if (data.status === 'missing-totp-token') return 'missing-totp-token'
-    return data.reason || 'Login failed.'
   }
 
   async function logout(): Promise<void> {
     clearSession()
-    await fetch('/admin/logout', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      // Credentials included so the browser sends the admin_session cookie,
-      // allowing the server to invalidate it.
-      credentials: 'same-origin',
-    }).catch(() => {})
+    try {
+      await api.post<undefined>('/api/auth/logout', undefined, { silent401: true })
+    } catch {
+      // Session already gone server-side; the cookie is cleared either way.
+    }
   }
 
-  return { email, privileges, needsBootstrap, monitoringTool, capabilities, isLoggedIn, isAdmin, handleAuthSuccess, clearBootstrap, clearSession, login, logout }
+  return {
+    user,
+    hostname,
+    email,
+    needsBootstrap,
+    ready,
+    capabilities,
+    isLoggedIn,
+    isAdmin,
+    init,
+    handleAuthSuccess,
+    clearBootstrap,
+    clearSession,
+    login,
+    logout,
+  }
 })

@@ -25,8 +25,14 @@ RSPAMD_POSTFIX_MILTERS = "rspamd:postfix-milters"
 # dkim - assigns smtpd_milters= in main.cf (spamassassin path); clamav appends after this
 DKIM_POSTFIX_MILTERS = "dkim:postfix-milters"
 
-# management - duplicity pip-install depends on the management venv existing first
-MANAGEMENT_VIRTUALENV = "management:virtualenv"
-
-# ssl - self-signed cert generation; oxi's config references the cert paths
+# ssl - self-signed cert generation; rav's config references the cert paths
 SSL_CERT = "ssl:cert"
+
+# daemon - Go binary installation; unit-installing components depend on
+# the binary their unit execs
+DAEMON_HELPERD = "daemon:helperd"
+DAEMON_MANAGERD = "daemon:managerd"
+DAEMON_MUNINWEB = "daemon:muninweb"
+
+# helper - creates the naust socket group; the managerd user joins it
+HELPER_GROUP = "helper:group"

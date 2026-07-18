@@ -15,8 +15,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . /opt/mailinabox
-WORKDIR /opt/mailinabox
+COPY . /opt/naust
+WORKDIR /opt/naust
 
 COPY deploy/docker/rspamd/supervisord.conf /etc/supervisor/conf.d/rspamd.conf
 COPY deploy/docker/rspamd/entrypoint.sh /entrypoint.sh

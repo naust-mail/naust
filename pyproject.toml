@@ -13,6 +13,14 @@ preview = true
 
 output-format = "concise"
 
+# management/ (Flask) is parked and on the delete-list, not maintained code -
+# skip it here so CI doesn't gate on a tree that's going away. CI no longer
+# passes "management/" on the command line at all, but force-exclude is kept
+# so any explicit/local invocation (e.g. `ruff check .`) still skips it too -
+# exclude/extend-exclude are otherwise ignored for explicitly-passed paths.
+extend-exclude = ["management"]
+force-exclude = true
+
 [tool.ruff.lint]
 select = [
 	"F",
@@ -63,13 +71,73 @@ ignore = [
 	"RUF001",
 	"RUF002",
 	"RUF003",
-	"RUF023"
+	"RUF023",
+	# Every site flagged is a deliberate wide try scope: atomic write-then-cleanup
+	# (temp file must be unlinked on any failure across the whole sequence), a
+	# fail-closed auth hook, best-effort per-row migration/export, or a query
+	# wrapped to catch one specific exception (e.g. sqlite3.OperationalError for
+	# a table that may not exist yet) - narrowing any of these would break the
+	# behavior the try block exists for, not just satisfy a statement count.
+	"PLW0717",
+	# setup/components/__init__.py (SETUP_DIR) and defs/backup/__init__.py
+	# (backup_key_task/ssh_key_task) are deliberate package-level shared
+	# constants/helpers, imported by a dozen+ component defs and tests - not
+	# accidental cruft. Splitting them into a separate module purely to satisfy
+	# this preview-mode style rule would mean an invasive import-path rename
+	# across the tree for no behavior change.
+	"RUF067",
+	# Every site flagged raises deliberately to trigger its own enclosing except
+	# clause (cleanup-then-reraise, corrupt-state detection that removes the bad
+	# file, a per-row raise caught by an immediately-following best-effort log-
+	# and-continue) - a standard, idiomatic try/except pattern. Abstracting the
+	# raise into an inner function per the rule's suggestion would add ceremony
+	# without improving readability.
+	"TRY301",
+	# Both sites are one-off installer/migration scripts iterating over a
+	# handful of items (CLI args, aliases from a small per-box table) - the
+	# per-iteration try/except overhead this rule warns about is irrelevant
+	# at that scale, and it's not a hot path.
+	"PERF203",
+	# Opinionated preview-mode style rule wanting `# ruff:ignore[name]` instead
+	# of `# noqa: CODE` - ruff's own docs say to disable it if you simply
+	# prefer noqa comments, which this codebase does throughout.
+	"RUF105"
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# boxctl health checks and doctor TUI: intentionally call system tools by short name
-# and inspect returncode rather than using check=True.
-"setup/boxctl/*.py" = ["S404", "S603", "S607", "PLW1510", "PLW0717"]
+# setup/ is the installer: shelling out to system tools by short name (systemctl,
+# apt-get, etc.) and relative imports within setup/components/ are the whole
+# point, not a risk to flag on every call site. Imports inside functions are
+# deliberate too - CLI subcommands (boxctl/__main__.py) and component task
+# builders (components/defs/*.py) lazy-import so a single invocation only pays
+# for the dependencies it actually needs, not every component's/subcommand's.
+# S103 (chmod 0o755) flags every installed binary and world-traversable directory
+# the installer creates (/usr/local/bin/*, ssl_dir, nginx.d, etc.) - 0o755 is the
+# correct, standard mode for those, not an oversight; bandit's threshold is just
+# "> 0o644" with no distinction between executables/dirs and secret-bearing files.
+# S104 (0.0.0.0 bind) sites are all conditional on runtime == "docker" - a
+# container needs to bind all interfaces since services run in separate
+# containers; bare metal still binds loopback only. No narrower alternative.
+# S310 (urlopen scheme audit) sites are all hardcoded https:// URLs, this
+# project's own GitHub API releases endpoint, or an internal http://MANAGEMENT_HOST
+# URL substituted at setup time - none accept an attacker-controlled scheme.
+"setup/**/*.py" = ["S404", "S603", "S607", "TID252", "PLC0415", "S103", "S104", "S310"]
+# boxctl health checks and doctor TUI: intentionally inspect returncode rather
+# than using check=True, and aggregate multi-step checks in one try clause.
+"setup/boxctl/*.py" = ["PLW1510", "PLW0717"]
+# Test suite: pytest idioms these rules were never designed for - assert is the
+# assertion mechanism (not a stripped-under-optimization production check), test
+# methods on a class routinely don't touch self, fixture args are often unused by
+# design, and tests commonly do lazy/conditional imports (skip guards, submodule
+# reloads) that don't belong at module top-level.
+"tests/**/*.py" = ["S101", "PLR6301", "ARG001", "ARG002", "PLC0415"]
+# Radicale storage plugin: these methods override radicale.storage.BaseStorage /
+# BaseCollection. Radicale calls them by its own contract, sometimes with
+# keyword args matching the base class's exact parameter names - renaming an
+# unused one to satisfy ARG002 risks a silent TypeError from Radicale's side,
+# not ours to control. Same reasoning for PLR6301: these stay instance methods
+# because Radicale calls them on an instance, even where the body doesn't use self.
+"setup/conf/radicale/storage.py" = ["ARG002", "PLR6301"]
 
 [tool.ruff.format]
 quote-style = "preserve"

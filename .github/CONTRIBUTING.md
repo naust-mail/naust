@@ -1,10 +1,10 @@
 # Contributing
 
-Contributions are welcome. This is an actively developed fork of Mail-in-a-Box with a specific direction - read this guide before sending a PR to avoid wasted effort.
+Contributions are welcome. Naust is an actively developed hard fork of Mail-in-a-Box with a specific direction - read this guide before sending a PR to avoid wasted effort.
 
 ## Project direction
 
-This project replaces the PHP/Nextcloud stack with modern alternatives (oxi.email, FileBrowser, Radicale) and adds a Vue 3 admin UI and WebAuthn. The mail core - Postfix, Dovecot, NSD - is intentionally stable and conservative.
+This project replaces the PHP/Nextcloud stack with modern alternatives (Rav webmail, FileBrowser, Radicale), a Go control-plane daemon, a Vue 3 admin UI, and WebAuthn. The mail core - Postfix, Dovecot, NSD - is intentionally stable and conservative.
 
 **Good contributions:**
 - Bug fixes with a clear reproduction
@@ -25,13 +25,14 @@ This project replaces the PHP/Nextcloud stack with modern alternatives (oxi.emai
 
 - Python 3.10+
 - [Docker](https://docs.docker.com/get-docker/) with Compose (`docker compose version`)
-- Node.js 20+ and npm (for admin UI work only)
+- Go 1.22+ (for control-plane daemon work only)
+- [Bun](https://bun.sh) (for admin UI work only)
 
 ### Quickstart
 
 ```bash
-git clone https://github.com/boomboompower/mailinabox
-cd mailinabox
+git clone https://github.com/naust-mail/naust.git
+cd naust
 python3 setup/boxctl docker    # interactive Docker setup wizard
 ```
 
@@ -42,7 +43,7 @@ cp deploy/docker/.env.example deploy/docker/.env
 # set PRIMARY_HOSTNAME in .env
 
 docker compose -f deploy/docker/docker-compose.yml \
-  --profile oxi --profile filebrowser --profile radicale --profile monitoring \
+  --profile rav --profile filebrowser --profile radicale --profile monitoring \
   up --build
 ```
 
@@ -53,13 +54,14 @@ The admin panel is at `https://localhost:8443/admin`. The initial admin account 
 Rebuild one container without restarting the stack:
 
 ```bash
-docker compose -f deploy/docker/docker-compose.yml --profile oxi up --build -d webmail
+docker compose -f deploy/docker/docker-compose.yml --profile rav up --build -d webmail
 ```
 
-Re-run a setup script inside its container:
+To pick up a change to a `setup/components/defs/*.py` component, re-run the installer -
+it's idempotent, so only the changed component actually re-applies:
 
 ```bash
-docker exec -it miab-mail bash -c "cd /opt/mailinabox && sudo setup/mail/postfix.sh"
+sudo setup/install.sh
 ```
 
 ### Admin UI (Vue 3)
@@ -68,41 +70,51 @@ The frontend lives in `frontend/` and is built separately from the setup scripts
 
 ```bash
 cd frontend
-npm install
-npm run dev      # dev server with hot reload - proxies API to the management daemon
-npm run build    # production build, output to management/static/app/
+bun install
+bun run dev      # dev server with hot reload - proxies API to the control-plane daemon
+bun run build    # production build, output to dist/admin, served statically by nginx
 ```
 
-The admin UI talks to the management daemon at `https://<box>/admin/api/`. In dev mode, Vite proxies API calls to the running Docker management container.
+The admin UI talks to the Go control-plane daemon (`managerd`) at `https://<box>/admin/api/`. In dev mode, Vite proxies API calls to the running Docker daemon container.
 
 ## Codebase layout
 
 ```
+daemon/            # Go control-plane daemon (managerd) - the successor to management/
+  internal/
+    auth/           # password hashing, sessions, WebAuthn
+    httpapi/        # REST API served under /api
+    checks/         # system status checks
+    ...
+
 setup/
-  infra/          # TLS, nginx, fail2ban, firewall, system
-  mail/           # Postfix, Dovecot, rspamd, SpamAssassin
-  webmail/        # oxi.email, Cypht, SnappyMail, Roundcube
-  optional/       # FileBrowser, Radicale
-  monitoring/     # Munin
-  boxctl/         # interactive setup wizard (Python TUI)
+  components/
+    defs/           # one Python module per component (TLS, Postfix, rspamd, webmail
+                     # clients, FileBrowser, Radicale, monitoring, system, ...) -
+                     # doit-based, must be idempotent
+  boxctl/           # interactive setup wizard (Python TUI)
   conf/
-    nginx/        # nginx config templates
-    mail/         # Dovecot, Postfix config templates
-    fail2ban/     # jails and filters
-    systemd/      # service unit files
+    nginx/          # nginx config templates
+    dovecot/        # Dovecot config templates, versioned by dialect
+    fail2ban/       # jails and filters
+    systemd/        # service unit files
 
-management/       # Python management daemon and REST API
-  services/       # mail, DNS, SSL, backup, web service logic
+management/         # legacy Python (Flask) daemon and REST API - being retired by
+                     # daemon/; still present during the cutover, avoid new features here
 
-frontend/         # Vue 3 + Vite + TypeScript admin UI
+frontend/            # Vue 3 + Vite + TypeScript admin UI
   src/
-    pages/        # one file per admin panel page
-    components/   # shared components
-    stores/       # Pinia stores
-    composables/  # API hooks
+    pages/            # one file per admin panel page
+    components/       # shared components
+    stores/           # Pinia stores
+    composables/       # API hooks
 
 deploy/
-  docker/         # Dockerfiles, compose files, entrypoints
+  docker/            # Dockerfiles, compose files, entrypoints
+
+tests/               # Python component tests (pytest) - setup/components, boxctl,
+                     # control socket, tools. Go tests live alongside their packages
+                     # under daemon/ (*_test.go).
 ```
 
 All setup scripts are **idempotent** - running them more than once must be safe. This is a hard requirement.
@@ -117,11 +129,23 @@ All setup scripts are **idempotent** - running them more than once must be safe.
 
 Use the PR template. At minimum, describe what changed and how you tested it (Docker, bare metal, or neither - all are fine, just be honest).
 
-Setup script changes should be tested with a full Docker stack run. Changes to `management/` or `frontend/` can be tested with the Docker management container alone.
+Setup script changes should be tested with a full Docker stack run. Changes to `daemon/` or `frontend/` can be tested with the Docker daemon container alone.
 
 ## Tests
 
-There is no automated test suite. Contributions that add test coverage are welcome.
+Run the Python component test suite from the repo root:
+
+```bash
+pytest tests/
+```
+
+Run the Go daemon test suite:
+
+```bash
+cd daemon && go test ./...
+```
+
+Both suites must pass before a PR is merged. Contributions that add coverage are welcome.
 
 ## License
 

@@ -39,30 +39,21 @@ const stateKey = computed<StateKey>(() => {
 </script>
 
 <template>
-  <Transition name="async-fade" mode="out-in">
-    <div :key="stateKey">
-      <slot v-if="stateKey === 'loading'" name="loading" />
-      <slot v-else-if="stateKey === 'error'" name="error">
-        <EmptyState :title="errorTitle" :description="errorDescription">
-          <template #icon><WifiOff /></template>
-          <template #action>
-            <Button variant="secondary" @click="emit('retry')">Try again</Button>
-          </template>
-        </EmptyState>
-      </slot>
-      <slot v-else-if="stateKey === 'empty'" name="empty" />
-      <slot v-else />
-    </div>
-  </Transition>
+  <div class="relative overflow-hidden">
+    <Transition name="crossfade">
+      <div :key="stateKey">
+        <slot v-if="stateKey === 'loading'" name="loading" />
+        <slot v-else-if="stateKey === 'error'" name="error">
+          <EmptyState :title="errorTitle" :description="errorDescription">
+            <template #icon><WifiOff /></template>
+            <template #action>
+              <Button variant="secondary" @click="emit('retry')">Try again</Button>
+            </template>
+          </EmptyState>
+        </slot>
+        <slot v-else-if="stateKey === 'empty'" name="empty" />
+        <slot v-else />
+      </div>
+    </Transition>
+  </div>
 </template>
-
-<style scoped>
-.async-fade-enter-active,
-.async-fade-leave-active {
-  transition: opacity 0.12s ease;
-}
-.async-fade-enter-from,
-.async-fade-leave-to {
-  opacity: 0;
-}
-</style>

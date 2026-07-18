@@ -12,7 +12,7 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
     type="checkbox"
     :checked="modelValue"
     :disabled="disabled"
-    class="size-4 rounded border-border-strong bg-surface focus:ring-2 focus:ring-accent"
+    class="size-4 rounded border-border-strong bg-surface outline-none ring-2 ring-transparent focus:ring-accent-ring transition-colors"
     @change="$emit('update:modelValue', ($event.target as HTMLInputElement).checked)"
   />
 </template>

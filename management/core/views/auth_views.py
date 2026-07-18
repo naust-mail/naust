@@ -82,6 +82,7 @@ def login():
 	current_app.logger.info("New login session created for %s", email)
 
 	from core.views.spa_views import _build_capabilities
+
 	monitoring = env.get('MONITORING_TOOL', 'none')
 	response = make_response(
 		json_response({
@@ -222,7 +223,7 @@ def list_tokens():
 @require_admin_route
 def create_token():
 	# API tokens may not create other API tokens - only session/basic auth callers can.
-	if request.token_scope != 'full':
+	if request.token_scope != 'full':  # noqa: S105 -- access scope label, not a secret
 		return ('API tokens cannot create other API tokens.', 403)
 	from auth.api_tokens import create_token as _create_token
 
@@ -245,7 +246,7 @@ def create_token():
 @require_admin_route
 def revoke_token(token_id: int):
 	# API tokens can only revoke themselves, not other tokens.
-	if request.token_scope != 'full' and request.caller_token_id != token_id:
+	if request.token_scope != 'full' and request.caller_token_id != token_id:  # noqa: S105 -- access scope label, not a secret
 		return ('API tokens can only revoke themselves.', 403)
 	from auth.api_tokens import revoke_token as _revoke_token
 

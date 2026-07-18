@@ -12,7 +12,6 @@ fixture, and restored on teardown. This prevents stub entries from leaking
 into other test modules that import the real services.* packages.
 """
 
-import importlib
 import importlib.util
 import pathlib
 import sys

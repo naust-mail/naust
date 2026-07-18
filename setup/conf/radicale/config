@@ -1,0 +1,34 @@
+[server]
+hosts = ${BIND_HOST}:5232
+max_connections = 20
+max_content_length = 10000000
+timeout = 30
+
+[auth]
+type = radicale_naust.auth
+# management_host: address of the management daemon used to validate credentials.
+management_host = ${MANAGEMENT_HOST}
+delay = 1
+cache_logins = True
+cache_successful_logins_expiry = 300
+cache_failed_logins_expiry = 90
+urldecode_username = True
+
+[rights]
+type = owner_only
+permit_delete_collection = False
+permit_overwrite_collection = False
+
+[storage]
+${STORAGE_BLOCK}
+
+[web]
+type = none
+
+[logging]
+level = warning
+mask_passwords = True
+
+[headers]
+X-Frame-Options = DENY
+Content-Security-Policy = frame-ancestors 'none'

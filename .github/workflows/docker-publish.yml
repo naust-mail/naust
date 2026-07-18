@@ -12,7 +12,7 @@ on:
     paths:
       - 'deploy/docker/**'
       - 'setup/components/**'
-      - 'management/**'
+      - 'daemon/**'
       - 'frontend/**'
       - 'setup/components/defs/filter/**'
   workflow_dispatch: {}
@@ -26,10 +26,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -47,8 +47,8 @@ jobs:
           files: deploy/docker/docker-compose.yml
           push: true
           set: |
-            *.cache-from=type=gha,scope=miab
-            *.cache-to=type=gha,scope=miab,mode=max
+            *.cache-from=type=gha,scope=naust
+            *.cache-to=type=gha,scope=naust,mode=max
             management.args.GIT_SHA=${{ github.sha }}
 
       # Re-tag every image with the short commit SHA for pinned deployments.
@@ -59,8 +59,8 @@ jobs:
           SHORT="${SHORT_SHA:0:8}"
           for svc in dns mail management nginx rspamd webmail filebrowser radicale munin clamav beszel-hub beszel-agent; do
             docker buildx imagetools create \
-              -t "ghcr.io/boomboompower/mailinabox-${svc}:sha-${SHORT}" \
-              "ghcr.io/boomboompower/mailinabox-${svc}:latest"
+              -t "ghcr.io/naust-mail/naust-${svc}:sha-${SHORT}" \
+              "ghcr.io/naust-mail/naust-${svc}:latest"
           done
 
   # Scan published images for known CVEs and surface results in the GitHub
@@ -82,16 +82,16 @@ jobs:
         service: [dns, mail, management, nginx, rspamd]
     steps:
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Scan ${{ matrix.service }} for vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/boomboompower/mailinabox-${{ matrix.service }}:latest
+          image-ref: ghcr.io/naust-mail/naust-${{ matrix.service }}:latest
           format: sarif
           output: trivy-${{ matrix.service }}.sarif
           severity: CRITICAL,HIGH

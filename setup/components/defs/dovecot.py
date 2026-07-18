@@ -17,8 +17,8 @@ Steps:
   ports     - disable plain IMAP (143) and POP3 (110) in 10-master.conf [dep: limits]
   idle      - imap_idle_notify_interval in 20-imap.conf
   lda       - postmaster_address in 15-lda.conf
-  auth      - enable auth-sql, disable auth-system in 10-auth.conf
-  version   - all version-specific config: mail location, SSL, quota, sieve, auth-sql
+  auth      - disable the distro auth includes in 10-auth.conf
+  version   - all version-specific config: mail location, SSL, quota, sieve, passwd-file auth
               [dep: auth, idle - both share files that version also writes]
   sieve     - copy and pre-compile sieve-spam.sieve [dep: version]
   dirs      - create mail/sieve directories, set /etc/dovecot permissions [dep: sieve]
@@ -27,6 +27,9 @@ Steps:
 Dovecot 2.3 (Ubuntu 22.04/24.04) and 2.4 (Ubuntu 26.04+) require completely
 different config syntax. The version step branches at runtime based on the
 installed binary. See the dovecot-2x-compat memory for the full breaking-change list.
+Whole config files we own live as ${VAR} templates in setup/conf/dovecot/<dialect>/;
+this file keeps only the logic (version dispatch, conditional blocks, edits to
+distro-owned files).
 """
 
 import os
@@ -58,13 +61,18 @@ COMPONENT = Component(
 
 _CONF_DIR = os.path.join(SETUP_DIR, "conf", "mail")
 
+# Version-dialect config templates. Whole files we own live here as ${VAR}
+# templates (one directory per Dovecot config dialect); settings edited into
+# distro-owned files stay as editconf/sed calls in the action functions.
+_TPL_DIR = os.path.join(SETUP_DIR, "conf", "dovecot")
+
 _SSL_CIPHERS = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305"
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	hostname = env.get("PRIMARY_HOSTNAME", "localhost")
 	# DOVECOT_IMAP_BIND controls the plain IMAP listener bind address.
@@ -75,16 +83,23 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 	mailboxes_src = os.path.join(_CONF_DIR, "dovecot-mailboxes.conf")
 	sieve_src = os.path.join(_CONF_DIR, "sieve-spam.txt")
 	mailcrypt_lua_src = os.path.join(_CONF_DIR, "mailcrypt-auth.lua")
+	mailcrypt_lua_src_23 = os.path.join(_CONF_DIR, "mailcrypt-auth-23.lua")
 
-	# Encryption at rest (mail_crypt). When on, the SQL passdb chains to a Lua
-	# passdb that delivers the per-user crypt_user_key_password at login. See
-	# the mailcrypt task and _mailcrypt for the full wiring.
-	encryption = env.get("ENCRYPTION_AT_REST", "false").lower() == "true"
+	# Encryption at rest (mail_crypt). When on, the passwd-file passdb chains
+	# to a Lua passdb that delivers the per-user mail key at login. See the
+	# mailcrypt task and _mailcrypt for the full wiring (dialect differences
+	# between 2.4 and 2.3 are handled inside _mailcrypt).
+	# Note: Only supported on Ubuntu 26.04+ (Dovecot 2.4 with dovecot.http).
+	encryption = env.get("ENCRYPTION_AT_REST", "false").lower() == "true" and artifacts.ubuntu_supports_encryption()
 
 	# Detect installed Dovecot version. Packages are installed before make_tasks
-	# is called, so the binary is always available at this point.
+	# is called, so the binary is always available at this point. A silent
+	# fallback here would configure the wrong dialect - fail loudly instead.
 	ver_result = subprocess.run(["dovecot", "--version"], capture_output=True, text=True, check=False)
-	dovecot_version = ver_result.stdout.split()[0] if ver_result.stdout.strip() else "2.3"
+	if ver_result.returncode != 0 or not ver_result.stdout.strip():
+		msg = "dovecot --version failed - is dovecot-core installed? Cannot plan the dovecot component without knowing the config dialect."
+		raise RuntimeError(msg)
+	dovecot_version = ver_result.stdout.split()[0]
 
 	# System RAM (physical + swap) for vsz_limit calculation.
 	mem_result = subprocess.run(["free", "-tm"], capture_output=True, text=True, check=False)
@@ -97,6 +112,8 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 	# storage path changes, IMAP bind address changes, or either branch of the
 	# config function changes. Both branch stamps are included so editing 2.4-only
 	# or 2.3-only code still invalidates the stamp even if the other branch is live.
+	# The template dir hash covers the config text itself, which lives outside
+	# the functions - editing a template must re-run the version step too.
 	version_stamp = "|".join([
 		dovecot_version,
 		storage_root,
@@ -104,6 +121,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 		str(encryption),
 		artifacts.fn_stamp(_version_24),
 		artifacts.fn_stamp(_version_23),
+		artifacts.hash_files(_TPL_DIR),
 	])
 
 	tasks = [
@@ -144,7 +162,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 		},
 		{
 			"name": "auth",
-			# Enables auth-sql, disables auth-system in 10-auth.conf.
+			# Forces both distro auth includes to a commented state.
 			# version also writes to 10-auth.conf, so version deps on this.
 			"uptodate": [config_changed(artifacts.fn_stamp(_auth))],
 			"actions": [(_auth,)],
@@ -181,16 +199,15 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 	# Encryption at rest: install the Lua auth plugin, write the mail_crypt config,
 	# and deploy the auth Lua script. Only added when the feature is enabled so
 	# installs that don't use it never pull in dovecot-auth-lua. Runs after the
-	# version step (which writes auth-sql.conf.ext with the passdb chain) and
+	# version step (which writes 95-auth.conf with the passdb chain) and
 	# before dirs (which locks down /etc/dovecot permissions).
 	if encryption:
+		mailcrypt_tpls = [os.path.join(_TPL_DIR, "2.4", "95-mail-crypt.conf")] if dovecot_version.startswith("2.4.") else [os.path.join(_TPL_DIR, "2.3", "05-mail-crypt-early.conf"), os.path.join(_TPL_DIR, "2.3", "96-mail-crypt.conf")]
 		tasks.append({
 			"name": "mailcrypt",
-			"uptodate": [config_changed(
-				f"{artifacts.fn_stamp(_mailcrypt)}:{artifacts.hash_files(mailcrypt_lua_src)}"
-			)],
+			"uptodate": [config_changed(f"{artifacts.fn_stamp(_mailcrypt)}:{artifacts.hash_files(mailcrypt_lua_src, mailcrypt_lua_src_23, *mailcrypt_tpls)}")],
 			"task_dep": ["dovecot:version"],
-			"actions": [(_mailcrypt, [mailcrypt_lua_src])],
+			"actions": [(_mailcrypt, [dovecot_version, mailcrypt_lua_src, mailcrypt_lua_src_23, storage_root])],
 		})
 		# Ensure the /etc/dovecot lockdown runs after the lua script is installed.
 		for t in tasks:
@@ -275,14 +292,15 @@ def _lda(hostname: str) -> None:
 
 
 def _auth() -> None:
-	"""Switch Dovecot from system-user auth to our SQLite-backed auth-sql driver.
+	"""Disable the distro's auth includes; our passdb/userdb live in 95-auth.conf.
 
-	Both sed patterns are idempotent: the first ensures auth-system is commented
-	regardless of current state; the second uncomments auth-sql only if commented.
+	Both system-user auth and the sql include are forced to a commented state
+	regardless of what a previous install left behind. Idempotent: s/#*X/#X/
+	collapses any number of leading hashes to one.
 	"""
 	for pattern in [
 		r"s/#*\(!include auth-system.conf.ext\)/#\1/",
-		r"s/#\(!include auth-sql.conf.ext\)/\1/",
+		r"s/#*\(!include auth-sql.conf.ext\)/#\1/",
 	]:
 		subprocess.run(
 			["sed", "-i", pattern, "/etc/dovecot/conf.d/10-auth.conf"],
@@ -313,7 +331,7 @@ def _version_24(storage_root: str, imap_bind: str, encryption: bool = False) -> 
 	- SSL settings renamed (ssl_cert -> ssl_server_cert_file, etc.)
 	- mail_plugins is BOOLLIST - no $variable expansion, use plain names
 	- inet_listener 'address' removed; use 'listen' instead
-	- auth-sql is inline in passdb/userdb blocks (no separate .ext file)
+	- passdb/userdb are inline blocks (no separate .ext files)
 	"""
 	# Opt in to strict 2.4 parsing. Without this, 2.4 runs in compat mode and
 	# some breakage is silent. With it, every incompatibility is a startup error.
@@ -378,27 +396,16 @@ def _version_24(storage_root: str, imap_bind: str, encryption: bool = False) -> 
 	# quota_storage_grace is now a SIZE (bytes); 10M matches the 2.3 spirit of 10%.
 	artifacts.write_file(
 		"/etc/dovecot/conf.d/90-quota.conf",
-		"quota quota {\n"
-		"    quota_driver = maildir\n"
-		"    quota_storage_grace = 10M\n"
-		"}\n"
-		"\n"
-		"quota_status_success = DUNNO\n"
-		"quota_status_nouser = DUNNO\n"
-		'quota_status_overquota = "522 5.2.2 Mailbox is full"\n'
-		"\n"
-		"service quota-status {\n"
-		"    executable = quota-status -p postfix\n"
-		"    inet_listener quota-status {\n"
-		"        port = 12340\n"
-		"    }\n"
-		"}\n",
+		artifacts.render_template(os.path.join(_TPL_DIR, "2.4", "90-quota.conf")),
 	)
 
 	# inet_listener 'address' field removed in 2.4; bind address is now 'listen'.
 	artifacts.write_file(
 		"/etc/dovecot/conf.d/99-local.conf",
-		f"service lmtp {{\n  unix_listener /var/spool/postfix/private/dovecot-lmtp {{\n    mode = 0660\n    user = postfix\n    group = postfix\n  }}\n  inet_listener lmtp {{\n    listen = 127.0.0.1\n    port = 10026\n  }}\n}}\n\nservice imap-login {{\n  inet_listener imap {{\n    listen = {imap_bind}\n    port = 143\n    ssl = no\n  }}\n}}\nprotocol imap {{\n  mail_max_userip_connections = 40\n}}\nprotocol lmtp {{\n  auth_username_format = %{{user | lower}}\n}}\n",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR, "2.4", "99-local.conf"),
+			{"IMAP_BIND": imap_bind},
+		),
 	)
 
 	# sieve: plugin{} removed. Pigeonhole 2.4 uses sieve_script SET_FILTER_ARRAY
@@ -406,91 +413,41 @@ def _version_24(storage_root: str, imap_bind: str, encryption: bool = False) -> 
 	# sieve_before/after/dir settings are gone; sieve_script_type controls ordering.
 	artifacts.write_file(
 		"/etc/dovecot/conf.d/99-local-sieve.conf",
-		"sieve_redirect_envelope_from = recipient\n"
-		"\n"
-		"sieve_script spam {\n"
-		"  sieve_script_type = before\n"
-		"  sieve_script_driver = file\n"
-		"  sieve_script_path = /etc/dovecot/sieve-spam.sieve\n"
-		"  sieve_script_precedence = 10\n"
-		"}\n"
-		"\n"
-		"sieve_script global_before {\n"
-		"  sieve_script_type = before\n"
-		"  sieve_script_driver = file\n"
-		f"  sieve_script_path = {storage_root}/mail/sieve/global_before\n"
-		"  sieve_script_precedence = 20\n"
-		"}\n"
-		"\n"
-		"sieve_script global_after {\n"
-		"  sieve_script_type = after\n"
-		"  sieve_script_driver = file\n"
-		f"  sieve_script_path = {storage_root}/mail/sieve/global_after\n"
-		"}\n"
-		"\n"
-		"sieve_script personal {\n"
-		"  sieve_script_type = personal\n"
-		"  sieve_script_driver = file\n"
-		f"  sieve_script_path = {storage_root}/mail/sieve/%{{user|domain}}/%{{user|username}}\n"
-		f"  sieve_script_active_path = {storage_root}/mail/sieve/%{{user|domain}}/%{{user|username}}.sieve\n"
-		"}\n",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR, "2.4", "99-local-sieve.conf"),
+			{"STORAGE_ROOT": storage_root},
+		),
 	)
 
-	# 2.4 auth-sql: inline passdb/userdb blocks; no separate dovecot-sql.conf.ext.
-	# quota_storage_size column returns per-user limit (replaces 2.3 quota_rule).
-	# When encryption at rest is on, the SQL passdb must not stop after verifying
-	# the password: it continues to the Lua passdb (defined in 95-mail-crypt.conf)
-	# which delivers crypt_user_key_password. result_failure=return-fail keeps a
-	# failed SQL verification authoritative so the Lua passdb can never override it.
-	chain = (
-		"  result_success = continue\n"
-		"  result_failure = return-fail\n"
-		if encryption else ""
-	)
-	# Per-user mail_crypt activation. mail_crypt needs crypt_user_key_curve at
-	# delivery time (userdb) to generate per-folder keys. Returning it only for
-	# users who have a committed password slot scopes encryption to opted-in
-	# mailboxes: the subquery yields NULL (field absent) for everyone else, so
-	# mail_crypt stays inactive for them. crypt_user_key_password is delivered
-	# separately by the Lua passdb at login for decryption.
-	curve_field = (
-		", \\\n"
-		"    (SELECT 'prime256v1' FROM mail_keys k WHERE k.user_id = users.id "
-		"AND k.slot_type='password' LIMIT 1) AS crypt_user_key_curve"
-		if encryption else ""
-	)
-	db_path = os.path.join(storage_root, "mail", "db", "users.sqlite")
+	# Auth against the manager's materialized passwd-file. Quota and the
+	# per-user mail_crypt activation field (crypt_user_key_curve) arrive as
+	# userdb_ extras in the file itself - managerd emits them, this config
+	# never varies per user. When encryption at rest is on, the passdb must
+	# not stop after verifying the password: it continues to the Lua passdb
+	# (defined in 95-mail-crypt.conf) which delivers crypt_user_key_password.
+	# result_failure=return-fail keeps a failed verification authoritative
+	# so the Lua passdb can never override it.
+	chain = "  result_success = continue\n  result_failure = return-fail\n" if encryption else ""
 	artifacts.write_file(
-		"/etc/dovecot/conf.d/auth-sql.conf.ext",
-		"passdb sql {\n"
-		+ chain
-		+ "  sql_driver = sqlite\n"
-		f"  sqlite_path = {db_path}\n"
-		"  passdb_default_password_scheme = BLF-CRYPT\n"
-		"  passdb_sql_query = SELECT password FROM users WHERE email='%{user}'\n"
-		"}\n"
-		"userdb sql {\n"
-		"  sql_driver = sqlite\n"
-		f"  sqlite_path = {db_path}\n"
-		"  userdb_sql_query = SELECT email, \\\n"
-		f"    '{storage_root}/mail/mailboxes/%{{user|domain}}/%{{user|username}}' AS home, \\\n"
-		"    'mail' AS uid, 'mail' AS gid, \\\n"
-		"    CASE WHEN quota='0' OR quota='' THEN 0 ELSE CAST(quota AS INTEGER) END AS quota_storage_size"
-		+ curve_field
-		+ " \\\n"
-		"    FROM users WHERE email='%{user}'\n"
-		"  userdb_sql_iterate_query = SELECT email AS user FROM users\n"
-		"}\n",
+		"/etc/dovecot/conf.d/95-auth.conf",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR, "2.4", "95-auth.conf"),
+			{"CHAIN": chain, "STORAGE_ROOT": storage_root},
+		),
 	)
+	_remove_sql_auth()
 
 
 def _version_23(storage_root: str, imap_bind: str, encryption: bool = False) -> None:
 	"""Dovecot 2.3 config (Ubuntu 22.04/24.04). Uses legacy plugin{} syntax.
 
-	TODO: encryption-at-rest wiring for 2.3 (plugin{} mail_crypt block + Lua
-	passdb) is not yet implemented. The 2.4 path is the supported target; 2.3
-	installs currently ignore ENCRYPTION_AT_REST. The mailcrypt task writes 2.4
-	config, so enabling this on 2.3 would need a version branch there too.
+	Encryption-at-rest wiring mirrors _version_24's chain (passwd-file passdb
+	continues to a Lua passdb that delivers the per-user mail key), adapted
+	for 2.3's dialect - see the mailcrypt task and _mailcrypt for the parts
+	that differ from 2.4 (2.3 has no %{passdb:...}, only %{userdb:...}, so
+	the Lua passdb must go through a prefetch userdb instead of a direct
+	passdb reference; see setup/conf/dovecot/2.3/05-mail-crypt-early.conf and
+	96-mail-crypt.conf for the resulting two-file split).
 	"""
 	artifacts.editconf(
 		"/etc/dovecot/conf.d/10-mail.conf",
@@ -540,7 +497,7 @@ def _version_23(storage_root: str, imap_bind: str, encryption: bool = False) -> 
 
 	artifacts.write_file(
 		"/etc/dovecot/conf.d/90-quota.conf",
-		"plugin {\n  quota = maildir\n\n  quota_grace = 10%\n\n  quota_status_success = DUNNO\n  quota_status_nouser = DUNNO\n  quota_status_overquota = \"522 5.2.2 Mailbox is full\"\n}\n\nservice quota-status {\n    executable = quota-status -p postfix\n    inet_listener {\n        port = 12340\n    }\n}\n",
+		artifacts.render_template(os.path.join(_TPL_DIR, "2.3", "90-quota.conf")),
 	)
 
 	# 2.3 pop3_uidl_format: must be set explicitly. 2.4's default is already
@@ -554,80 +511,101 @@ def _version_23(storage_root: str, imap_bind: str, encryption: bool = False) -> 
 	# 2.3 uses 'address' inside inet_listener blocks.
 	artifacts.write_file(
 		"/etc/dovecot/conf.d/99-local.conf",
-		f"service lmtp {{\n  unix_listener /var/spool/postfix/private/dovecot-lmtp {{\n    mode = 0660\n    user = postfix\n    group = postfix\n  }}\n  inet_listener lmtp {{\n    address = 127.0.0.1\n    port = 10026\n  }}\n}}\n\nservice imap-login {{\n  inet_listener imap {{\n    address = {imap_bind}\n    port = 143\n    ssl = no\n  }}\n}}\nprotocol imap {{\n  mail_max_userip_connections = 40\n}}\nprotocol lmtp {{\n  auth_username_format = %Lu\n}}\n",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR, "2.3", "99-local.conf"),
+			{"IMAP_BIND": imap_bind},
+		),
 	)
 
 	# 2.3 sieve uses plugin{} with sieve_before/after/dir settings.
 	artifacts.write_file(
 		"/etc/dovecot/conf.d/99-local-sieve.conf",
-		"plugin {\n"
-		"  sieve_before = /etc/dovecot/sieve-spam.sieve\n"
-		f"  sieve_before2 = {storage_root}/mail/sieve/global_before\n"
-		f"  sieve_after = {storage_root}/mail/sieve/global_after\n"
-		f"  sieve = {storage_root}/mail/sieve/%d/%n.sieve\n"
-		f"  sieve_dir = {storage_root}/mail/sieve/%d/%n\n"
-		"  sieve_redirect_envelope_from = recipient\n"
-		"}\n",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR, "2.3", "99-local-sieve.conf"),
+			{"STORAGE_ROOT": storage_root},
+		),
 	)
 
-	# 2.3 auth-sql references a separate dovecot-sql.conf.ext file (written by
-	# the users component after this one runs).
+	# 2.3 reads the same materialized passwd-file as 2.4, in its own dialect.
+	# When encryption is on, pass = yes lets the chain continue to the Lua
+	# passdb in 96-mail-crypt.conf (see _mailcrypt) instead of stopping here.
+	chain = "  pass = yes\n" if encryption else ""
 	artifacts.write_file(
-		"/etc/dovecot/conf.d/auth-sql.conf.ext",
-		"passdb {\n  driver = sql\n  args = /etc/dovecot/dovecot-sql.conf.ext\n}\nuserdb {\n  driver = sql\n  args = /etc/dovecot/dovecot-sql.conf.ext\n}\n",
+		"/etc/dovecot/conf.d/95-auth.conf",
+		artifacts.render_template(
+			os.path.join(_TPL_DIR, "2.3", "95-auth.conf"),
+			{"CHAIN": chain, "STORAGE_ROOT": storage_root},
+		),
 	)
+	_remove_sql_auth()
 
 
-def _mailcrypt(lua_src: str) -> None:
-	"""Configure encryption at rest (mail_crypt) for Dovecot 2.4.
+def _remove_sql_auth() -> None:
+	"""Drop the pre-flip SQL auth include; nothing references it anymore."""
+	stale = "/etc/dovecot/conf.d/auth-sql.conf.ext"
+	if os.path.exists(stale):
+		os.remove(stale)
+
+
+def _mailcrypt(dovecot_version: str, lua_src: str, lua_src_23: str, storage_root: str) -> None:
+	"""Configure encryption at rest (mail_crypt).
 
 	Loads the mail_crypt plugin, gives it a per-home file attribute dict (where it
-	stores key metadata), and adds the Lua passdb that delivers the per-user
-	crypt_user_key_password at login (SQL passdb chains into it - see _version_24).
+	stores key metadata), and adds the Lua passdb that delivers the per-user mail
+	key at login (the passwd-file passdb chains into it - see _version_24 and
+	_version_23). Both dialects call the same managerd unwrap endpoint from Lua;
+	only the Dovecot-side field delivery differs (2.4 uses a direct passdb field,
+	2.3 has no %{passdb:...} at all and must go through a prefetch userdb - see
+	setup/conf/mail/mailcrypt-auth-23.lua for why).
 
-	Deliberately does NOT set a global crypt_user_key_curve: that would make
-	mail_crypt auto-generate keypairs for every user on delivery and encrypt
-	everyone's mail. Instead, a user's keypair is generated explicitly only when
-	they enable encryption (management runs `doveadm mailbox cryptokey generate`).
-	So keypair existence is the per-user switch, and non-opted-in mailboxes are
-	untouched.
+	Deliberately does NOT set a global crypt_user_key_curve/mail_crypt_curve:
+	that would make mail_crypt auto-generate keypairs for every user on delivery
+	and encrypt everyone's mail. Instead, a user's keypair is generated explicitly
+	only when they enable encryption (management runs `doveadm mailbox cryptokey
+	generate`). So keypair existence is the per-user switch, and non-opted-in
+	mailboxes are untouched.
 	"""
 	# Install the Lua auth plugin only now (feature is opt-in).
 	from .. import packages
 
 	packages.ensure_installed(["dovecot-auth-lua"])
 
-	# Install the auth Lua script (root-owned, group dovecot, not world-readable).
 	dest_lua = "/etc/dovecot/mailcrypt-auth.lua"
-	shutil.copy2(lua_src, dest_lua)
+	is_24 = dovecot_version.startswith("2.4.")
+
+	if is_24:
+		# No template substitution needed - the 2.4 script never reads the
+		# passwd-file itself, only the storage-root-independent unwrap endpoint.
+		shutil.copy2(lua_src, dest_lua)
+	else:
+		# 2.3 also reads the materialized passwd-file directly for uid/gid/home
+		# (see that script's docstring), so it needs STORAGE_ROOT substituted in.
+		artifacts.write_file(
+			dest_lua,
+			artifacts.render_template(lua_src_23, {"STORAGE_ROOT": storage_root}),
+		)
 	subprocess.run(["chown", "root:dovecot", dest_lua], check=True)
 	subprocess.run(["chmod", "0640", dest_lua], check=True)
 
 	# mail_crypt config. crypt_write_algorithm is the default; set explicitly for
 	# clarity. mail_attribute uses the 2.4 dict-block form (validated on 2.4.2).
-	artifacts.write_file(
-		"/etc/dovecot/conf.d/95-mail-crypt.conf",
-		"mail_plugins {\n"
-		"  mail_crypt = yes\n"
-		"}\n"
-		"crypt_write_algorithm = aes-256-gcm-sha256\n"
-		"mail_attribute {\n"
-		"  dict file {\n"
-		"    path = %{home}/dovecot-attributes\n"
-		"  }\n"
-		"}\n"
-		"passdb lua {\n"
-		"  lua_file = /etc/dovecot/mailcrypt-auth.lua\n"
-		"}\n"
-		"\n"
-		"# Cache passdb results so the Lua->management->Argon2id unwrap runs on a\n"
-		"# cache miss, not on every IMAP/POP connection. The unwrapped key sits in\n"
-		"# the auth cache for the TTL (bounded); it is already in the mail process\n"
-		"# during a session, so the marginal exposure is the TTL window.\n"
-		"auth_cache_size = 10M\n"
-		"auth_cache_ttl = 5 mins\n"
-		"auth_cache_negative_ttl = 30 secs\n",
-	)
+	if is_24:
+		artifacts.write_file(
+			"/etc/dovecot/conf.d/95-mail-crypt.conf",
+			artifacts.render_template(os.path.join(_TPL_DIR, "2.4", "95-mail-crypt.conf")),
+		)
+	else:
+		# Split across two files for load-order reasons - see each file's
+		# own header comment (mail_plugins/prefetch-userdb timing vs the
+		# passdb-chain-must-follow-95-auth.conf requirement).
+		artifacts.write_file(
+			"/etc/dovecot/conf.d/05-mail-crypt-early.conf",
+			artifacts.render_template(os.path.join(_TPL_DIR, "2.3", "05-mail-crypt-early.conf")),
+		)
+		artifacts.write_file(
+			"/etc/dovecot/conf.d/96-mail-crypt.conf",
+			artifacts.render_template(os.path.join(_TPL_DIR, "2.3", "96-mail-crypt.conf")),
+		)
 
 
 def _sieve(src: str) -> None:
@@ -672,7 +650,8 @@ def _dirs(storage_root: str) -> None:
 	# postfix can bind sockets there - root:root 0755 causes Permission Denied.
 	priv = "/var/spool/postfix/private"
 	if not os.path.isdir(priv):
-		import pwd as _pwd, grp as _grp
+		import pwd as _pwd
+		import grp as _grp
 
 		os.makedirs(priv)
 		pw = _pwd.getpwnam("postfix")

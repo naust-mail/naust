@@ -2,7 +2,7 @@
 Tests for the runner's --build-mode / build() function.
 
 build() is designed to run at Docker image build time where no
-/etc/mailinabox.conf exists. It must:
+/etc/naust.conf exists. It must:
   - Not crash when make_tasks() accesses env keys (uses defaultdict)
   - Only run tasks tagged with "build": True
   - Install apt packages from COMPONENT.packages (via ensure_installed)
@@ -10,7 +10,7 @@ build() is designed to run at Docker image build time where no
 """
 
 import collections
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,10 +20,10 @@ import pytest
 
 def _build_tasks_for(component_name: str) -> list[dict]:
 	"""Return the build-safe tasks make_tasks() would produce for a component."""
-	from components.runner import _discover, BAREMETAL
+	from components.runner import _discover, BAREMETAL  # noqa: PLC2701
 
 	defs_by_name = {c.name: (c, fn) for c, fn in _discover()}
-	c, fn = defs_by_name[component_name]
+	_c, fn = defs_by_name[component_name]
 	env = collections.defaultdict(str)
 	all_tasks = fn(env, BAREMETAL)
 	return [t for t in all_tasks if t.get("build") is True]
@@ -38,9 +38,9 @@ def test_management_has_two_build_safe_tasks():
 	assert names == ["virtualenv", "pip-install"]
 
 
-def test_duplicity_has_one_build_safe_task():
+def test_duplicity_has_two_build_safe_tasks():
 	tasks = _build_tasks_for("duplicity")
-	assert [t["name"] for t in tasks] == ["pip-install"]
+	assert [t["name"] for t in tasks] == ["virtualenv", "pip-install"]
 
 
 def test_radicale_has_two_build_safe_tasks():
@@ -94,9 +94,8 @@ def test_env_key_access_does_not_crash_with_defaultdict():
 def test_build_rejects_unknown_component():
 	from components.runner import build
 
-	with pytest.raises(ValueError, match="Unknown components"):
-		with patch("components.runner.pkg.ensure_installed"):
-			build(["nonexistent_component"])
+	with pytest.raises(ValueError, match="Unknown components"), patch("components.runner.pkg.ensure_installed"):
+		build(["nonexistent_component"])
 
 
 def test_build_calls_ensure_installed_with_component_packages():
@@ -155,8 +154,7 @@ def test_build_key_stripped_before_doit():
 	inside _run_doit's generator. This test verifies that stripping by checking
 	what the doit module loader actually sees via the task generator.
 	"""
-	import types
-	from components.runner import _DOIT_KEYS
+	from components.runner import _DOIT_KEYS  # noqa: PLC2701
 
 	task_with_build = {"name": "noop", "build": True, "actions": []}
 	stripped = {k: v for k, v in task_with_build.items() if k in _DOIT_KEYS}

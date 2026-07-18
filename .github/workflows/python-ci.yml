@@ -13,14 +13,12 @@ on:
   push:
     paths:
       - 'setup/**'
-      - 'management/**'
       - 'tests/**'
       - 'setup/components/defs/filter/**'
       - '.github/workflows/python-ci.yml'
   pull_request:
     paths:
       - 'setup/**'
-      - 'management/**'
       - 'tests/**'
       - 'setup/components/defs/filter/**'
       - '.github/workflows/python-ci.yml'
@@ -45,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -54,17 +52,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-xdist ruff doit exclusiveprocess \
-            flask passlib[bcrypt] "bcrypt<4.0" pyotp fido2 qrcode[pil] \
-            email-validator dnspython cryptography rtyaml python-dateutil expiringdict
+            email-validator rtyaml
 
       # ruff check: linting (unused imports, undefined names, style issues, etc.)
+      # tests/management is excluded along with management/ itself: that
+      # Flask app is retired and parked (enabled=False), not shipped by
+      # Docker or setup anymore.
       - name: Ruff lint
-        run: python -m ruff check setup/ management/ tests/
+        run: python -m ruff check setup/ tests/ --exclude tests/management
 
       # ruff format --check: fails if any file would be reformatted.
       # Keeps diffs clean and avoids "format-only" commits cluttering history.
       - name: Ruff format
-        run: python -m ruff format --check setup/ management/ tests/
+        run: python -m ruff format --check setup/ tests/ --exclude tests/management
 
       - name: Run tests
-        run: python -m pytest tests/ -n auto --dist=worksteal --tb=short
+        run: python -m pytest tests/ --ignore=tests/management -n auto --dist=worksteal --tb=short

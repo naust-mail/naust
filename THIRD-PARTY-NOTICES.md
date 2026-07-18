@@ -115,10 +115,10 @@ Source: https://gitlab.com/libidn/libidn2
 
 ## Webmail (one selected per install)
 
-**oxi.email** - Webmail client (default)
+**Rav** - Webmail client (default)
 License: MIT
-Source: https://github.com/oxiEmail/oxi
-Fork: https://github.com/boomboompower/oxi-miab
+Original: https://github.com/c0h1b4/oxi
+Fork: https://github.com/naust-mail/rav
 
 **Roundcube** - Webmail client (optional)
 License: GPL v3+ with plugin/skin exception

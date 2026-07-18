@@ -12,14 +12,14 @@ const icon = computed(() =>
 
 const colorClass = computed(() =>
   ({
-    ok: 'text-emerald-500',
-    error: 'text-red-500',
-    warning: 'text-yellow-500',
+    ok: 'text-success',
+    error: 'text-error',
+    warning: 'text-warning',
     'not-applicable': 'text-faint',
   }[props.status]),
 )
 </script>
 
 <template>
-  <component :is="icon" :class="['size-4', colorClass]" />
+  <component :is="icon" :class="['size-4 transition-colors', colorClass]" />
 </template>

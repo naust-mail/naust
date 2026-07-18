@@ -16,7 +16,6 @@ has_prf_slot is always false and no PRF slot is created here.
 
 import base64
 import hmac
-import secrets
 import time
 
 from expiringdict import ExpiringDict
@@ -44,13 +43,12 @@ _relink_failures: ExpiringDict = ExpiringDict(max_len=1024, max_age_seconds=_REL
 
 
 def _log_enc_failure() -> None:
-	"""Emit a syslog line that the fail2ban miab-encryption jail matches on."""
-	ip = (request.headers.getlist("X-Forwarded-For")[0]
-	      if request.headers.getlist("X-Forwarded-For")
-	      else request.remote_addr)
+	"""Emit a syslog line that the fail2ban naust-encryption jail matches on."""
+	ip = request.headers.getlist("X-Forwarded-For")[0] if request.headers.getlist("X-Forwarded-For") else request.remote_addr
 	current_app.logger.warning(
-		"Mail-in-a-Box Management Daemon: Encryption auth failure from ip %s - timestamp %s",
-		ip, time.time(),
+		"Naust Management Daemon: Encryption auth failure from ip %s - timestamp %s",
+		ip,
+		time.time(),
 	)
 
 
@@ -398,7 +396,7 @@ def _generate_user_keypair(email: str, mail_key_hex: str) -> None:
 	import subprocess
 	import tempfile
 
-	fd, tmppath = tempfile.mkstemp(suffix=".conf", prefix="miab-crypt-")
+	fd, tmppath = tempfile.mkstemp(suffix=".conf", prefix="naust-crypt-")
 	try:
 		with os.fdopen(fd, "w") as f:
 			f.write("dovecot_config_version = 2.4.0\n")
@@ -406,8 +404,7 @@ def _generate_user_keypair(email: str, mail_key_hex: str) -> None:
 			f.write("crypt_user_key_curve = prime256v1\n")
 			f.write(f"crypt_user_key_password = {mail_key_hex}\n")
 		result = subprocess.run(
-			["doveadm", "-c", tmppath,
-			 "mailbox", "cryptokey", "generate", "-u", email, "-U"],
+			["doveadm", "-c", tmppath, "mailbox", "cryptokey", "generate", "-u", email, "-U"],
 			capture_output=True,
 			text=True,
 			check=False,
@@ -424,7 +421,7 @@ def _caller_has_master_key(req) -> bool:
 
 	Accepts the key via the X-Api-Key header (used by the Dovecot Lua passdb,
 	which avoids needing base64 in Lua) or via Basic auth username. This gates the
-	unwrap endpoint to on-box callers that can read /var/lib/mailinabox/api.key.
+	unwrap endpoint to on-box callers that can read /var/lib/naust/api.key.
 	Combined with the requirement that the correct login password unwraps the
 	slot, the key is double-gated."""
 	header_key = req.headers.get("X-Api-Key", "")

@@ -1,4 +1,5 @@
 import os
+import pathlib
 
 
 def write_opendkim_tables(domains, env):
@@ -41,8 +42,7 @@ def write_opendkim_tables(domains, env):
 					continue
 
 		# The contents needs to change.
-		with open("/etc/opendkim/" + filename, "w", encoding="utf-8") as f:
-			f.write(content)
+		pathlib.Path("/etc/opendkim/" + filename).write_text(content, encoding="utf-8")
 		did_update = True
 
 	# Return whether the files changed. If they didn't change, there's

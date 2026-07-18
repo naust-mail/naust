@@ -292,7 +292,7 @@ def build_zone(domain, domain_properties, additional_records, env, is_zone=True)
 		# Skip if the user has set a DKIM record already.
 		opendkim_record_file = os.path.join(env['STORAGE_ROOT'], 'mail/dkim/mail.txt')
 		with open(opendkim_record_file, encoding="utf-8") as orf:
-			m = re.match(r'(\S+)\s+IN\s+TXT\s+\( ((?:"[^"]+"\s+)+)\)', orf.read(), re.S)
+			m = re.match(r'(\S+)\s+IN\s+TXT\s+\( ((?:"[^"]+"\s+)+)\)', orf.read(), re.DOTALL)
 			val = "".join(re.findall(r'"([^"]+)"', m.group(2)))
 			if not has_rec(m.group(1), "TXT", prefix="v=DKIM1; "):
 				records.append((m.group(1), "TXT", val, 'recommended'))
@@ -326,8 +326,8 @@ def build_zone(domain, domain_properties, additional_records, env, is_zone=True)
 		# instead of '+' and '/' which are not allowed in an MTA-STS policy id) but then just take its
 		# first 20 characters, which is more than sufficient to change whenever the policy file changes
 		# (and ensures any '=' padding at the end of the base64 encoding is dropped).
-		with open("/var/lib/mailinabox/mta-sts.txt", "rb") as f:
-			mta_sts_policy_id = base64.b64encode(hashlib.sha1(f.read()).digest(), altchars=b"AA").decode("ascii")[0:20]
+		with open("/var/lib/naust/mta-sts.txt", "rb") as f:
+			mta_sts_policy_id = base64.b64encode(hashlib.sha1(f.read()).digest(), altchars=b"AA").decode("ascii")[0:20]  # noqa: S324 -- content-addressing id, not security-sensitive
 		mta_sts_records.extend([("_mta-sts", "TXT", "v=STSv1; id=" + mta_sts_policy_id, 'optional')])
 
 		# Enable SMTP TLS reporting (https://tools.ietf.org/html/rfc8460) if the user has set a config option.

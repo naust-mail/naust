@@ -1,0 +1,26 @@
+Welcome!
+
+Your mail server at {{.Hostname}} is up and running.
+
+Quick links:
+
+  Admin panel:  {{.AdminURL}}
+  Webmail:      {{.WebmailURL}}
+
+Mail apps on your phone or computer can usually configure
+themselves - just enter your address and password.
+{{if .Key}}
+YOUR BACKUP RECOVERY KEY
+========================
+
+Backups of this server are encrypted. Restoring them after a
+disaster requires the secret key below - without it, backups
+are unreadable.
+
+    {{.Key}}
+
+Keep a copy somewhere that is not this server: a password
+manager is ideal. Keeping this email in a mail app on another
+device also works. (One caution: if you forward your mail to
+another provider, this key travels with it.)
+{{end}}

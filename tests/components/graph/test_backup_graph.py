@@ -27,24 +27,25 @@ def test_backup_graph_no_dangling_task_deps(cfg, tmp_path):
 				assert dep in names, f"{comp_name}:{task['name']} has dangling task_dep {dep!r}; known tasks: {sorted(names)}"
 
 
-def test_restic_and_management_in_same_graph(tmp_path):
-	"""restic must appear alongside management in the default graph."""
+def test_restic_in_default_graph(tmp_path):
+	"""restic must appear alongside the daemon in the default graph."""
 	env = make_env(tmp_path, BACKUP_TOOL="restic")
 	graph = build_graph_full(env, "baremetal")
 	assert "restic" in graph, "restic must be in graph when BACKUP_TOOL=restic"
-	assert "management" in graph, "management must always be in graph"
+	assert "managerd" in graph, "managerd must always be in graph"
 
 
-def test_duplicity_and_management_in_same_graph(tmp_path):
-	"""duplicity must appear alongside management; its pip-install dep resolves."""
+def test_duplicity_owns_its_virtualenv(tmp_path):
+	"""duplicity must be self-contained; its pip-install dep resolves to its own venv."""
 	env = make_env(tmp_path, BACKUP_TOOL="duplicity")
 	graph = build_graph_full(env, "baremetal")
 	assert "duplicity" in graph, "duplicity must be in graph when BACKUP_TOOL=duplicity"
-	assert "management" in graph, "management must always be in graph"
+	assert "managerd" in graph, "managerd must always be in graph"
 
-	# The pip-install task must have a resolvable task_dep on management:virtualenv.
+	# duplicity owns its venv now (no tie to the retired Flask management stack):
+	# pip-install depends on duplicity:virtualenv, which must exist.
 	names = all_task_names(graph)
-	assert "management:virtualenv" in names, "management:virtualenv must exist for duplicity:pip-install to depend on it"
+	assert "duplicity:virtualenv" in names, "duplicity:virtualenv must exist for duplicity:pip-install to depend on it"
 
 
 def test_restic_not_in_duplicity_graph(tmp_path):

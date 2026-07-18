@@ -1,0 +1,29 @@
+#!/bin/bash
+# Docker shim for helperd: routes systemctl calls through the cross-container
+# control-socket-server bridge instead of a real systemd, which doesn't exist
+# in the management container.
+#
+# helperd execs this by fixed absolute path (/usr/bin/systemctl <action>
+# <service>[.service]), not via $PATH lookup, so this shim is installed
+# directly at /usr/bin/systemctl (there is no real systemctl to shadow).
+
+set -euo pipefail
+
+action="$1"
+svc="${2%.service}"
+
+declare -A role_for=(
+	[nsd]=dns [unbound]=dns
+	[postfix]=mail [dovecot]=mail [opendkim]=mail [opendmarc]=mail [spampd]=mail
+	[nginx]=nginx
+	[filebrowser]=filebrowser
+)
+
+role="${role_for[$svc]:-}"
+if [ -z "$role" ]; then
+	echo "systemctl shim: no socket role for service '${svc}'" >&2
+	exit 1
+fi
+
+exec python3 /usr/local/lib/naust/_socket_send.py \
+	"${STORAGE_ROOT:-/home/user-data}/sockets/${role}.sock" "$svc" "$action"

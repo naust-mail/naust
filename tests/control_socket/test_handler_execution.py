@@ -5,10 +5,9 @@ handler path, timeout, and action string passthrough.
 """
 
 import os
-import subprocess
-import sys
+import subprocess  # noqa: S404
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 @pytest.fixture
@@ -40,10 +39,11 @@ def run_handler(handler_path: str, action: str) -> tuple[str, str]:
 		return f"ERROR: no handler for service '{os.path.basename(handler_path)}'", ""
 
 	try:
-		result = subprocess.run(
+		result = subprocess.run(  # noqa: S603
 			[handler_path, action],
 			capture_output=True,
 			timeout=30,
+			check=False,
 		)
 	except subprocess.TimeoutExpired:
 		return "ERROR: handler timed out after 30s", ""
@@ -94,12 +94,13 @@ class TestHandlerExecution:
 		handler = make_handler(
 			handlers_dir,
 			"echo_action",
-			content="#!/bin/sh\necho \"got:$1\"\n",
+			content='#!/bin/sh\necho "got:$1"\n',
 		)
-		result = subprocess.run(
+		result = subprocess.run(  # noqa: S603
 			[str(handler), "reload"],
 			capture_output=True,
 			text=True,
+			check=False,
 		)
 		assert "got:reload" in result.stdout
 

@@ -7,8 +7,6 @@ pragmas, file permissions, and FK cascade rules.
 import os
 import sqlite3
 
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Schema / pragma checks

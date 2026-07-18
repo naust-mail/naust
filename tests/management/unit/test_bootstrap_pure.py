@@ -1,8 +1,8 @@
 import json
 import time
-import pytest
 import auth.bootstrap as bootstrap_module
 from auth.bootstrap import token_file_path, validate_code, consume_token
+import pathlib
 
 
 # ---------------------------------------------------------------------------
@@ -67,8 +67,7 @@ class TestLoadToken:
 
 	def test_malformed_json_returns_none(self, tmp_path):
 		path = token_file_path(_env(tmp_path))
-		with open(path, "w") as f:
-			f.write("{this is not valid json")
+		pathlib.Path(path).write_text("{this is not valid json")
 		result = bootstrap_module._load_token(_env(tmp_path))
 		assert result is None
 

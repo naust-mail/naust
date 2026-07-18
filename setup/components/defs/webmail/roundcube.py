@@ -20,11 +20,13 @@ Steps:
 import os
 import subprocess
 import shutil
+import tempfile
 
 from doit.tools import config_changed
 
 from ... import artifacts
 from ...component import Component
+import pathlib
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -50,14 +52,14 @@ COMPONENT = Component(
 	],
 	services=[],  # runs under PHP-FPM, no own service
 	docker_services=[],
-	enabled=lambda env: env.get("WEBMAIL_CLIENT", "oxi") == "roundcube",
+	enabled=lambda env: env.get("WEBMAIL_CLIENT", "rav") == "roundcube",
 )
 
-ROUNDCUBE_VERSION = "1.7.1"
+ROUNDCUBE_VERSION = "1.7.2"
 # GitHub's own computed digest for this asset, cross-checked against the
 # maintainer's .asc signature when bumping - never trust a hash fetched from
 # the same place as the archive at install time.
-ROUNDCUBE_SHA256 = "1e0382bcefd627ab0b6285d3181ddfba5b444fdcf6d49f33f5ea15fbf97864ef"
+ROUNDCUBE_SHA256 = "01bf9ede1665e507db94bab1361ebed20ee353dba04bc628b00fb6eca05af3d1"
 ROUNDCUBE_URL = f"https://github.com/roundcube/roundcubemail/releases/download/{ROUNDCUBE_VERSION}/roundcubemail-{ROUNDCUBE_VERSION}-complete.tar.gz"
 
 RCMCARDDAV_VERSION = "5.1.3"
@@ -74,7 +76,7 @@ _CARDDAV_STAMP = "/usr/local/share/roundcube-carddav.version"
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	hostname = env.get("PRIMARY_HOSTNAME", "localhost")
 	enable_radicale = env.get("ENABLE_RADICALE", "true").lower() != "false"
@@ -156,8 +158,10 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 
 def _fetch() -> None:
 	"""Download, verify, and deploy the pinned Roundcube release."""
-	tmp = "/tmp/roundcubemail.tar.gz"
+	tmp_fd, tmp = tempfile.mkstemp(suffix=".tar.gz")
+	os.close(tmp_fd)
 	try:
+		print(f"Downloading Roundcube {ROUNDCUBE_VERSION}...", flush=True)
 		subprocess.run(["wget", "-q", "-O", tmp, ROUNDCUBE_URL], check=True)
 		result = subprocess.run(
 			["sha256sum", "--check", "--strict"],
@@ -167,7 +171,8 @@ def _fetch() -> None:
 			check=False,
 		)
 		if result.returncode != 0:
-			raise RuntimeError(f"Roundcube SHA256 mismatch: {result.stderr.strip()}")
+			msg = f"Roundcube SHA256 mismatch: {result.stderr.strip()}"
+			raise RuntimeError(msg)
 
 		shutil.rmtree(_RC_SRC, ignore_errors=True)
 		os.makedirs(_RC_SRC, exist_ok=True)
@@ -185,8 +190,7 @@ def _fetch() -> None:
 	subprocess.run(["chown", "-R", "root:root", _RC_TARGET], check=True)
 	subprocess.run(["chmod", "-R", "755", _RC_TARGET], check=True)
 
-	with open(_RC_STAMP, "w") as fh:
-		fh.write(ROUNDCUBE_VERSION)
+	pathlib.Path(_RC_STAMP).write_text(ROUNDCUBE_VERSION, encoding="utf-8")
 
 
 def _dirs(storage_root: str) -> None:
@@ -203,11 +207,11 @@ def _dirs(storage_root: str) -> None:
 	if first_creation:
 		# Ensure the log file exists before fail2ban starts watching it -
 		# log_logins only creates it on the first actual login attempt otherwise.
-		open(login_log, "a").close()
+		open(login_log, "a", encoding="utf-8").close()
 		subprocess.run(["chown", "-R", "www-data:www-data", rc_dir], check=True)
 	else:
 		if not os.path.exists(login_log):
-			open(login_log, "a").close()
+			open(login_log, "a", encoding="utf-8").close()
 		subprocess.run(["chown", "www-data:www-data", login_log], check=True)
 
 	subprocess.run(["chmod", "750", rc_dir], check=True)
@@ -223,7 +227,7 @@ def _des_key(des_key_file: str) -> None:
 	forceful re-run with --always-execute, the des_key is preserved and not regenerated.
 	"""
 	if os.path.exists(des_key_file):
-		print(f"DES key for Roundcube already exists - refusing to regenerate.")
+		print("DES key for Roundcube already exists - refusing to regenerate.")
 		print(f"(Regenerating des_key invalidates existing sessions/encrypted stored credentials. Key file: {des_key_file})")
 		return
 	result = subprocess.run(
@@ -235,16 +239,14 @@ def _des_key(des_key_file: str) -> None:
 	key = result.stdout.strip()[:24]
 	old_umask = os.umask(0o177)
 	try:
-		with open(des_key_file, "w") as fh:
-			fh.write(key)
+		pathlib.Path(des_key_file).write_text(key, encoding="utf-8")
 	finally:
 		os.umask(old_umask)
 
 
-def _config(storage_root: str, hostname: str, des_key_file: str, enable_radicale: bool, enable_pgp: bool = False) -> None:
+def _config(storage_root: str, _hostname: str, des_key_file: str, enable_radicale: bool, enable_pgp: bool = False) -> None:
 	"""Write Roundcube runtime config and fix ownership."""
-	with open(des_key_file) as fh:
-		des_key = fh.read().strip()
+	des_key = pathlib.Path(des_key_file).read_text(encoding="utf-8").strip()
 
 	plugin_list = ["'archive'", "'zipdownload'"]
 	if enable_radicale:
@@ -292,6 +294,7 @@ def _db_init() -> None:
 	MySQL/PostgreSQL on a fresh DB fall through to db_init instead.
 	Safe to re-run on every setup pass.
 	"""
+	print("Initialising the Roundcube database...", flush=True)
 	result = subprocess.run(
 		["php", f"{_RC_TARGET}/bin/initdb.sh", "--update", "--dir", f"{_RC_TARGET}/SQL"],
 		check=False,
@@ -304,8 +307,10 @@ def _db_init() -> None:
 
 def _carddav_fetch() -> None:
 	"""Download and install the pinned rcmcarddav plugin."""
-	tmp = "/tmp/carddav.tar.gz"
+	tmp_fd, tmp = tempfile.mkstemp(suffix=".tar.gz")
+	os.close(tmp_fd)
 	try:
+		print(f"Downloading rcmcarddav {RCMCARDDAV_VERSION}...", flush=True)
 		subprocess.run(["wget", "-q", "-O", tmp, RCMCARDDAV_URL], check=True)
 		result = subprocess.run(
 			["sha256sum", "--check", "--strict"],
@@ -315,7 +320,8 @@ def _carddav_fetch() -> None:
 			check=False,
 		)
 		if result.returncode != 0:
-			raise RuntimeError(f"rcmcarddav SHA256 mismatch: {result.stderr.strip()}")
+			msg = f"rcmcarddav SHA256 mismatch: {result.stderr.strip()}"
+			raise RuntimeError(msg)
 
 		shutil.rmtree(_CARDDAV_DIR, ignore_errors=True)
 		os.makedirs(_CARDDAV_DIR, exist_ok=True)
@@ -324,14 +330,13 @@ def _carddav_fetch() -> None:
 		if os.path.exists(tmp):
 			os.unlink(tmp)
 
-	with open(_CARDDAV_STAMP, "w") as fh:
-		fh.write(RCMCARDDAV_VERSION)
+	pathlib.Path(_CARDDAV_STAMP).write_text(RCMCARDDAV_VERSION, encoding="utf-8")
 
 
 def _carddav_conf(hostname: str) -> None:
 	"""Write rcmcarddav plugin config pointing to this box's Radicale server.
 
-	%u expands to the IMAP username, which is the full email address in MIAB.
+	%u expands to the IMAP username, which is the full email address in NAUST.
 	"""
 	artifacts.write_file(
 		f"{_CARDDAV_DIR}/config.inc.php",
@@ -359,6 +364,5 @@ def _carddav_db(rc_db: str) -> None:
 		return
 	sql_files = sorted(os.path.join(migrations_dir, f) for f in os.listdir(migrations_dir) if f.endswith(".sql"))
 	for sql_file in sql_files:
-		with open(sql_file) as fh:
-			sql = fh.read()
+		sql = pathlib.Path(sql_file).read_text(encoding="utf-8")
 		subprocess.run(["sqlite3", rc_db], input=sql, text=True, check=True)

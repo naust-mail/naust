@@ -3,7 +3,7 @@
 # HTTP-level test fixtures for the Flask management API.
 #
 # Strategy:
-#   - core.app_context loads at import time (reads /etc/mailinabox.conf and the
+#   - core.app_context loads at import time (reads /etc/naust.conf and the
 #     api.key file). We patch both before the daemon module is first imported so
 #     the module-level singletons (`env`, `auth_service`) are wired to tmp dirs.
 #   - After import, we update core.app_context.env in-place so all view modules
@@ -25,6 +25,7 @@ import os
 import secrets
 
 import pytest
+import pathlib
 
 # Patch targets for side-effectful callouts used by mail/relay views.
 _KICK = "mail.mailconfig.sync.kick"
@@ -65,14 +66,13 @@ def _ensure_app_imported(tmp_path_factory, api_key: str) -> tuple:
 	}
 
 	key_file = str(tmp / "api.key")
-	with open(key_file, "w") as f:
-		f.write(api_key)
+	pathlib.Path(key_file).write_text(api_key)
 
 	def _fake_auth_init(self):
 		from datetime import timedelta
 		from expiringdict import ExpiringDict
 
-		self.auth_realm = "Mail-in-a-Box Management Server"
+		self.auth_realm = "Naust Management Server"
 		self.key_path = key_file
 		self.max_session_duration = timedelta(hours=1)
 		self.key = api_key

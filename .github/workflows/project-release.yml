@@ -1,9 +1,12 @@
 name: Publish release
 
 # Fires when a version tag (v1.2.3) is pushed. Packages the repo as a source
-# tarball and publishes it as a GitHub release. This is what `boxctl update`
-# fetches - it is separate from the frontend hash builds (frontend-release.yml)
-# which are not full releases.
+# tarball plus prebuilt Go daemon binaries (helperd, managerd, muninweb, boxctl) and publishes
+# them as one GitHub release. This is what `boxctl update` fetches and what
+# setup's daemon component pulls binaries from (gobuild.py matches the
+# attached daemon.hash against its local daemon/ tree before trusting them).
+# It is separate from the frontend hash builds (frontend-release.yml) which
+# are not full releases.
 
 on:
   workflow_dispatch:
@@ -20,7 +23,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -56,13 +59,37 @@ jobs:
           # Write version file into the archive so installed boxes know their version
           # without needing git history (git archive strips it).
           echo "$VERSION" > VERSION
-          git archive --format=tar.gz --prefix="mailinabox-${VERSION}/" \
+          git archive --format=tar.gz --prefix="naust-${VERSION}/" \
             --add-file=VERSION HEAD \
-            -o "mailinabox-${VERSION}.tar.gz"
+            -o "naust-${VERSION}.tar.gz"
           rm VERSION
-          sha256sum "mailinabox-${VERSION}.tar.gz" | cut -d' ' -f1 > "mailinabox-${VERSION}.tar.gz.sha256"
+          sha256sum "naust-${VERSION}.tar.gz" | cut -d' ' -f1 > "naust-${VERSION}.tar.gz.sha256"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
-          echo "TARBALL=mailinabox-${VERSION}.tar.gz" >> "$GITHUB_ENV"
+          echo "TARBALL=naust-${VERSION}.tar.gz" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+
+      - name: Test daemon
+        working-directory: daemon
+        run: go test ./...
+
+      - name: Build daemon binaries
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/assets
+          # daemon.hash lets setup verify its local daemon/ tree is the one
+          # these binaries were built from (see setup/components/gobuild.py).
+          python3 -c "import sys; sys.path.insert(0,'setup'); from components.artifacts import hash_files; print(hash_files('daemon'))" > /tmp/assets/daemon.hash
+          cd daemon
+          for cmd in helperd managerd muninweb boxctl; do
+            for arch in amd64 arm64; do
+              CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
+                go build -trimpath -ldflags "-s -w" -o "/tmp/assets/${cmd}-linux-${arch}" "./cmd/${cmd}"
+              sha256sum "/tmp/assets/${cmd}-linux-${arch}" | cut -d' ' -f1 > "/tmp/assets/${cmd}-linux-${arch}.sha256"
+            done
+          done
 
       - name: Create draft release
         env:
@@ -72,7 +99,8 @@ jobs:
           # exist if this step fails. Published manually from the GitHub UI after review.
           gh release create "$VERSION" \
             "$TARBALL" "${TARBALL}.sha256" \
+            /tmp/assets/* \
             --tag "$VERSION" \
-            --title "Mail-in-a-Box $VERSION" \
+            --title "Naust $VERSION" \
             --generate-notes \
             --draft

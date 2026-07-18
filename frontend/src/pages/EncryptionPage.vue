@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
-import { LockKeyhole, Copy, AlertTriangle } from 'lucide-vue-next'
+import { LockKeyhole, Copy, AlertTriangle, KeyRound } from 'lucide-vue-next'
+import { startAuthentication } from '@simplewebauthn/browser'
+import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -15,14 +16,22 @@ import Code from '@/components/ui/Code.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Sheet from '@/components/ui/Sheet.vue'
-import { useApi } from '@/composables/useApi'
-import type { EncryptionStatus, EncryptionSetupResponse } from '@/types'
-
-const api = useApi()
+import { api, ApiError } from '@/api/client'
+import type {
+  EncryptionChallengeRequest,
+  EncryptionPRFCompleteRequest,
+  EncryptionRelinkRequest,
+  EncryptionSetupRequest,
+  EncryptionSetupResponse,
+  EncryptionStatusResponse,
+  WebAuthnBeginResponse,
+} from '@/api/types.gen'
 
 const loading = ref(true)
 const loadError = ref(false)
-const status = ref<EncryptionStatus | null>(null)
+// The server itself has encryption at rest turned off (GET returns 404).
+const serverOff = ref(false)
+const status = ref<EncryptionStatusResponse | null>(null)
 
 // The ceremony lives in a Sheet. Stages:
 //   password  - destructive warning + confirm current password
@@ -48,7 +57,15 @@ const relinking = ref(false)
 // Shown after a successful re-link to prompt the user to rotate their codes.
 const showRotatePrompt = ref(false)
 
+// Passkey (PRF) ceremony state: enroll a passkey as an unlock method,
+// or re-link the password slot using an already-enrolled passkey.
+const prfOpen = ref(false)
+const prfMode = ref<'enroll' | 'relink'>('enroll')
+const prfPassword = ref('')
+const prfBusy = ref(false)
+
 const enabled = computed(() => status.value?.enabled === true)
+const hasPrfSlot = computed(() => status.value?.has_prf_slot === true)
 
 const SLOT_LABELS: Record<string, string> = {
   password: 'Login password',
@@ -66,7 +83,7 @@ watch(sheetOpen, (open) => {
   }
 })
 
-// ── Client-side recovery-code CRC (mirrors mail_crypt.validate_recovery_code_crc) ──
+// Client-side recovery-code CRC (mirrors the server's Crockford check).
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
 function normalizeCode(code: string): string {
@@ -98,15 +115,15 @@ const challengeOrdinal = computed(() => {
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
+  serverOff.value = false
   try {
-    const res = await api.get('/admin/user/encryption/status')
-    if (!res.ok) {
+    status.value = await api.get<EncryptionStatusResponse>('/api/user/encryption/status')
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      serverOff.value = true
+    } else {
       loadError.value = true
-      return
     }
-    status.value = await res.json()
-  } catch {
-    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -126,17 +143,15 @@ async function startSetup(): Promise<void> {
   starting.value = true
   try {
     const endpoint = mode.value === 'rotate'
-      ? '/admin/user/encryption/rotate-recovery'
-      : '/admin/user/encryption/setup'
-    const res = await api.post(endpoint, { password: password.value })
-    if (!res.ok) {
-      toast.error(await res.text())
-      return
-    }
-    const data: EncryptionSetupResponse = await res.json()
-    recoveryCodes.value = data.recovery_codes
+      ? '/api/user/encryption/rotate-recovery'
+      : '/api/user/encryption/setup'
+    const req: EncryptionSetupRequest = { password: password.value }
+    const data = await api.post<EncryptionSetupResponse>(endpoint, req)
+    recoveryCodes.value = data.recovery_codes ?? []
     password.value = ''
     stage.value = 'codes'
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Could not start the ceremony.')
   } finally {
     starting.value = false
   }
@@ -167,17 +182,14 @@ async function submitChallenge(): Promise<void> {
   submitting.value = true
   try {
     const endpoint = mode.value === 'rotate'
-      ? '/admin/user/encryption/rotate-recovery-confirm'
-      : '/admin/user/encryption/challenge'
-    // challengeIndex is 1-based for display; slot labels are 0-based.
-    const res = await api.post(endpoint, {
-      code_index: String(challengeIndex.value - 1),
+      ? '/api/user/encryption/rotate-recovery-confirm'
+      : '/api/user/encryption/challenge'
+    // challengeIndex is 1-based for display; the server indexes from 0.
+    const req: EncryptionChallengeRequest = {
+      code_index: challengeIndex.value - 1,
       code: challengeCode.value,
-    })
-    if (!res.ok) {
-      toast.error(await res.text())
-      return
     }
+    await api.post(endpoint, req)
     sheetOpen.value = false
     if (mode.value === 'rotate') {
       showRotatePrompt.value = false
@@ -186,6 +198,8 @@ async function submitChallenge(): Promise<void> {
       toast.success('Encryption at rest is now enabled.')
       await load()
     }
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Verification failed.')
   } finally {
     submitting.value = false
   }
@@ -213,19 +227,110 @@ async function submitRelink(): Promise<void> {
   }
   relinking.value = true
   try {
-    const res = await api.post('/admin/user/encryption/relink', {
+    const req: EncryptionRelinkRequest = {
       code: relinkCode.value,
       password: relinkPassword.value,
-    })
-    if (!res.ok) {
-      toast.error(await res.text())
-      return
     }
+    await api.post('/api/user/encryption/relink', req)
     relinkOpen.value = false
     showRotatePrompt.value = true
     toast.success('Encryption re-linked. Your password now unlocks your mail again.')
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Re-link failed.')
   } finally {
     relinking.value = false
+  }
+}
+
+// Passkey (PRF) ceremony.
+
+function b64urlToBuffer(s: string): ArrayBuffer {
+  const pad = '='.repeat((4 - (s.length % 4)) % 4)
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + pad)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes.buffer
+}
+
+function bufferToB64url(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf)
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+// The server sends prf eval salts base64url-encoded (WebAuthn JSON
+// encoding) and reads the prf result from an explicit prf_output
+// field: simplewebauthn passes extensions through untouched, so the
+// salts are converted to buffers here, and the raw ArrayBuffer result
+// is read from getClientExtensionResults() and re-encoded.
+type PRFEvalInput = { first: string }
+type PRFExtensionInput = { eval?: PRFEvalInput; evalByCredential?: Record<string, PRFEvalInput> }
+type PRFExtensionOutput = { prf?: { results?: { first?: ArrayBuffer } } }
+
+async function runPrfCeremony(purpose: 'enroll' | 'relink', pw: string): Promise<void> {
+  const base = `/api/user/encryption/prf/${purpose}`
+  const begin = await api.post<WebAuthnBeginResponse>(`${base}/begin`)
+  const options = begin.options as { publicKey: PublicKeyCredentialRequestOptionsJSON }
+  const prf = (options.publicKey.extensions as { prf?: PRFExtensionInput } | undefined)?.prf
+  if (prf?.eval) {
+    (prf.eval as unknown as { first: BufferSource }).first = b64urlToBuffer(prf.eval.first)
+  }
+  if (prf?.evalByCredential) {
+    for (const id of Object.keys(prf.evalByCredential)) {
+      const entry = prf.evalByCredential[id]
+      if (entry) (entry as unknown as { first: BufferSource }).first = b64urlToBuffer(entry.first)
+    }
+  }
+  const credential = await startAuthentication({ optionsJSON: options.publicKey })
+  const extResults = credential.clientExtensionResults as PRFExtensionOutput
+  const first = extResults.prf?.results?.first
+  if (!first) throw new Error('prf-unsupported')
+  const prfOutput = bufferToB64url(first)
+  // The raw ArrayBuffer result does not survive JSON; drop it before
+  // the credential is sent.
+  delete extResults.prf
+  const req: EncryptionPRFCompleteRequest = {
+    nonce: begin.nonce,
+    credential,
+    prf_output: prfOutput,
+    password: pw,
+  }
+  await api.post(`${base}/complete`, req)
+}
+
+function openPrf(m: 'enroll' | 'relink'): void {
+  prfMode.value = m
+  prfPassword.value = ''
+  prfOpen.value = true
+}
+
+watch(prfOpen, (open) => {
+  if (!open) prfPassword.value = ''
+})
+
+async function submitPrf(): Promise<void> {
+  if (!prfPassword.value || prfBusy.value) return
+  prfBusy.value = true
+  try {
+    await runPrfCeremony(prfMode.value, prfPassword.value)
+    prfOpen.value = false
+    if (prfMode.value === 'enroll') {
+      toast.success('Passkey enrolled. It can now unlock your encrypted mail.')
+      await load()
+    } else {
+      toast.success('Encryption re-linked. Your password now unlocks your mail again.')
+    }
+  } catch (e) {
+    if (e instanceof ApiError) {
+      toast.error(e.message)
+    } else if ((e as Error).message === 'prf-unsupported') {
+      toast.error('This passkey does not support encryption (PRF). Try a different passkey.')
+    } else if ((e as Error).name !== 'NotAllowedError') {
+      toast.error('Passkey ceremony failed. Please try again.')
+    }
+  } finally {
+    prfBusy.value = false
   }
 }
 
@@ -233,13 +338,12 @@ onMounted(load)
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="Encryption at Rest" description="Encrypt your mailbox with a key only you can unlock." />
 
     <AsyncState :loading="loading" :error="loadError" :empty="false" error-title="Could not load encryption settings" @retry="load">
       <template #loading>
         <SectionHeader title="Status" />
-        <Card class="p-6">
+        <Card padding="lg">
           <Skeleton class="size-12 rounded-full mb-4" />
           <Skeleton class="h-5 w-56 mb-2" />
           <Skeleton class="h-4 w-80 mb-4" />
@@ -247,81 +351,118 @@ onMounted(load)
         </Card>
       </template>
 
-      <SectionHeader title="Status" />
-
-      <!-- Enabled -->
-      <Card v-if="enabled" class="p-6">
-        <div class="flex items-start gap-5">
-          <div class="flex-none size-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-            <LockKeyhole class="size-6 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <p class="text-base font-semibold text-text">Your mailbox is encrypted at rest</p>
-              <Badge variant="success">Enabled</Badge>
-            </div>
-            <p class="text-sm text-muted mb-4">
-              Your mail is unlocked with your login password. Keep your recovery codes safe -
-              they are the only other way to unlock it if you lose access.
-            </p>
-            <div v-if="status?.slot_types?.length" class="flex flex-wrap gap-1.5">
-              <span class="text-xs text-muted mr-1 self-center">Active unlock methods:</span>
-              <Badge v-for="t in status.slot_types" :key="t" variant="default">{{ SLOT_LABELS[t] ?? t }}</Badge>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <!-- Actions available when encryption is enabled -->
-      <template v-if="enabled">
-        <SectionHeader title="Recover access" class="mt-8" />
-        <Card class="p-5">
-          <p class="text-sm text-muted mb-4">
-            If your password was changed or reset, your login may no longer unlock your encrypted mail.
-            Re-link it with a recovery code to restore access - this does not change your recovery codes.
-          </p>
-          <Button variant="secondary" @click="relinkOpen = true">Re-link with a recovery code</Button>
-        </Card>
-
-        <SectionHeader title="Recovery codes" class="mt-8" />
-        <Card class="p-5">
-          <div v-if="showRotatePrompt" class="flex gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 p-4 mb-4">
-            <AlertTriangle class="size-5 flex-none text-amber-600 dark:text-amber-400 mt-0.5" />
-            <p class="text-sm text-muted">
-              You used a recovery code to re-link.
-              <span class="font-medium text-text">Generate a new set now</span>
-              so your old codes cannot be reused by someone who may have seen them.
-            </p>
-          </div>
-          <p class="text-sm text-muted mb-4">
-            Your 4 recovery codes are the only way to unlock your mail if you forget your password.
-            Rotate them if you think any code was exposed.
-          </p>
-          <Button variant="secondary" @click="openCeremony('rotate')">Generate new recovery codes</Button>
-        </Card>
-      </template>
-
-      <!-- Not enabled -->
+      <!-- Feature disabled server-wide -->
       <EmptyState
-        v-else
-        title="Encryption at rest is off"
-        description="Enable it to encrypt your mailbox with a key derived from your login password. You will be given recovery codes to store safely."
+        v-if="serverOff"
+        bordered
+        title="Not available on this server"
+        description="Encryption at rest is not enabled on this server. Ask your administrator about turning it on."
       >
         <template #icon><LockKeyhole /></template>
-        <template #action>
-          <Button @click="openCeremony('setup')">Enable encryption</Button>
-        </template>
       </EmptyState>
+
+      <template v-else>
+        <SectionHeader title="Status" />
+
+        <!-- Enabled -->
+        <Card v-if="enabled" padding="lg">
+          <div class="flex items-start gap-5">
+            <div class="flex-none size-12 rounded-full bg-success-bg flex items-center justify-center">
+              <LockKeyhole class="size-6 text-success" />
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <p class="text-base font-semibold text-text">Your mailbox is encrypted at rest</p>
+                <Badge variant="success">Enabled</Badge>
+              </div>
+              <p class="text-sm text-muted mb-4">
+                Your mail is unlocked with your login password. Keep your recovery codes safe -
+                they are the only other way to unlock it if you lose access.
+              </p>
+              <div v-if="status?.slot_types?.length" class="flex flex-wrap gap-1.5">
+                <span class="text-xs text-muted mr-1 self-center">Active unlock methods:</span>
+                <Badge v-for="t in status.slot_types" :key="t" variant="default">{{ SLOT_LABELS[t] ?? t }}</Badge>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <!-- Actions available when encryption is enabled -->
+        <template v-if="enabled">
+          <SectionHeader title="Passkey unlock" class="mt-8" />
+          <Card padding="md">
+            <template v-if="hasPrfSlot">
+              <p class="text-sm text-muted mb-4">
+                A passkey is enrolled as an unlock method. If your password is ever reset,
+                that passkey can restore access to your mail without a recovery code.
+                You can enroll additional passkeys.
+              </p>
+            </template>
+            <template v-else>
+              <p class="text-sm text-muted mb-4">
+                Enroll a passkey as an unlock method. If an administrator ever resets your
+                password, the passkey can restore access to your encrypted mail without
+                typing a recovery code. Requires a passkey registered on your account.
+              </p>
+            </template>
+            <Button variant="secondary" @click="openPrf('enroll')">
+              <KeyRound class="size-4" /> {{ hasPrfSlot ? 'Enroll another passkey' : 'Enroll a passkey' }}
+            </Button>
+          </Card>
+
+          <SectionHeader title="Recover access" class="mt-8" />
+          <Card padding="md">
+            <p class="text-sm text-muted mb-4">
+              If your password was changed or reset, your login may no longer unlock your encrypted mail.
+              Re-link it to restore access - this does not change your recovery codes.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <Button variant="secondary" @click="relinkOpen = true">Re-link with a recovery code</Button>
+              <Button v-if="hasPrfSlot" variant="secondary" @click="openPrf('relink')">Re-link with your passkey</Button>
+            </div>
+          </Card>
+
+          <SectionHeader title="Recovery codes" class="mt-8" />
+          <Card padding="md">
+            <div v-if="showRotatePrompt" class="flex gap-3 rounded-lg border border-warning-border bg-warning-bg p-4 mb-4">
+              <AlertTriangle class="size-5 flex-none text-warning mt-0.5" />
+              <p class="text-sm text-muted">
+                You used a recovery code to re-link.
+                <span class="font-medium text-text">Generate a new set now</span>
+                so your old codes cannot be reused by someone who may have seen them.
+              </p>
+            </div>
+            <p class="text-sm text-muted mb-4">
+              Your 4 recovery codes are the only way to unlock your mail if you forget your password.
+              Rotate them if you think any code was exposed.
+            </p>
+            <Button variant="secondary" @click="openCeremony('rotate')">Generate new recovery codes</Button>
+          </Card>
+        </template>
+
+        <!-- Not enabled -->
+        <EmptyState
+          v-else
+          bordered
+          title="Encryption at rest is off"
+          description="Enable it to encrypt your mailbox with a key derived from your login password. You will be given recovery codes to store safely."
+        >
+          <template #icon><LockKeyhole /></template>
+          <template #action>
+            <Button @click="openCeremony('setup')">Enable encryption</Button>
+          </template>
+        </EmptyState>
+      </template>
     </AsyncState>
 
     <!-- Setup / rotate ceremony (shared sheet, mode-aware) -->
     <Sheet v-model="sheetOpen" :title="mode === 'rotate' ? 'Generate new recovery codes' : 'Enable encryption at rest'">
       <!-- Stage: password -->
       <template v-if="stage === 'password'">
-        <div v-if="mode === 'setup'" class="flex gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10 p-4 mb-5">
-          <AlertTriangle class="size-5 flex-none text-red-600 dark:text-red-400 mt-0.5" />
+        <div v-if="mode === 'setup'" class="flex gap-3 rounded-lg border border-error-border bg-error-bg p-4 mb-5">
+          <AlertTriangle class="size-5 flex-none text-error mt-0.5" />
           <div class="text-sm">
-            <p class="font-medium text-red-600 dark:text-red-400 mb-1">Read this before you continue.</p>
+            <p class="font-medium text-error mb-1">Read this before you continue.</p>
             <ul class="list-disc pl-4 space-y-1 text-muted">
               <li>Your mail is unlocked by your login password. If you forget it, only a recovery code can restore access.</li>
               <li>If you lose your password <span class="font-medium">and</span> all recovery codes, your mail is permanently unrecoverable. There is no master key.</li>
@@ -405,7 +546,7 @@ onMounted(load)
       </template>
     </Sheet>
 
-    <!-- Re-link ceremony -->
+    <!-- Re-link ceremony (recovery code) -->
     <Sheet v-model="relinkOpen" title="Re-link encryption">
       <p class="text-sm text-muted mb-5">
         Enter one of your recovery codes and your <span class="font-medium text-text">current</span> password.
@@ -440,5 +581,34 @@ onMounted(load)
         </div>
       </template>
     </Sheet>
-  </AppLayout>
+
+    <!-- Passkey (PRF) ceremony: enroll or re-link -->
+    <Sheet v-model="prfOpen" :title="prfMode === 'enroll' ? 'Enroll a passkey' : 'Re-link with your passkey'">
+      <p v-if="prfMode === 'enroll'" class="text-sm text-muted mb-5">
+        Your password unlocks your mail key so the passkey can be added as an unlock
+        method. Your browser will then ask you to use your passkey.
+      </p>
+      <p v-else class="text-sm text-muted mb-5">
+        Your enrolled passkey unlocks your mail key, and it is re-attached to your
+        <span class="font-medium text-text">current</span> password.
+        Your browser will ask you to use your passkey.
+      </p>
+      <Field :label="prfMode === 'enroll' ? 'Confirm your password' : 'Current password'" for="prfPassword">
+        <Input
+          id="prfPassword"
+          v-model="prfPassword"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Your account password"
+        />
+      </Field>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <Button variant="secondary" @click="prfOpen = false">Cancel</Button>
+          <Button :disabled="!prfPassword || prfBusy" @click="submitPrf">
+            {{ prfBusy ? 'Waiting for passkey...' : 'Continue with passkey' }}
+          </Button>
+        </div>
+      </template>
+    </Sheet>
 </template>

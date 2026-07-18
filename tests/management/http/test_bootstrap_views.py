@@ -20,11 +20,8 @@
 # For tests that go through the full code path (generate_token -> submit),
 # a real token file is written via generate_token().
 
-import json
-import os
 from unittest.mock import patch
 
-import pytest
 
 # The bootstrap module uses module-level globals for attempt tracking.
 # Reset them between tests to avoid cross-contamination.

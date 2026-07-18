@@ -53,8 +53,8 @@ from .checks import (
 import pathlib
 from .questions import step_webmail, step_monitoring
 
-BARE_METAL_CONF = "/etc/mailinabox.conf"
-# Parent of the boxctl/ package - either setup/ (dev) or /usr/local/lib/mailinabox/ (installed).
+BARE_METAL_CONF = "/etc/naust.conf"
+# Parent of the boxctl/ package - either setup/ (dev) or /usr/local/lib/naust/ (installed).
 # components/ lives at the same level, so this is the correct cwd for python3 -m components.runner.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -74,7 +74,7 @@ _BACKUP_PATHS = {
 }
 
 _STOP_SERVICES = {
-	"WEBMAIL_CLIENT:oxi": ["oxi-email"],
+	"WEBMAIL_CLIENT:rav": ["rav"],
 	"WEBMAIL_CLIENT:roundcube": [],
 	"WEBMAIL_CLIENT:snappymail": [],
 	"WEBMAIL_CLIENT:cypht": [],
@@ -247,7 +247,7 @@ def _write_conf_key(key, value):
 	import tempfile
 
 	dir_ = os.path.dirname(BARE_METAL_CONF)
-	fd, tmp = tempfile.mkstemp(dir=dir_, prefix=".mailinabox-conf-")
+	fd, tmp = tempfile.mkstemp(dir=dir_, prefix=".naust-conf-")
 	try:
 		with os.fdopen(fd, "w", encoding="utf-8") as f:
 			f.writelines(lines)
@@ -257,19 +257,16 @@ def _write_conf_key(key, value):
 		raise
 
 
-_LIB = "/usr/local/lib/mailinabox"
-
-
-def _regenerate(_conf, reload_daemon=False):
-	if reload_daemon:
-		subprocess.run(["systemctl", "restart", "mailinabox"], capture_output=True)
-		for _ in range(30):
-			if _port_open("127.0.0.1", 10222, timeout=1):
-				break
-			time.sleep(1)
-	r1 = subprocess.run([f"{_LIB}/dns_update"], capture_output=True)
-	r2 = subprocess.run([f"{_LIB}/web_update"], capture_output=True)
-	return r1.returncode == 0 and r2.returncode == 0
+def _regenerate(_conf, reload_daemon=False):  # noqa: ARG001 - reload_daemon kept for call-site clarity; every call restarts managerd regardless (see comment below)
+	# managerd converges nginx sites and nsd zones on startup, so a
+	# restart IS the regeneration (and re-reads /etc/naust.conf, which
+	# is why service enable/disable needs this).
+	subprocess.run(["systemctl", "restart", "naust-managerd"], capture_output=True)
+	for _ in range(30):
+		if _port_open("127.0.0.1", 10223, timeout=1):
+			return True
+		time.sleep(1)
+	return False
 
 
 # -- UI rendering ---------------------------------------------------------------
@@ -445,32 +442,18 @@ def _run_with_output(conf_key, _conf, storage_root, action_verb="Installing"):
 		print(f"  {red('✗')} Script failed - check output above.\n")
 		return False
 
-	sys.stdout.write("  → Reloading daemon...  ")
+	sys.stdout.write("  → Reloading daemon (regenerates nginx + DNS)...  ")
 	sys.stdout.flush()
-	subprocess.run(["systemctl", "restart", "mailinabox"], capture_output=True)
-	for _ in range(30):
-		if _port_open("127.0.0.1", 10222, timeout=1):
-			break
-		time.sleep(1)
-	if _port_open("127.0.0.1", 10222, timeout=1):
-		print(green('✓'))
-	else:
-		print(f"{red('✗')}  {gray_desc('daemon unreachable - run sudo setup/install.sh')}")
-
-	sys.stdout.write("  → Regenerating nginx + DNS...  ")
-	sys.stdout.flush()
-	r1 = subprocess.run([f"{_LIB}/dns_update"], capture_output=True)
-	r2 = subprocess.run([f"{_LIB}/web_update"], capture_output=True)
-	regen_ok = r1.returncode == 0 and r2.returncode == 0
+	regen_ok = _regenerate(_conf)
 	if regen_ok:
 		print(green('✓'))
 	else:
-		print(f"{red('✗')}  {gray_desc('check: journalctl -u mailinabox')}")
+		print(f"{red('✗')}  {gray_desc('daemon unreachable - check journalctl -u naust-managerd')}")
 
 	if regen_ok:
 		print(f"\n  {green('✓')} {bold('Done.')}\n")
 	else:
-		print(f"\n  {bold('Installed.')} {gray_desc('nginx/DNS reload failed - services are running but may not be reachable. Check journalctl -u mailinabox.')}\n")
+		print(f"\n  {bold('Installed.')} {gray_desc('daemon restart failed - services are running but may not be reachable. Check journalctl -u naust-managerd.')}\n")
 	return True
 
 
@@ -557,7 +540,7 @@ def _nginx_actions(_key, _label, _status, _msg, _conf, _storage_root):
 
 
 def _management_actions(_key, _label, _status, _msg, _conf, _storage_root):
-	return [_view_logs_action("mailinabox")]
+	return [_view_logs_action("naust-managerd")]
 
 
 def _spam_actions(_key, _label, _status, _msg, conf, storage_root):
@@ -607,9 +590,9 @@ def _spam_actions(_key, _label, _status, _msg, conf, storage_root):
 
 
 def _webmail_actions(_key, _label, status, _msg, conf, storage_root):
-	current = conf.get("WEBMAIL_CLIENT", "oxi")
+	current = conf.get("WEBMAIL_CLIENT", "rav")
 	clients = [
-		("oxi.email", "oxi"),
+		("rav", "rav"),
 		("Roundcube", "roundcube"),
 		("SnappyMail", "snappymail"),
 		("Cypht", "cypht"),
@@ -938,7 +921,7 @@ def run(check=False):
 
 	if check:
 		if not conf:
-			print("  error: no /etc/mailinabox.conf found")
+			print("  error: no /etc/naust.conf found")
 			sys.exit(2)
 		_run_check(conf)
 		return
@@ -956,7 +939,7 @@ def run(check=False):
 		sys.exit(1)
 
 	if not conf:
-		print(f"\n  {red('No /etc/mailinabox.conf found.')}")
+		print(f"\n  {red('No /etc/naust.conf found.')}")
 		print(f"  {gray_desc('Run sudo setup/install.sh first.')}\n")
 		sys.exit(1)
 

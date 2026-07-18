@@ -7,11 +7,9 @@ Any generation primitive found outside these sets is a test failure: it means
 a key-generation call can run on every setup invocation rather than only once.
 """
 
-import ast
 import os
 import re
 
-import pytest
 
 _DEFS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "setup", "components", "defs"))
 
@@ -42,8 +40,10 @@ MUST_GATE = {
 DOCUMENTED_EXEMPT = {
 	"_generate_cert",
 	"_start_script",
-	# system.py: ssh-keygen for the host SSH key - guarded by targets= in doit.
+	# backup/__init__.py: ssh-keygen for the rsync/sftp backup key - guarded by targets= in doit.
 	"_ssh_key",
+	# managerd.py: openssl rand for the mailcrypt unwrap secret - guarded by targets= in doit plus its own existence check.
+	"_unwrap_key",
 	# beszel.py: ssh-keygen for hub->agent keypair - guarded by targets= in doit.
 	"_generate_keypair",
 }
@@ -72,7 +72,7 @@ def _collect_violations() -> list[str]:
 				continue
 			path = os.path.join(dirpath, fname)
 			rel = os.path.relpath(path, _DEFS_DIR)
-			with open(path) as fh:
+			with open(path, encoding="utf-8") as fh:
 				lines = fh.readlines()
 			for lineno, line in enumerate(lines):
 				for pat in _PATTERNS:

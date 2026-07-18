@@ -22,3 +22,10 @@ docs/tsconfig.tsbuildinfo
 deploy/docker/.env
 *.zip
 .*/
+daemon/managerd
+daemon/helperd
+daemon/muninweb
+daemon/apigen
+daemon/coverage.out
+daemon/coverage.html
+daemon/tmp

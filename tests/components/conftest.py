@@ -1,7 +1,7 @@
 import itertools
 
 _SPAM_FILTERS = ["rspamd", "spamassassin"]
-_WEBMAIL_CLIENTS = ["oxi", "roundcube", "snappymail", "cypht", "none"]
+_WEBMAIL_CLIENTS = ["rav", "roundcube", "snappymail", "cypht", "none"]
 _BOOLS = ["true", "false"]
 _RUNTIMES = ["baremetal", "docker"]
 
@@ -27,7 +27,7 @@ def make_env(tmp_path, **overrides):
 		"PUBLIC_IP": "1.2.3.4",
 		"EMAIL_ADDR": "admin@example.com",
 		"SPAM_FILTER": "rspamd",
-		"WEBMAIL_CLIENT": "oxi",
+		"WEBMAIL_CLIENT": "rav",
 		"ENABLE_RADICALE": "false",
 		"ENABLE_FILEBROWSER": "false",
 		"ENABLE_CLAMAV": "false",
@@ -48,6 +48,5 @@ BACKUP_CONFIGS = [
 def all_task_names(graph):
 	names = set()
 	for comp_name, tasks in graph.items():
-		for t in tasks:
-			names.add(f"{comp_name}:{t['name']}")
+		names.update(f"{comp_name}:{t['name']}" for t in tasks)
 	return names

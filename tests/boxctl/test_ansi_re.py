@@ -5,11 +5,7 @@ simple colour codes. These tests guard against regressions that would leave
 raw escape bytes in the TUI log viewer output.
 """
 
-import re
-
-import pytest
-
-from boxctl.doctor import _ANSI_RE
+from boxctl.doctor import _ANSI_RE  # noqa: PLC2701
 
 
 def _strip(s: str) -> str:
@@ -23,19 +19,19 @@ def _strip(s: str) -> str:
 
 class TestSgrCsi:
 	def test_plain_colour_reset(self):
-		assert _strip("\x1b[0m") == ""
+		assert not _strip("\x1b[0m")
 
 	def test_bold(self):
-		assert _strip("\x1b[1m") == ""
+		assert not _strip("\x1b[1m")
 
 	def test_fg_colour(self):
-		assert _strip("\x1b[31m") == ""
+		assert not _strip("\x1b[31m")
 
 	def test_256_colour(self):
-		assert _strip("\x1b[38;5;200m") == ""
+		assert not _strip("\x1b[38;5;200m")
 
 	def test_rgb_truecolour(self):
-		assert _strip("\x1b[38;2;255;128;0m") == ""
+		assert not _strip("\x1b[38;2;255;128;0m")
 
 	def test_text_preserved_around_colour(self):
 		assert _strip("\x1b[32mhello\x1b[0m") == "hello"
@@ -45,8 +41,8 @@ class TestSgrCsi:
 
 	def test_question_mark_private_csi(self):
 		# ?25l / ?25h (cursor hide/show) are CSI sequences with ? prefix
-		assert _strip("\x1b[?25l") == ""
-		assert _strip("\x1b[?25h") == ""
+		assert not _strip("\x1b[?25l")
+		assert not _strip("\x1b[?25h")
 
 
 # ---------------------------------------------------------------------------
@@ -56,16 +52,16 @@ class TestSgrCsi:
 
 class TestCursorCsi:
 	def test_cursor_up(self):
-		assert _strip("\x1b[2A") == ""
+		assert not _strip("\x1b[2A")
 
 	def test_cursor_column(self):
-		assert _strip("\x1b[40G") == ""
+		assert not _strip("\x1b[40G")
 
 	def test_erase_line(self):
-		assert _strip("\x1b[2K") == ""
+		assert not _strip("\x1b[2K")
 
 	def test_erase_display(self):
-		assert _strip("\x1b[2J") == ""
+		assert not _strip("\x1b[2J")
 
 
 # ---------------------------------------------------------------------------
@@ -75,10 +71,10 @@ class TestCursorCsi:
 
 class TestOsc:
 	def test_osc_window_title_bel_terminated(self):
-		assert _strip("\x1b]0;My Title\x07") == ""
+		assert not _strip("\x1b]0;My Title\x07")
 
 	def test_osc_window_title_st_terminated(self):
-		assert _strip("\x1b]0;My Title\x1b\\") == ""
+		assert not _strip("\x1b]0;My Title\x1b\\")
 
 	def test_osc_hyperlink(self):
 		assert _strip("\x1b]8;;https://example.com\x07link\x1b]8;;\x07") == "link"
@@ -96,22 +92,22 @@ class TestOsc:
 class TestVt100SingleChar:
 	def test_save_cursor(self):
 		# ESC 7 (DECSC) - would render as raw '7' without stripping
-		assert _strip("\x1b7") == ""
+		assert not _strip("\x1b7")
 
 	def test_restore_cursor(self):
 		# ESC 8 (DECRC) - same
-		assert _strip("\x1b8") == ""
+		assert not _strip("\x1b8")
 
 	def test_text_around_save_restore_preserved(self):
 		assert _strip("before\x1b7inside\x1b8after") == "beforeinsideafter"
 
 	def test_application_keypad_mode(self):
 		# ESC = (DECKPAM, 0x3D) - emitted by readline/ncurses, outside [0-9] range
-		assert _strip("\x1b=") == ""
+		assert not _strip("\x1b=")
 
 	def test_numeric_keypad_mode(self):
 		# ESC > (DECKPNM, 0x3E)
-		assert _strip("\x1b>") == ""
+		assert not _strip("\x1b>")
 
 	# ---------------------------------------------------------------------------
 	def test_coloured_log_line(self):
@@ -127,7 +123,7 @@ class TestVt100SingleChar:
 		assert _strip(line) == line
 
 	def test_empty_string_unchanged(self):
-		assert _strip("") == ""
+		assert not _strip("")
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +139,7 @@ class TestTruncatedSequences:
 	def test_truncated_osc_stripped_to_end(self):
 		# OSC with no BEL/ST terminator: strip greedily to end of string.
 		# Leaving it raw would corrupt terminal state in the TUI log viewer.
-		assert _strip("\x1b]0;unterminated") == ""
+		assert not _strip("\x1b]0;unterminated")
 
 
 # ---------------------------------------------------------------------------

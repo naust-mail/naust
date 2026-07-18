@@ -72,7 +72,7 @@ def munin_cgi(filename):
 	munin-cgi-graph has several failure modes. Some write HTTP Status headers and
 	others return nonzero exit codes.
 	Situating munin_cgi between the user-agent and munin-cgi-graph enables keeping
-	the cgi script behind mailinabox's auth mechanisms and avoids additional
+	the cgi script behind naust's auth mechanisms and avoids additional
 	support infrastructure like spawn-fcgi.
 	"""
 
@@ -91,7 +91,7 @@ def munin_cgi(filename):
 	query_str = request.query_string.decode("utf-8", 'ignore')
 
 	# Note: this 'env' is the subprocess environment for the CGI call, unrelated
-	# to the module-level mailinabox settings 'env' imported above - same name,
+	# to the module-level naust settings 'env' imported above - same name,
 	# same as the original code, scoped to this function only.
 	cgi_env = {'PATH_INFO': f'/{filename}/', 'REQUEST_METHOD': 'GET', 'QUERY_STRING': query_str}
 	code, binout = utils.shell(

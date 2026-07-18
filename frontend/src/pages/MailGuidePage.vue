@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Card from '@/components/ui/Card.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -7,15 +6,15 @@ import Code from '@/components/ui/Code.vue'
 import Divider from '@/components/ui/Divider.vue'
 import Table from '@/components/ui/Table.vue'
 import TableRow from '@/components/ui/TableRow.vue'
-import { useConfigStore } from '@/stores/config'
+import { useAuthStore } from '@/stores/auth'
 
-const config = useConfigStore()
+const auth = useAuthStore()
 
 type SettingRow = [string, string]
 
 const imapSmtpRows: SettingRow[] = [
   ['Protocol', 'IMAP'],
-  ['Mail server', config.hostname],
+  ['Mail server', auth.hostname],
   ['IMAP port', '993 (SSL/TLS)'],
   ['SMTP port', '465 (SSL/TLS)'],
   ['SMTP port', '587 (STARTTLS)'],
@@ -26,22 +25,21 @@ const imapSmtpRows: SettingRow[] = [
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="Checking and Sending Mail" description="How to connect your mail app, or use the built-in webmail." />
 
     <!-- Webmail -->
     <SectionHeader title="Webmail" />
-    <Card class="p-5 mb-6">
+    <Card padding="md" class="mb-6">
       <p class="text-sm text-muted mb-2">
         Access your email from any web browser - no setup required.
       </p>
       <a
-        :href="`https://${config.hostname}/mail`"
+        :href="`https://${auth.hostname}/mail`"
         target="_blank"
         rel="noopener"
         class="text-sm font-medium underline underline-offset-2"
       >
-        https://{{ config.hostname || 'example.com' }}/mail
+        https://{{ auth.hostname || 'example.com' }}/mail
       </a>
       <p class="text-xs text-muted mt-2">Your username is your full email address.</p>
     </Card>
@@ -54,7 +52,7 @@ const imapSmtpRows: SettingRow[] = [
           iOS and macOS users can set up Mail automatically using the configuration profile:
         </p>
         <a
-          :href="`https://${config.hostname}/mailinabox.mobileconfig`"
+          :href="`https://${auth.hostname}/naust.mobileconfig`"
           class="text-sm font-medium underline underline-offset-2"
         >
           Download configuration profile
@@ -79,7 +77,7 @@ const imapSmtpRows: SettingRow[] = [
 
     <!-- Other info -->
     <SectionHeader title="Other Information" />
-    <Card class="p-5">
+    <Card padding="md">
       <div class="divide-y divide-border">
         <div class="pb-4">
           <p class="text-sm font-medium mb-1">Greylisting</p>
@@ -105,5 +103,4 @@ const imapSmtpRows: SettingRow[] = [
         </div>
       </div>
     </Card>
-  </AppLayout>
 </template>

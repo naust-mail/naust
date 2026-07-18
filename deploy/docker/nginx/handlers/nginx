@@ -1,5 +1,6 @@
 #!/bin/bash
 case "$1" in
+    test)    nginx -t ;;
     reload)  nginx -s reload ;;
     restart) nginx -s quit; sleep 1; nginx -g 'daemon off;' ;;
 esac

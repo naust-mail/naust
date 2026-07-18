@@ -1,0 +1,28 @@
+#!/bin/bash
+# Docker shim for helperd: intercepts nsd-control calls (serviceIntent()'s
+# custom nsd reload sequence in daemon/internal/helper) and routes them
+# through the cross-container control-socket-server bridge. The real
+# nsd-control binary and running nsd live in the dns container, not here.
+#
+# helperd runs "nsd-control reconfig" then "nsd-control reload" in sequence;
+# the dns container's own nsd handler already does both steps for a single
+# "reload" action, so only the first call needs to hit the socket - the
+# second is made a no-op success. helperd execs this by fixed absolute path
+# (/usr/sbin/nsd-control), not via $PATH lookup, so this shim is installed
+# directly there (there is no real nsd-control binary in this container).
+
+set -euo pipefail
+
+case "${1:-}" in
+	reconfig)
+		exec python3 /usr/local/lib/naust/_socket_send.py \
+			"${STORAGE_ROOT:-/home/user-data}/sockets/dns.sock" nsd reload
+		;;
+	reload)
+		exit 0
+		;;
+	*)
+		echo "nsd-control shim: unsupported argument '${1:-}'" >&2
+		exit 1
+		;;
+esac

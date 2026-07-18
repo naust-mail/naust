@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from collections.abc import Callable
 
 
 # A single step inside a check's run. Mirrors how a CI job shows its steps:
@@ -10,7 +10,7 @@ class StepResult:
 	status: str = "running"  # running | ok | warning | error
 	message: str = ""
 	started_at: float = 0.0
-	finished_at: Optional[float] = None
+	finished_at: float | None = None
 
 
 # The result of one whole check (one or more steps).
@@ -21,7 +21,7 @@ class CheckResult:
 	status: str  # ok | warning | error | skipped
 	message: str = ""
 	steps: list = field(default_factory=list)  # list[StepResult]
-	domain: Optional[str] = None  # set when this result is one instance of a per-domain check
+	domain: str | None = None  # set when this result is one instance of a per-domain check
 
 
 @dataclass
@@ -31,9 +31,9 @@ class Check:
 	fn: Callable
 	depends_on: list = field(default_factory=list)
 	# enabled(env) -> bool. None means always enabled.
-	enabled: Optional[Callable] = None
+	enabled: Callable | None = None
 	# per_domain(env) -> iterable of domain strings. None means this check runs once.
-	per_domain: Optional[Callable] = None
+	per_domain: Callable | None = None
 
 
 # All checks that have registered themselves by being imported.

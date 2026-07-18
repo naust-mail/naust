@@ -1,3 +1,3 @@
-from .orchestrator import run_checks, discover_checks, get_optimal_pool_size
-from .utils import query_dns, normalize_ip, what_version_is_this, get_latest_miab_version, list_apt_updates, is_reboot_needed_due_to_package_installation
-from .serialize import results_to_list, result_to_dict
+from .orchestrator import run_checks as run_checks, discover_checks as discover_checks, get_optimal_pool_size as get_optimal_pool_size
+from .utils import query_dns as query_dns, normalize_ip as normalize_ip, what_version_is_this as what_version_is_this, get_latest_naust_version as get_latest_naust_version, list_apt_updates as list_apt_updates, is_reboot_needed_due_to_package_installation as is_reboot_needed_due_to_package_installation
+from .serialize import results_to_list as results_to_list, result_to_dict as result_to_dict

@@ -6,11 +6,9 @@ CyclicDependencyError at runtime. This is a structural property that static
 analysis can catch cheaply without running any tasks.
 """
 
-from collections import deque
-
 import pytest
 
-from tests.components.conftest import CONFIG_MATRIX, BACKUP_CONFIGS, make_env, all_task_names
+from tests.components.conftest import CONFIG_MATRIX, BACKUP_CONFIGS, make_env
 from tests.components._helpers import build_graph_full
 
 
@@ -28,8 +26,8 @@ def _has_cycle(graph: dict[str, list[dict]]) -> list[str] | None:
 			node = f"{comp_name}:{t['name']}"
 			adj[node] = list(t.get("task_dep", []))
 
-	color: dict[str, int] = {n: 0 for n in adj}
-	parent: dict[str, str | None] = {n: None for n in adj}
+	color: dict[str, int] = dict.fromkeys(adj, 0)
+	parent: dict[str, str | None] = dict.fromkeys(adj)
 
 	for start in adj:
 		if color[start] != 0:

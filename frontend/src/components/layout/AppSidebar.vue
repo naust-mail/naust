@@ -3,7 +3,6 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import { useConfigStore } from '@/stores/config'
 import {
   Users, AtSign, Globe, ExternalLink, Activity, Database, Shield,
   Lock, LockKeyhole, Key, Layout, BookOpen, RefreshCw, BarChart2, Send,
@@ -15,7 +14,6 @@ const props = defineProps<{ forceExpanded?: boolean }>()
 
 const ui = useUiStore()
 const auth = useAuthStore()
-const config = useConfigStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -60,7 +58,7 @@ const visibleNavGroups = computed<NavGroup[]>(() => {
     { label: 'Mail', path: '/mail-guide', icon: BookOpen, adminOnly: true },
     { label: 'Sync', path: '/sync-guide', icon: RefreshCw, adminOnly: true },
   ]
-  if (auth.monitoringTool) {
+  if (auth.capabilities.includes('monitoring')) {
     guidesItems.push({ label: 'Monitoring', path: '/monitoring', icon: BarChart2, adminOnly: true })
   }
   groups.push({ label: 'Guides', items: guidesItems })
@@ -95,13 +93,13 @@ async function handleLogout(): Promise<void> {
 
 // Each entry: [palette id, display color, tooltip label]
 // Colors are sourced from each theme's canonical accent/primary values:
-// Oxi: primary from oxi globals.css; Indigo: from docs tailwind config;
+// rav: primary from rav globals.css; Indigo: from docs tailwind config;
 // Nord: Nord8 frost cyan (#88C0D0) from nordtheme.com palette;
 // Emerald: mid forest green representative of the muted green surface hue;
 // Catppuccin: Mocha mauve (#CBA6F7), the signature Catppuccin accent.
 const PALETTES: [Palette, string, string][] = [
   ['zinc',       '#9b9b9b',  'Zinc'],
-  ['oxi',        'hsl(20 70% 50%)', 'Oxi'],
+  ['rav', 'hsl(20 70% 50%)', 'Rav'],
   ['indigo',     '#6366f1',  'Indigo'],
   ['nord',       '#88C0D0',  'Nord'],
   ['emerald',    'hsl(152 42% 36%)', 'Emerald'],
@@ -112,7 +110,9 @@ const PALETTES: [Palette, string, string][] = [
 <template>
   <aside
     :class="[
-      'fixed top-0 left-0 h-screen flex flex-col z-50 transition-all duration-300',
+      // Below every overlay (Dialog/Sheet backdrops start at z-40) so a Sheet
+      // or Dialog always covers the persistent sidebar, never sits under it.
+      'fixed top-0 left-0 h-screen flex flex-col z-30 transition-all duration-300',
       forceExpanded
         ? 'bg-sidebar'
         : 'bg-sidebar backdrop-blur-md',
@@ -127,7 +127,7 @@ const PALETTES: [Palette, string, string][] = [
     <div class="flex flex-col flex-1 overflow-hidden min-h-0">
       <!-- Logo row -->
       <div :class="['flex items-center h-14 mb-2', collapsed ? 'justify-center' : 'justify-between px-1']">
-        <span class="text-sm font-semibold whitespace-nowrap overflow-hidden transition-[max-width] duration-300" :class="collapsed ? 'max-w-0' : 'max-w-full'">{{ config.hostname || 'Mail-in-a-Box' }}</span>
+        <span class="text-sm font-semibold whitespace-nowrap overflow-hidden transition-[max-width] duration-300" :class="collapsed ? 'max-w-0' : 'max-w-full'">{{ auth.hostname || 'Naust' }}</span>
         <button
           v-if="!forceExpanded"
           :class="[
@@ -142,10 +142,10 @@ const PALETTES: [Palette, string, string][] = [
       </div>
 
       <!-- Nav -->
-      <nav class="flex-1 overflow-y-auto space-y-4">
+      <nav :class="['flex-1 overflow-y-auto', collapsed ? 'space-y-2' : 'space-y-4']">
         <div v-for="group in visibleNavGroups" :key="group.label">
           <!-- Divider replaces section label in collapsed mode -->
-          <div v-if="collapsed" class="border-t border-border mx-1 mb-1" />
+          <div v-if="collapsed" class="border-t border-border mx-1 mb-2" />
           <p class="text-[10px] font-semibold uppercase tracking-wider text-muted px-2.5 overflow-hidden transition-[max-height,opacity] duration-300"
              :class="collapsed ? 'max-h-0 opacity-0' : 'max-h-8 opacity-100 mb-1'">
             {{ group.label }}

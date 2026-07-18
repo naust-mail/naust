@@ -3,8 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { KeyRound } from 'lucide-vue-next'
 import { startRegistration } from '@simplewebauthn/browser'
+import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -17,36 +17,39 @@ import Divider from '@/components/ui/Divider.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Dialog from '@/components/ui/Dialog.vue'
-import { useApi } from '@/composables/useApi'
-import { useAuthStore } from '@/stores/auth'
-import { useRouter } from 'vue-router'
-import type { MfaEntry, MfaStatus, TotpProvision } from '@/types'
-
-const api = useApi()
-const auth = useAuthStore()
-const router = useRouter()
+import { api, ApiError } from '@/api/client'
+import type {
+  EnableTOTPRequest,
+  MFACredential,
+  MFAStateResponse,
+  TOTPSetupResponse,
+  WebAuthnBeginResponse,
+  WebAuthnRegisterCompleteRequest,
+} from '@/api/types.gen'
 
 const loading = ref(true)
 const loadError = ref(false)
-const totpEntries = ref<MfaEntry[]>([])
-const passkeyEntries = ref<MfaEntry[]>([])
-const totpSetup = ref<TotpProvision | null>(null)
+const totpEntries = ref<MFACredential[]>([])
+const passkeyEntries = ref<MFACredential[]>([])
 
-// TOTP enroll state
+// TOTP enrollment: setup is requested on demand; nothing is stored
+// server-side until the enable call proves the app produces codes.
+const totpSetup = ref<TOTPSetupResponse | null>(null)
+const settingUp = ref(false)
 const enrollLabel = ref('')
 const enrollToken = ref('')
 const enrolling = ref(false)
 
-// TOTP/entry disable state
+// Disable confirm state
 const disableOpen = ref(false)
-const disableTarget = ref<MfaEntry | null>(null)
+const disableTarget = ref<MFACredential | null>(null)
 const disabling = ref(false)
 
 const disableDescription = computed(() => {
   if (disableTarget.value?.type === 'totp') {
-    return 'You will be logged out and can log back in without a one-time code.'
+    return 'Logins will no longer require a one-time code.'
   }
-  return `Remove "${disableTarget.value?.name || 'this passkey'}"? You will no longer be able to sign in with it.`
+  return `Remove "${disableTarget.value?.label || 'this passkey'}"? You will no longer be able to sign in with it.`
 })
 
 // Passkey add state
@@ -54,24 +57,23 @@ const showAddPasskey = ref(false)
 const passkeyName = ref('')
 const addingPasskey = ref(false)
 
-const enrollTokenValid = computed(() =>
-  /^\d{6}$/.test(enrollToken.value.trim()),
-)
+const enrollTokenValid = computed(() => /^\d{6}$/.test(enrollToken.value.trim()))
+
+// Discrete view keys so the whole card body can crossfade as one block
+// when list/empty/form visibility flips, instead of each piece popping
+// in and out on its own with no transition.
+const passkeyViewKey = computed(() => `${passkeyEntries.value.length > 0}-${showAddPasskey.value}`)
+const totpViewKey = computed(() => `${totpEntries.value.length > 0}-${!!totpSetup.value}`)
 
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
   try {
-    const res = await api.post('/admin/mfa/status')
-    if (!res.ok) {
-      loadError.value = true;
-      toast.error('Failed to load MFA status.');
-      return
-    }
-    const data: MfaStatus = await res.json()
-    totpEntries.value = data.enabled_mfa.filter(e => e.type === 'totp')
-    passkeyEntries.value = data.enabled_mfa.filter(e => e.type === 'webauthn')
-    totpSetup.value = data.new_mfa?.totp ?? null
+    const resp = await api.get<MFAStateResponse>('/api/auth/mfa')
+    const creds = resp.credentials ?? []
+    totpEntries.value = creds.filter(c => c.type === 'totp')
+    passkeyEntries.value = creds.filter(c => c.type === 'webauthn')
+    totpSetup.value = null
     enrollToken.value = ''
     enrollLabel.value = ''
   } catch {
@@ -82,28 +84,38 @@ async function load(): Promise<void> {
   }
 }
 
+async function startTotpSetup(): Promise<void> {
+  if (settingUp.value) return
+  settingUp.value = true
+  try {
+    totpSetup.value = await api.post<TOTPSetupResponse>('/api/auth/totp/setup')
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to start TOTP setup.')
+  } finally {
+    settingUp.value = false
+  }
+}
+
 async function enableTotp(): Promise<void> {
   if (!enrollTokenValid.value || !totpSetup.value || enrolling.value) return
   enrolling.value = true
   try {
-    const res = await api.post('/admin/mfa/totp/enable', {
-      token: enrollToken.value.trim(),
+    const req: EnableTOTPRequest = {
       secret: totpSetup.value.secret,
+      code: enrollToken.value.trim(),
       label: enrollLabel.value,
-    })
-    if (!res.ok) {
-      toast.error(await res.text())
-      return
     }
-    toast.success('Two-factor authentication enabled. Please log in again.')
-    await auth.logout()
-    await router.push('/login')
+    await api.post('/api/auth/totp/enable', req)
+    toast.success('Two-factor authentication enabled.')
+    await load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to enable TOTP.')
   } finally {
     enrolling.value = false
   }
 }
 
-function openDisable(entry: MfaEntry): void {
+function openDisable(entry: MFACredential): void {
   disableTarget.value = entry
   disableOpen.value = true
 }
@@ -112,23 +124,12 @@ async function confirmDisable(): Promise<void> {
   if (!disableTarget.value || disabling.value) return
   disabling.value = true
   try {
-    const body: Record<string, string> = { 'mfa-id': String(disableTarget.value.id) }
-    const res = await api.post('/admin/mfa/disable', body)
-    if (!res.ok) {
-      toast.error(await res.text())
-      return
-    }
-    const isTotp = disableTarget.value.type === 'totp'
+    await api.del(`/api/auth/mfa/${disableTarget.value.type}/${disableTarget.value.id}`)
     disableOpen.value = false
-
-    if (isTotp) {
-      toast.success('Two-factor authentication disabled. Please log in again.')
-      await auth.logout()
-      await router.push('/login')
-    } else {
-      toast.success('Passkey removed.')
-      await load()
-    }
+    toast.success(disableTarget.value.type === 'totp' ? 'Two-factor authentication disabled.' : 'Passkey removed.')
+    await load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to remove credential.')
   } finally {
     disabling.value = false
   }
@@ -138,32 +139,25 @@ async function addPasskey(): Promise<void> {
   if (!passkeyName.value.trim() || addingPasskey.value) return
   addingPasskey.value = true
   try {
-    const beginRes = await api.post('/admin/mfa/webauthn/register/begin')
-    if (!beginRes.ok) {
-      toast.error(await beginRes.text());
-      return
-    }
-    const { options, nonce } = await beginRes.json()
-
+    const begin = await api.post<WebAuthnBeginResponse>('/api/auth/webauthn/register/begin')
+    const options = begin.options as { publicKey: PublicKeyCredentialCreationOptionsJSON }
     const credential = await startRegistration({ optionsJSON: options.publicKey })
 
-    const completeRes = await api.post('/admin/mfa/webauthn/register/complete', {
-      nonce,
+    const complete: WebAuthnRegisterCompleteRequest = {
+      nonce: begin.nonce,
       name: passkeyName.value.trim(),
-      credential: JSON.stringify(credential),
-    })
-    if (!completeRes.ok) {
-      toast.error(await completeRes.text());
-      return
+      credential,
     }
+    await api.post('/api/auth/webauthn/register/complete', complete)
 
     toast.success('Passkey added.')
     passkeyName.value = ''
     showAddPasskey.value = false
     await load()
   } catch (e) {
-    if (e instanceof Error && e.name !== 'NotAllowedError') {
-      console.error('Failed to add a passkey', e)
+    if (e instanceof ApiError) {
+      toast.error(e.message)
+    } else if (e instanceof Error && e.name !== 'NotAllowedError') {
       toast.error('Failed to add passkey.')
     }
   } finally {
@@ -175,18 +169,17 @@ onMounted(load)
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="Two-Factor Authentication" description="Protect your admin account with a second login step." />
 
     <AsyncState :loading="loading" :error="loadError" :empty="false" error-title="Could not load MFA settings" @retry="load">
       <template #loading>
         <SectionHeader title="Passkeys" />
-        <Card class="p-5 mb-6">
+        <Card padding="md" class="mb-6">
           <Skeleton class="h-4 w-48 mb-3"/>
           <Skeleton class="h-9 w-32"/>
         </Card>
         <SectionHeader title="Authenticator App (TOTP)" />
-        <Card class="p-5">
+        <Card padding="md">
           <Skeleton class="h-4 w-64 mb-3"/>
           <Skeleton class="h-9 w-40"/>
         </Card>
@@ -194,7 +187,10 @@ onMounted(load)
 
       <!-- Passkeys Section -->
       <SectionHeader title="Passkeys" />
-      <Card class="p-5 mb-6">
+      <Card padding="md" class="mb-6">
+        <div class="relative overflow-hidden">
+        <Transition name="crossfade">
+        <div :key="passkeyViewKey">
         <!-- Existing passkeys -->
         <div v-if="passkeyEntries.length > 0" class="mb-4 divide-y divide-border">
           <div
@@ -202,12 +198,8 @@ onMounted(load)
             :key="entry.id"
             class="flex items-center justify-between py-3 first:pt-0 last:pb-0"
           >
-            <div>
-              <p class="text-sm font-medium">{{ entry.name || 'Unnamed passkey' }}</p>
-              <p v-if="entry.last_used" class="text-xs text-muted mt-0.5">Last used {{ entry.last_used }}</p>
-              <p v-else class="text-xs text-muted mt-0.5">Never used</p>
-            </div>
-            <Button variant="ghost" size="sm" @click="openDisable(entry)">Remove</Button>
+            <p class="text-sm font-medium">{{ entry.label || 'Unnamed passkey' }}</p>
+            <Button variant="secondary" size="sm" @click="openDisable(entry)">Remove</Button>
           </div>
         </div>
 
@@ -249,11 +241,17 @@ onMounted(load)
             <p class="text-xs text-muted mt-1.5">Your browser will prompt you to create a passkey.</p>
           </div>
         </template>
+        </div>
+        </Transition>
+        </div>
       </Card>
 
       <!-- TOTP Section -->
       <SectionHeader title="Authenticator App (TOTP)" />
-      <Card class="p-5">
+      <Card padding="md">
+        <div class="relative overflow-hidden">
+        <Transition name="crossfade">
+        <div :key="totpViewKey">
         <!-- TOTP active -->
         <template v-if="totpEntries.length > 0">
           <div v-for="entry in totpEntries" :key="entry.id" class="flex items-center justify-between">
@@ -268,13 +266,19 @@ onMounted(load)
           </div>
         </template>
 
-        <!-- TOTP empty state -->
+        <!-- Offer setup -->
         <EmptyState
           v-else-if="!totpSetup"
           title="No authenticator app configured"
-          description="Refresh the page if this persists."
+          description="Require a 6-digit code from your phone at every password login."
           class="py-4"
-        />
+        >
+          <template #action>
+            <Button :disabled="settingUp" @click="startTotpSetup">
+              {{ settingUp ? 'Preparing...' : 'Set up authenticator' }}
+            </Button>
+          </template>
+        </EmptyState>
 
         <!-- TOTP setup form -->
         <template v-else>
@@ -285,20 +289,17 @@ onMounted(load)
           </p>
 
           <div class="space-y-6">
-            <!-- Step 1: QR code -->
+            <!-- Step 1: secret -->
             <div class="flex gap-5 items-start">
               <Badge class="flex-none mt-0.5 size-6 justify-center rounded-full px-0">1</Badge>
-              <div>
-                <p class="text-sm font-medium mb-3">Scan the QR code with your app</p>
-                <Card class="inline-flex p-3 mb-3">
-                  <img
-                    :src="`data:image/png;base64,${totpSetup.qr_code_base64}`"
-                    alt="QR code for TOTP setup"
-                    class="w-40 h-40"
-                  />
-                </Card>
-                <p class="text-xs text-muted mb-1">Or enter the secret manually:</p>
-                <Code block class="max-w-xs">{{ totpSetup.secret }}</Code>
+              <div class="min-w-0">
+                <p class="text-sm font-medium mb-2">Add the account to your app</p>
+                <p class="text-xs text-muted mb-1">
+                  On this device,
+                  <a :href="totpSetup.otpauth_uri" class="underline underline-offset-2">open in your authenticator app</a>.
+                  Elsewhere, enter the secret manually:
+                </p>
+                <Code block class="max-w-xs break-all">{{ totpSetup.secret }}</Code>
               </div>
             </div>
 
@@ -328,11 +329,14 @@ onMounted(load)
                     {{ enrolling ? 'Enabling...' : 'Enable' }}
                   </Button>
                 </div>
-                <p class="text-xs text-muted mt-1.5">You will be logged out after enabling.</p>
+                <p class="text-xs text-muted mt-1.5">Nothing is saved until the code verifies.</p>
               </Field>
             </div>
           </div>
         </template>
+        </div>
+        </Transition>
+        </div>
       </Card>
     </AsyncState>
 
@@ -349,5 +353,4 @@ onMounted(load)
         </Button>
       </template>
     </Dialog>
-  </AppLayout>
 </template>

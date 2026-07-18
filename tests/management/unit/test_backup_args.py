@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch
 
 
@@ -11,10 +10,10 @@ class TestGetDuplicityTargetUrl:
 	def test_local_target_unchanged(self):
 		from services.backup.duplicity_args import get_duplicity_target_url
 
-		config = {"target": "file:///var/lib/mailinabox/backup/encrypted"}
+		config = {"target": "file:///var/lib/naust/backup/encrypted"}
 		with patch('services.backup.duplicity_args.get_target_type', return_value='file'):
 			result = get_duplicity_target_url(config)
-		assert result == "file:///var/lib/mailinabox/backup/encrypted"
+		assert result == "file:///var/lib/naust/backup/encrypted"
 
 	def test_rsync_target_unchanged(self):
 		from services.backup.duplicity_args import get_duplicity_target_url

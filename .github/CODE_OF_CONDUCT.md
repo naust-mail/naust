@@ -38,7 +38,7 @@ We will not tolerate harassment. Harassment is any unwelcome or hostile behavior
 
 We will remove, edit, or reject comments, commits, code, wiki edits, issues, and other contributions that are not consistent with this Code of Conduct. We may ban, temporarily or permanently, any contributor for violating this code, when appropriate.
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported via [GitHub Security Advisories](https://github.com/boomboompower/mailinabox/security/advisories/new) for private reporting, or by opening an issue for non-sensitive matters. All reports will be treated confidentially, impartially, consistently, and swiftly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported via [GitHub Security Advisories](https://github.com/naust-mail/naust/security/advisories/new) for private reporting, or by opening an issue for non-sensitive matters. All reports will be treated confidentially, impartially, consistently, and swiftly.
 
 Because the need for confidentiality for all parties involved in an enforcement action outweighs the goals of openness, limited information will be shared with the community regarding enforcement actions.
 

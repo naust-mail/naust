@@ -19,7 +19,7 @@ def _is_spamassassin(env):
 # Services always present regardless of spam filter or webmail choice.
 _SERVICE_NAMES_ALWAYS = [
 	"Dovecot LMTP LDA",
-	"Mail-in-a-Box Management Daemon",
+	"Naust Management Daemon",
 	"SSH Login (ssh)",
 	"Public DNS (nsd4)",
 	"Incoming Mail (SMTP/postfix)",
@@ -31,7 +31,7 @@ _SERVICE_NAMES_ALWAYS = [
 	"HTTPS Web (nginx)",
 ]
 
-_SERVICE_NAMES_OXI = ["oxi.email Webmail (oxi-email)"]
+_SERVICE_NAMES_RAV = ["rav Webmail (rav)"]
 
 # Only present when SPAM_FILTER=spamassassin.
 _SERVICE_NAMES_SPAMASSASSIN = [
@@ -61,15 +61,15 @@ def _make_check(service_name):
 	return check_fn
 
 
-def _is_oxi(env):
-	return env.get("WEBMAIL_CLIENT", "oxi") == "oxi"
+def _is_rav(env):
+	return env.get("WEBMAIL_CLIENT", "rav") == "rav"
 
 
 for _name in _SERVICE_NAMES_ALWAYS:
 	check(f"service:{_name}", category="services")(_make_check(_name))
 
-for _name in _SERVICE_NAMES_OXI:
-	check(f"service:{_name}", category="services", enabled=_is_oxi)(_make_check(_name))
+for _name in _SERVICE_NAMES_RAV:
+	check(f"service:{_name}", category="services", enabled=_is_rav)(_make_check(_name))
 
 for _name in _SERVICE_NAMES_SPAMASSASSIN:
 	check(f"service:{_name}", category="services", enabled=_is_spamassassin)(_make_check(_name))

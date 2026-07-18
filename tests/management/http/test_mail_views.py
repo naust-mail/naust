@@ -17,7 +17,6 @@
 
 from unittest.mock import patch
 
-import pytest
 
 _KICK = "mail.mailconfig.sync.kick"
 _DOVEADM = "mail.mailconfig.users.dovecot_quota_recalc"

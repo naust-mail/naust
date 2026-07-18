@@ -1,20 +1,21 @@
-import base64, hmac, json, secrets
+import base64
+import hmac
+import json
+import secrets
 from datetime import timedelta
-from typing import Optional
 
 from expiringdict import ExpiringDict
 
-from core import utils
 from mail.mailconfig import get_mail_password, get_mail_user_privileges
 from mail.mailconfig.users import verify_password, hash_password
 from mail.mailconfig.database import open_database
 from auth.mfa import get_hash_mfa_state, validate_auth_mfa
 
-DEFAULT_KEY_PATH = '/var/lib/mailinabox/api.key'
-DEFAULT_AUTH_REALM = 'Mail-in-a-Box Management Server'
+DEFAULT_KEY_PATH = '/var/lib/naust/api.key'
+DEFAULT_AUTH_REALM = 'Naust Management Server'
 
 
-def parse_http_authorization_basic(header: str) -> "tuple[Optional[str], Optional[str]]":
+def parse_http_authorization_basic(header: str) -> "tuple[str | None, str | None]":
 	"""Parse an HTTP Basic Authorization header into (username, password).
 	Returns (None, None) if the header is absent, malformed, or not Basic scheme."""
 	if not header or " " not in header:
@@ -43,7 +44,7 @@ def _get_dummy_hash() -> str:
 	if _dummy_hash_cache is None:
 		from passlib.hash import bcrypt
 
-		_dummy_hash_cache = "{BLF-CRYPT}" + bcrypt.hash("mailinabox-timing-dummy")
+		_dummy_hash_cache = "{BLF-CRYPT}" + bcrypt.hash("naust-timing-dummy")
 	return _dummy_hash_cache
 
 
@@ -114,9 +115,8 @@ class AuthService:
 				# Clear the session and return immediately - no privilege lookup needed.
 				del self.login_sessions[sessionid]
 				return (username, [])
-			else:
-				# Re-up the session so that it does not expire.
-				self.login_sessions[sessionid] = session
+			# Re-up the session so that it does not expire.
+			self.login_sessions[sessionid] = session
 
 		# If no password was given, but a username was given, we're missing some information.
 		elif password.strip() == "":

@@ -1,9 +1,8 @@
 """Tests for check_relay in setup/boxctl/checks.py."""
 
-import subprocess
-from unittest.mock import patch, mock_open
+import subprocess  # noqa: S404
+from unittest.mock import patch
 
-import pytest
 
 from boxctl.checks import check_relay, OK, WARN, OFF
 
@@ -38,17 +37,17 @@ def _dig_result(spf_txt):
 
 class TestCheckRelayOff:
 	def test_missing_settings_file_is_off(self, tmp_path):
-		status, msg = check_relay(_make_conf(str(tmp_path)))
+		status, _msg = check_relay(_make_conf(str(tmp_path)))
 		assert status == OFF
 
 	def test_empty_settings_is_off(self, tmp_path):
 		(tmp_path / "settings.yaml").write_text("{}\n")
-		status, msg = check_relay(_make_conf(str(tmp_path)))
+		status, _msg = check_relay(_make_conf(str(tmp_path)))
 		assert status == OFF
 
 	def test_no_relay_host_is_off(self, tmp_path):
 		(tmp_path / "settings.yaml").write_text("smtp_relay:\n  host: ''\n")
-		status, msg = check_relay(_make_conf(str(tmp_path)))
+		status, _msg = check_relay(_make_conf(str(tmp_path)))
 		assert status == OFF
 
 
@@ -66,7 +65,7 @@ class TestCheckRelayNoSpfInclude:
 
 	def test_warn_message_contains_host(self, tmp_path):
 		(tmp_path / "settings.yaml").write_text("smtp_relay:\n  host: smtp.mailgun.org\n  spf_include: ''\n")
-		status, msg = check_relay(_make_conf(str(tmp_path)))
+		_status, msg = check_relay(_make_conf(str(tmp_path)))
 		assert "smtp.mailgun.org" in msg
 
 
@@ -106,7 +105,7 @@ class TestCheckRelayDnsVerification:
 		r.stdout = ""
 		r.stderr = ""
 		with patch("subprocess.run", return_value=r):
-			status, msg = check_relay(_make_conf(str(tmp_path)))
+			status, _msg = check_relay(_make_conf(str(tmp_path)))
 		assert status == WARN
 
 	def test_no_dns_check_when_no_hostname(self, tmp_path):
@@ -114,7 +113,7 @@ class TestCheckRelayDnsVerification:
 		(tmp_path / "settings.yaml").write_text(_yaml_relay())
 		conf = {"STORAGE_ROOT": str(tmp_path), "PRIMARY_HOSTNAME": ""}
 		with patch("subprocess.run") as mock_dig:
-			status, msg = check_relay(conf)
+			status, _msg = check_relay(conf)
 		mock_dig.assert_not_called()
 		assert status == OK
 
@@ -134,7 +133,7 @@ class TestCheckRelayMalformedSettings:
 	def test_smtp_relay_wrong_type_list(self, tmp_path):
 		# smtp_relay is a list, not a dict - must not raise AttributeError
 		(tmp_path / "settings.yaml").write_text("smtp_relay:\n  - smtp.sendgrid.net\n")
-		status, msg = check_relay(_make_conf(str(tmp_path)))
+		status, _msg = check_relay(_make_conf(str(tmp_path)))
 		assert status == OFF  # relay.host is absent so treated as unconfigured
 
 	def test_permissions_error_returns_warn(self, tmp_path):
@@ -142,7 +141,7 @@ class TestCheckRelayMalformedSettings:
 		p = tmp_path / "settings.yaml"
 		p.write_text(_yaml_relay())
 		with patch("builtins.open", side_effect=PermissionError("denied")):
-			status, msg = check_relay(_make_conf(str(tmp_path)))
+			status, _msg = check_relay(_make_conf(str(tmp_path)))
 		assert status == WARN
 
 	def test_spf_include_whitespace_only(self, tmp_path):
@@ -167,7 +166,7 @@ class TestCheckRelayDigEdgeCases:
 		r.stdout = '"v=spf1 mx" " include:sendgrid.net -all"\n'
 		r.stderr = ""
 		with patch("subprocess.run", return_value=r):
-			status, msg = check_relay(_make_conf(str(tmp_path)))
+			status, _msg = check_relay(_make_conf(str(tmp_path)))
 		assert status == OK
 
 	def test_dig_redirect_not_accepted_as_include(self, tmp_path):

@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from tests.components.conftest import CONFIG_MATRIX, make_env, all_task_names
+from tests.components.conftest import CONFIG_MATRIX, make_env
 from tests.components._helpers import build_graph_full
 
 # Matches an unconditional global smtpd_milters= assignment with a hardcoded value.

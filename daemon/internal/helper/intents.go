@@ -25,7 +25,7 @@ type intentDef struct {
 	// exact arg names this intent requires - no more, no fewer.
 	args     []string
 	validate func(args map[string]string) error
-	execute  func(ctx context.Context, d Deps, args map[string]string) error
+	execute  func(ctx context.Context, d Deps, args map[string]string) (string, error)
 }
 
 // Intents is the menu. Adding an entry here is a design decision - see
@@ -45,36 +45,9 @@ var Intents = map[string]intentDef{
 			}
 			return validValue(args["value"])
 		},
-		execute: func(ctx context.Context, d Deps, args map[string]string) error {
-			return d.Run.Run(ctx, []string{"/usr/sbin/postconf", "-e", args["key"] + "=" + args["value"]}, nil)
-		},
-	},
-
-	"postfix.map": {
-		timeout: 60 * time.Second,
-		args:    []string{"map", "content"},
-		redact:  map[string]bool{"content": true},
-		validate: func(args map[string]string) error {
-			if _, ok := mapTargets[args["map"]]; !ok {
-				return fmt.Errorf("postfix map %q not in allowlist", args["map"])
-			}
-			if len(args["content"]) > maxContentLen {
-				return fmt.Errorf("content exceeds %d bytes", maxContentLen)
-			}
-			return nil
-		},
-		execute: func(ctx context.Context, d Deps, args map[string]string) error {
-			path := filepath.Join(d.Root, mapTargets[args["map"]].path)
-			if err := writeFileAtomic(path, []byte(args["content"]), 0o600); err != nil {
-				return err
-			}
-			// postmap builds <path>.db; the plaintext is removed right
-			// after so secrets exist on disk only during the rebuild.
-			if err := d.Run.Run(ctx, []string{"/usr/sbin/postmap", "hash:" + path}, nil); err != nil {
-				os.Remove(path)
-				return err
-			}
-			return os.Remove(path)
+		execute: func(ctx context.Context, d Deps, args map[string]string) (string, error) {
+			_, err := d.Run.Run(ctx, []string{"/usr/sbin/postconf", "-e", args["key"] + "=" + args["value"]}, nil)
+			return "", err
 		},
 	},
 
@@ -90,32 +63,140 @@ var Intents = map[string]intentDef{
 			}
 			return nil
 		},
-		execute: func(ctx context.Context, d Deps, args map[string]string) error {
+		execute: func(ctx context.Context, d Deps, args map[string]string) (string, error) {
 			t := configTargets[args["target"]]
-			return writeFileAtomic(filepath.Join(d.Root, t.path), []byte(args["content"]), t.mode)
+			return "", writeFileAtomic(filepath.Join(d.Root, t.path), []byte(args["content"]), t.mode)
+		},
+	},
+
+	"web.sync_sites": webSyncIntent,
+
+	// Read-only queue snapshot for the status checks. managerd runs
+	// under NoNewPrivileges, so postqueue's setgid bit is ignored for
+	// its children and the showq socket stays unreachable there; the
+	// helper reads the queue instead and managerd gains no group or
+	// file access. Output returns to the caller like the host intents.
+	"postfix.queue": {
+		timeout: 60 * time.Second,
+		execute: func(ctx context.Context, d Deps, _ map[string]string) (string, error) {
+			return d.Run.Run(ctx, []string{"/usr/sbin/postqueue", "-j"}, nil)
 		},
 	},
 
 	// Exact argv from management/core/views/system_views.py.
 	"host.apt_update": {
 		timeout: 10 * time.Minute,
-		execute: func(ctx context.Context, d Deps, _ map[string]string) error {
+		execute: func(ctx context.Context, d Deps, _ map[string]string) (string, error) {
 			return d.Run.Run(ctx, []string{"/usr/bin/apt-get", "-qq", "update"}, nil)
 		},
 	},
 	"host.apt_upgrade": {
 		timeout: 20 * time.Minute,
-		execute: func(ctx context.Context, d Deps, _ map[string]string) error {
+		execute: func(ctx context.Context, d Deps, _ map[string]string) (string, error) {
 			return d.Run.Run(ctx, []string{"/usr/bin/apt-get", "-y", "upgrade"},
 				[]string{"DEBIAN_FRONTEND=noninteractive"})
 		},
 	},
 	"host.reboot": {
 		timeout: 10 * time.Second,
-		execute: func(ctx context.Context, d Deps, _ map[string]string) error {
+		execute: func(ctx context.Context, d Deps, _ map[string]string) (string, error) {
 			return d.Run.Run(ctx, []string{"/sbin/shutdown", "-r", "now"}, nil)
 		},
 	},
+
+	// Generate a user's mail_crypt EC keypair, password-protected by
+	// the supplied key (the Dovecot subkey of the user's mail root
+	// key, never the root itself). The key is written to a 0600 temp
+	// config and passed via doveadm -c so it never appears in argv.
+	// The curve setting is set only in that temp config so mail_crypt
+	// never auto-generates keys for non-opted-in users.
+	//
+	// Dialect (2.4 vs 2.3) is picked by checking which mail_crypt conf
+	// file setup wrote, not by re-running `dovecot --version` here -
+	// setup already made that call once; this just reads its answer.
+	// See setup/components/defs/dovecot.py:_mailcrypt for the source
+	// of truth this mirrors.
+	"mailcrypt.keygen": {
+		timeout: 60 * time.Second,
+		args:    []string{"email", "key_hex"},
+		redact:  map[string]bool{"key_hex": true},
+		validate: func(args map[string]string) error {
+			if err := validEmailArg(args["email"]); err != nil {
+				return err
+			}
+			return validKeyHex(args["key_hex"])
+		},
+		execute: func(ctx context.Context, d Deps, args map[string]string) (string, error) {
+			tmp, err := os.CreateTemp("", "naust-crypt-*.conf")
+			if err != nil {
+				return "", err
+			}
+			defer os.Remove(tmp.Name())
+			var conf string
+			if _, err := os.Stat(filepath.Join(d.Root, "/etc/dovecot/conf.d/96-mail-crypt.conf")); err == nil {
+				// 2.3 dialect: legacy plugin{} block.
+				conf = "!include /etc/dovecot/dovecot.conf\n" +
+					"plugin {\n" +
+					"  mail_crypt_curve = prime256v1\n" +
+					"  mail_crypt_private_password = " + args["key_hex"] + "\n" +
+					"}\n"
+			} else {
+				conf = "dovecot_config_version = 2.4.0\n" +
+					"!include /etc/dovecot/dovecot.conf\n" +
+					"crypt_user_key_curve = prime256v1\n" +
+					"crypt_user_key_password = " + args["key_hex"] + "\n"
+			}
+			if err := tmp.Chmod(0o600); err != nil {
+				tmp.Close()
+				return "", err
+			}
+			if _, err := tmp.WriteString(conf); err != nil {
+				tmp.Close()
+				return "", err
+			}
+			if err := tmp.Close(); err != nil {
+				return "", err
+			}
+			return d.Run.Run(ctx, []string{"/usr/bin/doveadm", "-c", tmp.Name(),
+				"mailbox", "cryptokey", "generate", "-u", args["email"], "-U"}, nil)
+		},
+	},
+}
+
+// validEmailArg rejects anything that could not be a mail address or
+// would break the doveadm invocation or the temp config.
+func validEmailArg(email string) error {
+	if len(email) == 0 || len(email) > 254 {
+		return fmt.Errorf("email length invalid")
+	}
+	at := 0
+	for _, r := range email {
+		if r > unicode.MaxASCII || unicode.IsControl(r) || unicode.IsSpace(r) {
+			return fmt.Errorf("email contains invalid character")
+		}
+		if r == '@' {
+			at++
+		}
+	}
+	if at != 1 || email[0] == '@' || email[len(email)-1] == '@' {
+		return fmt.Errorf("email is not a plausible address")
+	}
+	return nil
+}
+
+// validKeyHex requires exactly 64 hex characters (a 32-byte key).
+func validKeyHex(s string) error {
+	if len(s) != 64 {
+		return fmt.Errorf("key_hex must be 64 hex characters")
+	}
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'f', r >= 'A' && r <= 'F':
+		default:
+			return fmt.Errorf("key_hex must be 64 hex characters")
+		}
+	}
+	return nil
 }
 
 func serviceIntent(action string) intentDef {
@@ -128,39 +209,40 @@ func serviceIntent(action string) intentDef {
 			}
 			return nil
 		},
-		execute: func(ctx context.Context, d Deps, args map[string]string) error {
+		execute: func(ctx context.Context, d Deps, args map[string]string) (string, error) {
 			name := args["service"]
 			def := services[name]
 			if action == "reload" && def.reload != nil {
 				var err error
 				for _, argv := range def.reload {
-					if err = d.Run.Run(ctx, argv, nil); err != nil {
+					if _, err = d.Run.Run(ctx, argv, nil); err != nil {
 						break
 					}
 				}
 				if err != nil && def.reloadFallback != nil {
-					return d.Run.Run(ctx, def.reloadFallback, nil)
+					_, err = d.Run.Run(ctx, def.reloadFallback, nil)
 				}
-				return err
+				return "", err
 			}
-			return d.Run.Run(ctx, []string{"/usr/bin/systemctl", action, name}, nil)
+			_, err := d.Run.Run(ctx, []string{"/usr/bin/systemctl", action, name}, nil)
+			return "", err
 		},
 	}
 }
 
 // Dispatch validates a request against the menu and executes it. This is
 // the single entry point the server uses.
-func Dispatch(ctx context.Context, d Deps, req Request) error {
+func Dispatch(ctx context.Context, d Deps, req Request) (string, error) {
 	def, ok := Intents[req.Intent]
 	if !ok {
-		return fmt.Errorf("unknown intent %q", req.Intent)
+		return "", fmt.Errorf("unknown intent %q", req.Intent)
 	}
 	if err := checkArgNames(def.args, req.Args); err != nil {
-		return err
+		return "", err
 	}
 	if def.validate != nil {
 		if err := def.validate(req.Args); err != nil {
-			return err
+			return "", err
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, def.timeout)

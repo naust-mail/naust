@@ -1,18 +1,18 @@
 """Tests for setup/tools/editconf.py invoked via subprocess."""
 
 import os
-import subprocess
+import subprocess  # noqa: S404
 import sys
-import pytest
 
 EDITCONF = os.path.join(os.path.dirname(__file__), "..", "..", "setup", "tools", "editconf.py")
 
 
 def run_editconf(args: list[str], *, check: bool = False) -> subprocess.CompletedProcess:
-	return subprocess.run(
-		[sys.executable, EDITCONF] + args,
+	return subprocess.run(  # noqa: S603
+		[sys.executable, EDITCONF, *args],
 		capture_output=True,
 		text=True,
+		check=False,
 	)
 
 
@@ -24,8 +24,8 @@ class TestBasicReplacement:
 		text = f.read_text()
 		assert "KEY=new" in text
 		# Old value must only appear in commented-out lines.
-		active = [l for l in text.splitlines() if not l.lstrip().startswith("#")]
-		assert not any("KEY=old" in l for l in active)
+		active = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+		assert not any("KEY=old" in line for line in active)
 
 	def test_appends_new_key(self, tmp_path):
 		f = tmp_path / "conf"
@@ -103,8 +103,8 @@ class TestEraseMode:
 		# Original line must be commented out.
 		assert "#KEY=old" in text or "# KEY=old" in text
 		# The key must not be re-added as an active setting.
-		active_lines = [l for l in text.splitlines() if not l.strip().startswith("#")]
-		assert not any("KEY=" in l for l in active_lines)
+		active_lines = [line for line in text.splitlines() if not line.strip().startswith("#")]
+		assert not any("KEY=" in line for line in active_lines)
 
 	def test_erase_nonexistent_key_no_op(self, tmp_path):
 		f = tmp_path / "conf"

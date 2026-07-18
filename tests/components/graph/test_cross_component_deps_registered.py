@@ -15,6 +15,7 @@ import inspect
 import os
 
 import components.task_names as _task_names
+import pathlib
 
 _DEFS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "setup", "components", "defs"))
 
@@ -29,14 +30,12 @@ def _task_dep_strings(tree: ast.AST) -> list[str]:
 	for node in ast.walk(tree):
 		if not isinstance(node, ast.Dict):
 			continue
-		for key, val in zip(node.keys, node.values):
+		for key, val in zip(node.keys, node.values, strict=True):
 			if not (isinstance(key, ast.Constant) and key.value == "task_dep"):
 				continue
 			if not isinstance(val, ast.List):
 				continue
-			for elt in val.elts:
-				if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-					results.append(elt.value)
+			results.extend(elt.value for elt in val.elts if isinstance(elt, ast.Constant) and isinstance(elt.value, str))
 	return results
 
 
@@ -53,8 +52,7 @@ def test_cross_component_deps_are_registered():
 			path = os.path.join(dirpath, fname)
 			rel = os.path.relpath(path, _DEFS_DIR)
 
-			with open(path) as fh:
-				source = fh.read()
+			source = pathlib.Path(path).read_text(encoding="utf-8")
 			tree = ast.parse(source, filename=path)
 
 			for dep in _task_dep_strings(tree):

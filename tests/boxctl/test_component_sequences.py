@@ -7,23 +7,23 @@ make_tasks(), these tests fail regardless of what the function is named.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
-from components.runner import _discover
+from components.runner import _discover  # noqa: PLC2701
 from tests.components._helpers import _subprocess_dispatch
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 _BASE_ENV = {
-	"STORAGE_ROOT": "/tmp/test-storage",
+	"STORAGE_ROOT": "/tmp/test-storage",  # noqa: S108
 	"PRIMARY_HOSTNAME": "box.example.com",
 	"PRIVATE_IP": "10.0.0.1",
 	"PRIVATE_IPV6": "",
 	"PUBLIC_IP": "1.2.3.4",
 	"EMAIL_ADDR": "admin@example.com",
 	"SPAM_FILTER": "rspamd",
-	"WEBMAIL_CLIENT": "oxi",
+	"WEBMAIL_CLIENT": "rav",
 	"ENABLE_RADICALE": "false",
 	"ENABLE_FILEBROWSER": "false",
 	"ENABLE_CLAMAV": "false",
@@ -53,7 +53,7 @@ def test_make_tasks_does_not_call_ensure_installed(comp_name, make_tasks_fn, run
 	the task graph. Violating this means apt runs on every setup invocation even
 	when all tasks are stamped up-to-date.
 	"""
-	env = _SPAMASSASSIN_ENV if comp_name in ("spamassassin", "dkim") else _BASE_ENV
+	env = _SPAMASSASSIN_ENV if comp_name in {"spamassassin", "dkim"} else _BASE_ENV
 	installed_calls = []
 
 	def _capture_install(pkgs):
@@ -73,7 +73,7 @@ def test_make_tasks_does_not_call_systemctl(comp_name, make_tasks_fn, runtime):
 	systemctl calls (mask, stop, disable) are write-side-effects that must live
 	inside task actions, not in the graph-building phase.
 	"""
-	env = _SPAMASSASSIN_ENV if comp_name in ("spamassassin", "dkim") else _BASE_ENV
+	env = _SPAMASSASSIN_ENV if comp_name in {"spamassassin", "dkim"} else _BASE_ENV
 	systemctl_calls = []
 
 	def _dispatch(cmd, **kwargs):

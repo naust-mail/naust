@@ -2,12 +2,15 @@
 # domains for which a mail account has been set up.
 ########################################################################
 
-import os, os.path, re, rtyaml
+import os
+import os.path
+import re
+import rtyaml
 
 from mail.mailconfig import get_mail_domains
 from services.dns_update import get_custom_dns_config, get_dns_zones
 from services.ssl_certificates import get_ssl_certificates, get_domain_ssl_files, check_certificate
-from core.utils import shell, safe_domain_name, sort_domains
+from core.utils import safe_domain_name, sort_domains
 
 
 def get_web_domains(env, include_www_redirects=True, include_auto=True, exclude_dns_elsewhere=True):
@@ -98,7 +101,7 @@ def do_web_update(env):
 	ssl_certificates = get_ssl_certificates(env)
 
 	# Helper for reading config files and templates
-	_NGINX_TEMPLATES = "/usr/local/share/mailinabox/nginx-templates"
+	_NGINX_TEMPLATES = "/usr/local/share/naust/nginx-templates"
 	_NGINX_TEMPLATES_FALLBACK = os.path.join(os.path.dirname(__file__), "../../setup/conf/nginx")
 
 	def read_conf(conf_fn):
@@ -143,9 +146,9 @@ def do_web_update(env):
 	# The webmail catch-all (location /) depends on which client is selected.
 	# 'none' means no catch-all: the primary domain falls back to the same
 	# static-file serving every other domain gets from nginx-alldomains.conf.
-	webmail_client = env.get('WEBMAIL_CLIENT', 'oxi')
-	if webmail_client == 'oxi':
-		extras.append(read_conf("nginx-webmail-oxi.conf"))
+	webmail_client = env.get('WEBMAIL_CLIENT', 'rav')
+	if webmail_client == 'rav':
+		extras.append(read_conf("nginx-webmail-rav.conf"))
 	elif webmail_client == 'roundcube':
 		extras.append(read_conf("nginx-webmail-roundcube.conf"))
 	elif webmail_client == 'snappymail':
@@ -183,8 +186,9 @@ def do_web_update(env):
 				return ""
 
 	# Save the file.
-	with open(nginx_conf_fn, "w", encoding='utf-8') as f:
-		f.write(nginx_conf)
+	from services.control_plane import config_write
+
+	config_write("nginx_local", nginx_conf)
 
 	# Kick nginx. Reload (not restart) to avoid dropping open connections.
 	# On first boot nginx may not be up yet (socket missing or not listening);
@@ -217,7 +221,7 @@ def make_domain_config(domain, templates, ssl_certificates, env):
 	def hashfile(filepath):
 		import hashlib
 
-		sha1 = hashlib.sha1()
+		sha1 = hashlib.sha1()  # noqa: S324 -- change-detection fingerprint, not security-sensitive
 		with open(filepath, 'rb') as f:
 			sha1.update(f.read())
 		return sha1.hexdigest()

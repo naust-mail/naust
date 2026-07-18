@@ -1,4 +1,3 @@
-import pytest
 from core.utils import safe_domain_name, sort_domains, load_env_vars_from_file
 
 

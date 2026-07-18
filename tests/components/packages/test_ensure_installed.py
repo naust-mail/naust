@@ -12,9 +12,7 @@ into the image via --build-mode).
 """
 
 import os
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import patch
 
 
 def _run(packages, env_overrides=None):

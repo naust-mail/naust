@@ -9,11 +9,8 @@ Tests for artifacts.fn_stamp().
 """
 
 import importlib.util
-import os
 import textwrap
 
-import pytest
-from unittest.mock import patch, MagicMock
 
 from components import artifacts
 
@@ -59,7 +56,7 @@ def test_fn_stamp_differs_when_constant_changes(tmp_path):
 
 def test_dnssec_tasks_use_run_once_not_config_changed(tmp_path):
 	"""DNSSEC key tasks must use run_once and not config_changed in their uptodate list."""
-	from doit.tools import run_once, config_changed
+	from doit.tools import run_once
 	from components.defs import dns
 
 	env = {

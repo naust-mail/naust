@@ -15,6 +15,7 @@ from doit.tools import config_changed
 
 from ... import artifacts
 from ...component import Component
+import pathlib
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ COMPONENT = Component(
 	],
 	services=[],  # runs under PHP-FPM, no own service
 	docker_services=[],
-	enabled=lambda env: env.get("WEBMAIL_CLIENT", "oxi") == "snappymail",
+	enabled=lambda env: env.get("WEBMAIL_CLIENT", "rav") == "snappymail",
 )
 
 SNAPPYMAIL_VERSION = "2.38.2"
@@ -67,7 +68,7 @@ _DOMAIN_PHP = f"{_SM_SRC}/snappymail/v/{SNAPPYMAIL_VERSION}/app/libraries/RainLo
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	sm_data = os.path.join(storage_root, "snappymail", "_data_", "_default_")
 	sm_config_ini = os.path.join(sm_data, "configs", "config.ini")
@@ -118,9 +119,12 @@ def _fetch() -> None:
 	downloaded before the patch was introduced pick it up on the next rerun.
 	"""
 	import shutil
+	import tempfile
 
-	tmp = "/tmp/snappymail.zip"
+	tmp_fd, tmp = tempfile.mkstemp(suffix=".zip")
+	os.close(tmp_fd)
 	try:
+		print(f"Downloading SnappyMail {SNAPPYMAIL_VERSION}...", flush=True)
 		subprocess.run(["wget", "-q", "-O", tmp, SNAPPYMAIL_URL], check=True)
 		result = subprocess.run(
 			["sha256sum", "--check", "--strict"],
@@ -130,7 +134,8 @@ def _fetch() -> None:
 			check=False,
 		)
 		if result.returncode != 0:
-			raise RuntimeError(f"SnappyMail SHA256 mismatch: {result.stderr.strip()}")
+			msg = f"SnappyMail SHA256 mismatch: {result.stderr.strip()}"
+			raise RuntimeError(msg)
 
 		shutil.rmtree(_SM_SRC, ignore_errors=True)
 		os.makedirs(_SM_SRC, exist_ok=True)
@@ -147,17 +152,15 @@ def _fetch() -> None:
 	# Apply wildcard-domain bug patch idempotently.
 	if not os.path.exists(_DOMAIN_PHP):
 		print(
-			f"WARNING: DefaultDomain.php not found at expected path - cannot apply wildcard-domain bug patch.",
+			"WARNING: DefaultDomain.php not found at expected path - cannot apply wildcard-domain bug patch.",
 			flush=True,
 		)
 	else:
-		with open(_DOMAIN_PHP, encoding="utf-8") as fh:
-			content = fh.read()
+		content = pathlib.Path(_DOMAIN_PHP).read_text(encoding="utf-8")
 		if _FIXED_LINE in content:
 			pass  # already patched
 		elif _BUGGY_LINE in content:
-			with open(_DOMAIN_PHP, "w", encoding="utf-8") as fh:
-				fh.write(content.replace(_BUGGY_LINE, _FIXED_LINE))
+			pathlib.Path(_DOMAIN_PHP).write_text(content.replace(_BUGGY_LINE, _FIXED_LINE), encoding="utf-8")
 			print("Patched SnappyMail wildcard-domain fallback bug (DefaultDomain.php).")
 		else:
 			print(
@@ -174,8 +177,7 @@ def _fetch() -> None:
 	subprocess.run(["chown", "-R", "root:root", _SM_TARGET], check=True)
 	subprocess.run(["chmod", "-R", "755", _SM_TARGET], check=True)
 
-	with open(_SM_STAMP, "w") as fh:
-		fh.write(SNAPPYMAIL_VERSION)
+	pathlib.Path(_SM_STAMP).write_text(SNAPPYMAIL_VERSION, encoding="utf-8")
 
 
 def _dirs(storage_root: str) -> None:
@@ -203,7 +205,7 @@ def _dirs(storage_root: str) -> None:
 def _config(storage_root: str) -> None:
 	"""Write config.ini: disable admin panel, enable fail2ban auth logging.
 
-	allow_admin=Off: MIAB already has its own control panel. An enabled-by-default
+	allow_admin=Off: NAUST already has its own control panel. An enabled-by-default
 	admin UI with an auto-generated password that's never surfaced to the admin is
 	a needless attack surface for a feature nobody asked for.
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Cleanup SSL certificates which expired more than 7 days ago from $STORAGE_ROOT/ssl and move them to $STORAGE_ROOT/ssl.expired
 
-source /etc/mailinabox.conf
+source /etc/naust.conf
 shopt -s extglob nullglob
 
 retain_after="$(date --date="7 days ago" +%Y%m%d)"

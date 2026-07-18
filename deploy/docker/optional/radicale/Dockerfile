@@ -17,7 +17,7 @@ RUN pip3 install --break-system-packages --quiet doit exclusiveprocess
 
 # Copy the component definition first so the pip layer below is only
 # invalidated when the Radicale package list in the component changes.
-COPY setup/components/defs/radicale.py /tmp/radicale_component.py
+COPY setup/components/defs/optional/radicale.py /tmp/radicale_component.py
 
 # Pre-install the Radicale venv at image build time so container startup
 # skips the slow pip step (doit's uptodate check sees the venv directory
@@ -28,8 +28,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     /usr/local/lib/radicale/bin/pip install --upgrade pip && \
     /usr/local/lib/radicale/bin/pip install "radicale>=3.1,<4" "passlib[bcrypt]"
 
-COPY . /opt/mailinabox
-WORKDIR /opt/mailinabox
+COPY . /opt/naust
+WORKDIR /opt/naust
 
 COPY deploy/docker/optional/radicale/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

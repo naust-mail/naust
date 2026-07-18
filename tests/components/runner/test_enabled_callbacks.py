@@ -6,8 +6,6 @@ when ENABLE_MUNIN="false" is correctly documenting an inconsistency in how
 that component reads env vs the others.
 """
 
-import pytest
-
 
 def test_rspamd_enabled_with_correct_case():
 	from components.defs.filter.rspamd import COMPONENT
@@ -48,11 +46,11 @@ def test_munin_enabled_when_env_is_false_string():
 	assert COMPONENT.enabled({"ENABLE_MUNIN": "false"}) is True
 
 
-def test_oxi_disabled_with_uppercase():
-	from components.defs.webmail.oxi import COMPONENT
+def test_rav_disabled_with_uppercase():
+	from components.defs.webmail.rav import COMPONENT
 
-	# The lambda does a strict equality check: "OXI" != "oxi".
-	assert COMPONENT.enabled({"WEBMAIL_CLIENT": "OXI"}) is False
+	# The lambda does a strict equality check: "RAV" != "rav".
+	assert COMPONENT.enabled({"WEBMAIL_CLIENT": "RAV"}) is False
 
 
 # ── Backup tool selection ──────────────────────────────────────────────────────

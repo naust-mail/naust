@@ -47,7 +47,8 @@ from doit.tools import config_changed
 
 from .. import artifacts, SETUP_DIR
 from .. import packages as pkg
-from ..component import Component
+from ..component import Component, DOCKER
+import pathlib
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 	# Config file mtime for cache invalidation when SPAM_FILTER changes.
 	# doit's config_changed() compares stored stamps; including mtime ensures
 	# the stamp changes when the config file is written, even if value comparison fails.
-	conf_mtime = os.path.getmtime("/etc/mailinabox.conf") if os.path.exists("/etc/mailinabox.conf") else 0
+	conf_mtime = os.path.getmtime("/etc/naust.conf") if os.path.exists("/etc/naust.conf") else 0
 
 	tasks = [
 		{
@@ -96,9 +97,9 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 		{
 			"name": "identity",
 			# Re-runs when hostname or IPs change, or code changes.
-			"uptodate": [config_changed(f"{hostname}:{private_ip}:{private_ipv6}:{artifacts.fn_stamp(_identity)}")],
+			"uptodate": [config_changed(f"{hostname}:{private_ip}:{private_ipv6}:{env.get('PUBLIC_IP', '')}:{env.get('PUBLIC_IPV6', '')}:{runtime}:{artifacts.fn_stamp(_identity)}")],
 			"task_dep": ["postfix:static"],
-			"actions": [(_identity, [env])],
+			"actions": [(_identity, [env, runtime])],
 		},
 		{
 			"name": "relay",
@@ -144,8 +145,7 @@ def _header_filters(env: dict, template: str) -> None:
 	The filter strips privacy-sensitive headers (internal Received lines) from
 	mail sent by authenticated users on ports 465/587.
 	"""
-	with open(template) as f:
-		content = f.read()
+	content = pathlib.Path(template).read_text(encoding="utf-8")
 	content = content.replace("PRIMARY_HOSTNAME", env["PRIMARY_HOSTNAME"]).replace("PUBLIC_IP", env.get("PUBLIC_IP", ""))
 	artifacts.write_file("/etc/postfix/outgoing_mail_header_filters", content)
 
@@ -240,12 +240,17 @@ def _static() -> None:
 	# both share the service name "smtp". Fall back to editconf if postconf is not
 	# on PATH (e.g. package install race); the doctor check will catch any collision.
 	try:
-		subprocess.run(["postconf", "-M",
-			"smtp/inet=smtp inet n - y - 1 postscreen",
-			"smtpd/pass=smtpd pass - - y - - smtpd",
-			"dnsblog/unix=dnsblog unix - - y - 0 dnsblog",
-			"tlsproxy/unix=tlsproxy unix - - y - 0 tlsproxy",
-		], check=True)
+		subprocess.run(
+			[
+				"postconf",
+				"-M",
+				"smtp/inet=smtp inet n - y - 1 postscreen",
+				"smtpd/pass=smtpd pass - - y - - smtpd",
+				"dnsblog/unix=dnsblog unix - - y - 0 dnsblog",
+				"tlsproxy/unix=tlsproxy unix - - y - 0 tlsproxy",
+			],
+			check=True,
+		)
 	except FileNotFoundError:
 		artifacts.editconf(
 			"/etc/postfix/master.cf",
@@ -261,7 +266,7 @@ def _static() -> None:
 			["sed", "-i", r"s/^#\(smtp\s\+unix\)/\1/", "/etc/postfix/master.cf"],
 			check=False,
 		)
-	open("/etc/postfix/postscreen_access.cidr", "a").close()
+	open("/etc/postfix/postscreen_access.cidr", "a", encoding="utf-8").close()
 	artifacts.editconf(
 		"/etc/postfix/main.cf",
 		"postscreen_access_list=permit_mynetworks cidr:/etc/postfix/postscreen_access.cidr",
@@ -276,25 +281,62 @@ def _static() -> None:
 	artifacts.editconf("/etc/postfix/main.cf", "message_size_limit=134217728")
 
 
-def _identity(env: dict) -> None:
+def _identity(env: dict, runtime: str) -> None:
 	"""Write settings that depend on this server's hostname and network addresses."""
+	storage_root = env["STORAGE_ROOT"]
 	artifacts.editconf(
 		"/etc/postfix/main.cf",
-		"inet_interfaces=all",
+		f"inet_interfaces={_inet_interfaces(env, runtime)}",
 		f"smtp_bind_address={env.get('PRIVATE_IP', '')}",
 		f"smtp_bind_address6={env.get('PRIVATE_IPV6', '')}",
 		f"myhostname={env['PRIMARY_HOSTNAME']}",
 		# Banner must begin with hostname per RFC 5321 §4.3.1.
-		r"smtpd_banner=$myhostname ESMTP (Ubuntu/Postfix; see https://github.com/boomboompower/mailinabox)",
+		r"smtpd_banner=$myhostname ESMTP (Ubuntu/Postfix; see https://github.com/naust-mail/naust)",
 		"mydestination=localhost",
-	)
-	# TLS cert paths depend on STORAGE_ROOT which derives from identity.
-	storage_root = env["STORAGE_ROOT"]
-	artifacts.editconf(
-		"/etc/postfix/main.cf",
+		# TLS cert paths depend on STORAGE_ROOT which derives from identity.
 		f"smtpd_tls_cert_file={storage_root}/ssl/ssl_certificate.pem",
 		f"smtpd_tls_key_file={storage_root}/ssl/ssl_private_key.pem",
 	)
+
+
+def _inet_interfaces(env: dict, runtime: str) -> str:
+	"""Build an explicit inet_interfaces list instead of 'all'.
+
+	'all' makes Postfix call getifaddrs() and bind every interface it finds.
+	On boxes with a non-IP interface in that list (a WireGuard tunnel, a
+	Docker bridge, some provider-specific virtual NIC), Postfix 3.6 fails
+	outright with "Address family not supported by protocol" instead of
+	skipping the entry - postmap/postqueue/postfix itself refuse to start.
+	An explicit list avoids the enumeration entirely.
+
+	127.0.0.1 is always included (Dovecot SASL and local submission use it).
+	::1 is only included when the box actually has IPv6 configured
+	(PUBLIC_IPV6 or PRIVATE_IPV6 set) - on an IPv6-less box, Postfix tries
+	to resolve "::1" as a hostname and fails outright with "host not found"
+	since there's no IPv6 stack to resolve it against, confirmed on a real
+	box. Public/private addresses are added only when actually configured,
+	de-duplicated for the common single-NIC VPS case where they're equal.
+
+	In Docker, PUBLIC_IP/PRIVATE_IP are the box's externally-visible
+	addresses, not addresses bound to any interface inside this container -
+	binding only to them leaves Postfix reachable solely on its own
+	loopback, unreachable from sibling containers or via the host's
+	published ports. Docker containers only ever have 'lo' plus one or two
+	simple bridge NICs (never the exotic interfaces 'all' was built to
+	avoid), so 'all' is safe there and is what actually makes the container
+	reachable.
+	"""
+	if runtime == DOCKER:
+		return "all"
+	has_ipv6 = bool(env.get("PUBLIC_IPV6") or env.get("PRIVATE_IPV6"))
+	addrs = ["127.0.0.1"]
+	if has_ipv6:
+		addrs.append("::1")
+	for key in ("PUBLIC_IP", "PRIVATE_IP", "PUBLIC_IPV6", "PRIVATE_IPV6"):
+		value = env.get(key, "")
+		if value and value not in addrs:
+			addrs.append(value)
+	return ", ".join(addrs)
 
 
 def _relay(storage_root: str) -> None:
@@ -338,32 +380,41 @@ def _spam_filter(env: dict) -> None:
 	spamassassin: milter on 8891 (OpenDKIM only), lmtp via spampd, Postgrey
 	"""
 	spam_filter = env.get("SPAM_FILTER", "rspamd")
-	storage_root = env["STORAGE_ROOT"]
 
 	# Submission milter: Rspamd handles both spam scanning and DKIM on one port.
 	# OpenDMARC is excluded from submission - it only applies to incoming mail.
 	milter = "inet:127.0.0.1:11332" if spam_filter == "rspamd" else "inet:127.0.0.1:8891"
 	try:
-		subprocess.run(["postconf", "-M",
-			"smtps/inet=smtps inet n - - - - smtpd",
-			"submission/inet=submission inet n - - - - smtpd",
-			# authclean strips Received headers exposing internal IPs from outbound mail.
-			"authclean/unix=authclean unix n - - - 0 cleanup",
-		], check=True)
-		subprocess.run(["postconf", "-P",
-			"smtps/inet/smtpd_tls_wrappermode=yes",
-			"smtps/inet/smtpd_sasl_auth_enable=yes",
-			"smtps/inet/syslog_name=postfix/submission",
-			f"smtps/inet/smtpd_milters={milter}",
-			"smtps/inet/cleanup_service_name=authclean",
-			"submission/inet/smtpd_sasl_auth_enable=yes",
-			"submission/inet/syslog_name=postfix/submission",
-			f"submission/inet/smtpd_milters={milter}",
-			"submission/inet/smtpd_tls_security_level=encrypt",
-			"submission/inet/cleanup_service_name=authclean",
-			"authclean/unix/header_checks=pcre:/etc/postfix/outgoing_mail_header_filters",
-			"authclean/unix/nested_header_checks=",
-		], check=True)
+		subprocess.run(
+			[
+				"postconf",
+				"-M",
+				"smtps/inet=smtps inet n - - - - smtpd",
+				"submission/inet=submission inet n - - - - smtpd",
+				# authclean strips Received headers exposing internal IPs from outbound mail.
+				"authclean/unix=authclean unix n - - - 0 cleanup",
+			],
+			check=True,
+		)
+		subprocess.run(
+			[
+				"postconf",
+				"-P",
+				"smtps/inet/smtpd_tls_wrappermode=yes",
+				"smtps/inet/smtpd_sasl_auth_enable=yes",
+				"smtps/inet/syslog_name=postfix/submission",
+				f"smtps/inet/smtpd_milters={milter}",
+				"smtps/inet/cleanup_service_name=authclean",
+				"submission/inet/smtpd_sasl_auth_enable=yes",
+				"submission/inet/syslog_name=postfix/submission",
+				f"submission/inet/smtpd_milters={milter}",
+				"submission/inet/smtpd_tls_security_level=encrypt",
+				"submission/inet/cleanup_service_name=authclean",
+				"authclean/unix/header_checks=pcre:/etc/postfix/outgoing_mail_header_filters",
+				"authclean/unix/nested_header_checks=",
+			],
+			check=True,
+		)
 	except FileNotFoundError:
 		artifacts.editconf(
 			"/etc/postfix/master.cf",
@@ -425,7 +476,7 @@ def _postgrey(storage_root: str) -> None:
 	)
 
 	if not os.path.isdir(db_dir):
-		subprocess.run(["service", "postgrey", "stop"], capture_output=True)
+		subprocess.run(["service", "postgrey", "stop"], capture_output=True, check=False)
 		os.makedirs(db_dir, exist_ok=True)
 		# Migrate existing db files from the default location if present.
 		old_db = "/var/lib/postgrey"
@@ -434,17 +485,17 @@ def _postgrey(storage_root: str) -> None:
 				shutil.move(os.path.join(old_db, name), db_dir)
 
 	# Fix ownership only if wrong - avoids traversing a large live db on every run.
-	result = subprocess.run(["stat", "-c", "%U", postgrey_root], capture_output=True, text=True)
+	result = subprocess.run(["stat", "-c", "%U", postgrey_root], capture_output=True, text=True, check=False)
 	if result.stdout.strip() != "postgrey":
 		subprocess.run(["chown", "-R", "postgrey:postgrey", postgrey_root], check=True)
 	os.chmod(postgrey_root, 0o700)
 	os.chmod(db_dir, 0o700)
 
-	cron_path = "/etc/cron.daily/mailinabox-postgrey-whitelist"
+	cron_path = "/etc/cron.daily/naust-postgrey-whitelist"
 	artifacts.write_file(
 		cron_path,
 		"#!/bin/bash\n"
-		"# Mail-in-a-Box - update Postgrey sender whitelist.\n"
+		"# Naust - update Postgrey sender whitelist.\n"
 		"if [ ! -f /etc/postgrey/whitelist_clients ] || "
 		"find /etc/postgrey/whitelist_clients -mtime +28 | grep -q '.' ; then\n"
 		"    if curl https://postgrey.schweikert.ch/pub/postgrey_whitelist_clients "
@@ -474,7 +525,7 @@ def _read_relay_conf(storage_root: str) -> tuple[str, str]:
 			cfg = rtyaml.load(f) or {}
 		r = cfg.get("smtp_relay", {})
 		return (r.get("host", "") or "", str(r.get("port", 587)))
-	except Exception:
+	except Exception:  # noqa: BLE001 - missing/malformed settings.yaml just means "no relay configured"
 		return ("", "587")
 
 
@@ -491,5 +542,5 @@ def _relay_stamp(storage_root: str) -> str:
 			cfg = rtyaml.load(f) or {}
 		r = cfg.get("smtp_relay", {})
 		return f"{r.get('host', '')}:{r.get('port', 587)}:{r.get('user', '')}"
-	except Exception:
+	except Exception:  # noqa: BLE001 - missing/malformed settings.yaml just means "no relay configured"
 		return "no-relay"

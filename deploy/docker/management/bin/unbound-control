@@ -1,0 +1,17 @@
+#!/bin/bash
+# Docker shim for helperd: intercepts the unbound-control flush_zone call
+# (serviceIntent()'s custom unbound reload sequence) and routes it through
+# the cross-container control-socket-server bridge. The real unbound-control
+# binary and running unbound live in the dns container, not here.
+#
+# helperd only ever invokes this as
+# "/usr/sbin/unbound-control -c /etc/unbound/unbound.conf flush_zone .", so
+# the arguments aren't parsed - any invocation maps to the dns container's
+# unbound reload action. helperd execs by fixed absolute path, not via $PATH
+# lookup, so this shim is installed directly at /usr/sbin/unbound-control
+# (there is no real unbound-control binary in this container).
+
+set -euo pipefail
+
+exec python3 /usr/local/lib/naust/_socket_send.py \
+	"${STORAGE_ROOT:-/home/user-data}/sockets/dns.sock" unbound reload

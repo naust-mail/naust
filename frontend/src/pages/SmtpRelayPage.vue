@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { Settings2, Send, CheckCircle, XCircle } from 'lucide-vue-next'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import Field from '@/components/ui/Field.vue'
@@ -14,10 +13,8 @@ import Card from '@/components/ui/Card.vue'
 import Sheet from '@/components/ui/Sheet.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
 import Well from '@/components/ui/Well.vue'
-import { useApi } from '@/composables/useApi'
-import type { SmtpRelayConfig } from '@/types'
-
-const api = useApi()
+import { api, ApiError } from '@/api/client'
+import type { MessageResponse, RelayConfig, RelayTestRequest, SetRelayRequest } from '@/api/types.gen'
 
 type ProviderId = 'direct' | 'ses' | 'brevo' | 'mailgun' | 'mailjet' | 'postmark' | 'resend' | 'sendgrid' | 'smtp2go' | 'custom'
 
@@ -51,7 +48,7 @@ const sendingTest = ref(false)
 const testResult = ref<{ ok: boolean; message: string } | null>(null)
 const sheetOpen = ref(false)
 
-const current = ref<SmtpRelayConfig | null>(null)
+const current = ref<RelayConfig | null>(null)
 const provider = ref<ProviderId>('direct')
 const host = ref('')
 const port = ref('587')
@@ -78,11 +75,10 @@ async function sendPageTestEmail(): Promise<void> {
   sendingPageTest.value = true
   pageTestResult.value = null
   try {
-    const res = await api.post('/admin/system/relay/send-test', {})
-    const text = await res.text()
-    pageTestResult.value = { ok: res.ok, message: text }
-  } catch {
-    pageTestResult.value = { ok: false, message: 'Request failed.' }
+    const resp = await api.post<MessageResponse>('/api/system/relay/send-test')
+    pageTestResult.value = { ok: true, message: resp.message }
+  } catch (e) {
+    pageTestResult.value = { ok: false, message: e instanceof ApiError ? e.message : 'Request failed.' }
   } finally {
     sendingPageTest.value = false
   }
@@ -137,8 +133,7 @@ async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
   try {
-    const res = await api.get('/admin/system/relay')
-    current.value = await res.json()
+    current.value = await api.get<RelayConfig>('/api/system/relay')
   } catch {
     loadError.value = true
     toast.error('Failed to load relay configuration.')
@@ -159,16 +154,16 @@ async function testConnection(): Promise<void> {
   testing.value = true
   testResult.value = null
   try {
-    const res = await api.post('/admin/system/relay/test', {
+    const req: RelayTestRequest = {
       host: host.value,
-      port: port.value,
+      port: portNum,
       user: user.value,
       password: password.value,
-    })
-    const text = await res.text()
-    testResult.value = { ok: res.ok, message: text }
-  } catch {
-    testResult.value = { ok: false, message: 'Request failed.' }
+    }
+    const resp = await api.post<MessageResponse>('/api/system/relay/test', req)
+    testResult.value = { ok: true, message: resp.message }
+  } catch (e) {
+    testResult.value = { ok: false, message: e instanceof ApiError ? e.message : 'Request failed.' }
   } finally {
     testing.value = false
   }
@@ -179,11 +174,10 @@ async function sendTestEmail(): Promise<void> {
   sendingTest.value = true
   testResult.value = null
   try {
-    const res = await api.post('/admin/system/relay/send-test', {})
-    const text = await res.text()
-    testResult.value = { ok: res.ok, message: text }
-  } catch {
-    testResult.value = { ok: false, message: 'Request failed.' }
+    const resp = await api.post<MessageResponse>('/api/system/relay/send-test')
+    testResult.value = { ok: true, message: resp.message }
+  } catch (e) {
+    testResult.value = { ok: false, message: e instanceof ApiError ? e.message : 'Request failed.' }
   } finally {
     sendingTest.value = false
   }
@@ -191,25 +185,26 @@ async function sendTestEmail(): Promise<void> {
 
 async function save(): Promise<void> {
   if (saving.value) return
+  const portNum = parseInt(port.value, 10)
+  if (provider.value !== 'direct' && !Number.isFinite(portNum)) {
+    toast.error('Invalid port.')
+    return
+  }
   saving.value = true
   try {
-    const body: Record<string, string> = {
+    const req: SetRelayRequest = {
       host: provider.value === 'direct' ? '' : host.value,
-      port: port.value,
+      port: provider.value === 'direct' ? 587 : portNum,
       user: user.value,
       spf_include: spfInclude.value,
     }
-    if (password.value) body.password = password.value
+    if (password.value) req.password = password.value
 
-    const res = await api.post('/admin/system/relay', body)
-    const text = await res.text()
-    if (!res.ok) {
-      toast.error(text)
-      return
-    }
+    current.value = await api.put<RelayConfig>('/api/system/relay', req)
     toast.success(provider.value === 'direct' ? 'Relay disabled.' : 'Relay configured.')
     sheetOpen.value = false
-    await load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to save relay configuration.')
   } finally {
     saving.value = false
   }
@@ -219,7 +214,6 @@ onMounted(load)
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="Outbound Mail Relay" description="Send outbound mail through an external mail provider.">
       <template #actions>
         <Button variant="secondary" size="sm" @click="openSheet"><Settings2 class="size-3.5" />Configure</Button>
@@ -229,14 +223,14 @@ onMounted(load)
     <!-- Status card -->
     <AsyncState :loading="loading" :error="loadError" error-title="Could not load relay configuration" @retry="load">
       <template #loading>
-        <Card class="p-5 space-y-3">
+        <Card padding="md" class="space-y-3">
           <Skeleton class="h-5 w-32" />
           <Skeleton class="h-4 w-64" />
           <Skeleton class="h-4 w-48" />
         </Card>
       </template>
 
-      <Card class="p-5">
+      <Card padding="md">
       <!-- Active relay -->
       <template v-if="isActive">
         <div class="flex items-start justify-between gap-4 mb-4">
@@ -273,7 +267,7 @@ onMounted(load)
         </div>
 
         <!-- Test result feedback -->
-        <div v-if="pageTestResult" class="mt-3 flex items-start gap-2 text-xs" :class="pageTestResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+        <div v-if="pageTestResult" class="mt-3 flex items-start gap-2 text-xs" :class="pageTestResult.ok ? 'text-success' : 'text-error'">
           <component :is="pageTestResult.ok ? CheckCircle : XCircle" class="size-3.5 mt-0.5 shrink-0" />
           {{ pageTestResult.message }}
         </div>
@@ -349,9 +343,9 @@ onMounted(load)
 
           <Field label="SPF include" for="relaySpf">
             <template #label>SPF include <span class="font-normal text-faint">- optional</span></template>
-            <Input id="relaySpf" v-model="spfInclude" placeholder="e.g. sendgrid.net" />
+            <Input id="relaySpf" v-model="spfInclude" placeholder="e.g. sendgrid.net" :maxlength="256" />
             <p class="text-xs text-muted mt-1">
-              When set, <code class="font-mono">include:{{ spfInclude || 'relay-domain.com' }}</code> is added
+              When set, <code class="font-mono break-all">include:{{ spfInclude || 'relay-domain.com' }}</code> is added
               to your auto-generated SPF record. Pre-filled for known providers.
               Leave blank if you manage DNS externally.
             </p>
@@ -374,10 +368,9 @@ onMounted(load)
         <Button v-else class="w-full" :disabled="saving" @click="save">
           {{ saving ? 'Saving...' : 'Disable Relay' }}
         </Button>
-        <p v-if="testResult" class="text-xs" :class="testResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+        <p v-if="testResult" class="text-xs" :class="testResult.ok ? 'text-success' : 'text-error'">
           {{ testResult.message }}
         </p>
       </div>
     </Sheet>
-  </AppLayout>
 </template>

@@ -100,7 +100,7 @@ def mail_user_privs():
 @bp.route('/users/privileges/add', methods=['POST'])
 def mail_user_privs_add():
 	# API tokens may not grant admin - only session/basic auth callers can.
-	if request.form.get('privilege', '') == 'admin' and request.token_scope != 'full':
+	if request.form.get('privilege', '') == 'admin' and request.token_scope != 'full':  # noqa: S105 -- access scope label, not a secret
 		return ('API tokens cannot grant admin privileges.', 403)
 	try:
 		email = validate_email(request.form.get('email', ''))

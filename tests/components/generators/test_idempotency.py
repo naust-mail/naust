@@ -6,9 +6,8 @@ action function directly, then asserts the file bytes are unchanged.
 """
 
 import os
-import importlib
-import pytest
 from unittest.mock import patch, MagicMock
+import pathlib
 
 _DOVECOT_FAKE = MagicMock(stdout="2.3.21 (abc)", returncode=0)
 _SENTINEL = b"SENTINEL_DO_NOT_OVERWRITE"
@@ -24,7 +23,8 @@ def _extract_action(tasks: list[dict], task_name: str):
 			else:
 				fn, args = entry, []
 			return fn, args
-	raise KeyError(f"Task {task_name!r} not found")
+	msg = f"Task {task_name!r} not found"
+	raise KeyError(msg)
 
 
 def _call_action(fn, args):
@@ -41,8 +41,7 @@ def test_dnssec_rsasha256_is_idempotent(tmp_path):
 	dnssec_dir = os.path.join(storage_root, "dns", "dnssec")
 	os.makedirs(dnssec_dir, exist_ok=True)
 	conf_file = os.path.join(dnssec_dir, "RSASHA256.conf")
-	with open(conf_file, "wb") as f:
-		f.write(_SENTINEL)
+	pathlib.Path(conf_file).write_bytes(_SENTINEL)
 
 	from components.defs import dns
 
@@ -52,8 +51,7 @@ def test_dnssec_rsasha256_is_idempotent(tmp_path):
 	fn, args = _extract_action(tasks, "dnssec-keys-rsasha256")
 	_call_action(fn, args)
 
-	with open(conf_file, "rb") as f:
-		assert f.read() == _SENTINEL
+	assert pathlib.Path(conf_file).read_bytes() == _SENTINEL
 
 
 def test_dnssec_ecdsap256sha256_is_idempotent(tmp_path):
@@ -62,8 +60,7 @@ def test_dnssec_ecdsap256sha256_is_idempotent(tmp_path):
 	dnssec_dir = os.path.join(storage_root, "dns", "dnssec")
 	os.makedirs(dnssec_dir, exist_ok=True)
 	conf_file = os.path.join(dnssec_dir, "ECDSAP256SHA256.conf")
-	with open(conf_file, "wb") as f:
-		f.write(_SENTINEL)
+	pathlib.Path(conf_file).write_bytes(_SENTINEL)
 
 	from components.defs import dns
 
@@ -73,8 +70,7 @@ def test_dnssec_ecdsap256sha256_is_idempotent(tmp_path):
 	fn, args = _extract_action(tasks, "dnssec-keys-ecdsap256sha256")
 	_call_action(fn, args)
 
-	with open(conf_file, "rb") as f:
-		assert f.read() == _SENTINEL
+	assert pathlib.Path(conf_file).read_bytes() == _SENTINEL
 
 
 # ── SSL key generator ─────────────────────────────────────────────────────────
@@ -86,8 +82,7 @@ def test_ssl_key_is_idempotent(tmp_path):
 	ssl_dir = os.path.join(storage_root, "ssl")
 	os.makedirs(ssl_dir, exist_ok=True)
 	key_file = os.path.join(ssl_dir, "ssl_private_key.pem")
-	with open(key_file, "wb") as f:
-		f.write(_SENTINEL)
+	pathlib.Path(key_file).write_bytes(_SENTINEL)
 
 	from components.defs import ssl
 
@@ -100,8 +95,7 @@ def test_ssl_key_is_idempotent(tmp_path):
 	# targets= means doit skips when file exists; the action itself must also gate.
 	_call_action(fn, args)
 
-	with open(key_file, "rb") as f:
-		assert f.read() == _SENTINEL
+	assert pathlib.Path(key_file).read_bytes() == _SENTINEL
 
 
 # ── DKIM key generator (dkim component / spamassassin path) ──────────────────
@@ -113,8 +107,7 @@ def test_dkim_key_is_idempotent(tmp_path):
 	dkim_dir = os.path.join(storage_root, "mail", "dkim")
 	os.makedirs(dkim_dir, exist_ok=True)
 	key_file = os.path.join(dkim_dir, "mail.private")
-	with open(key_file, "wb") as f:
-		f.write(_SENTINEL)
+	pathlib.Path(key_file).write_bytes(_SENTINEL)
 
 	from components.defs import dkim
 
@@ -123,8 +116,7 @@ def test_dkim_key_is_idempotent(tmp_path):
 	fn, args = _extract_action(tasks, "dkim-key")
 	_call_action(fn, args)
 
-	with open(key_file, "rb") as f:
-		assert f.read() == _SENTINEL
+	assert pathlib.Path(key_file).read_bytes() == _SENTINEL
 
 
 # ── Roundcube DES key ─────────────────────────────────────────────────────────
@@ -136,8 +128,7 @@ def test_roundcube_des_key_is_idempotent(tmp_path):
 	rc_dir = os.path.join(storage_root, "roundcube")
 	os.makedirs(rc_dir, exist_ok=True)
 	des_key_file = os.path.join(rc_dir, "des_key.txt")
-	with open(des_key_file, "wb") as f:
-		f.write(_SENTINEL)
+	pathlib.Path(des_key_file).write_bytes(_SENTINEL)
 
 	from components.defs.webmail import roundcube
 
@@ -152,8 +143,7 @@ def test_roundcube_des_key_is_idempotent(tmp_path):
 	fn, args = _extract_action(tasks, "des-key")
 	_call_action(fn, args)
 
-	with open(des_key_file, "rb") as f:
-		assert f.read() == _SENTINEL
+	assert pathlib.Path(des_key_file).read_bytes() == _SENTINEL
 
 
 # ── Management backup key ─────────────────────────────────────────────────────
@@ -165,20 +155,17 @@ def test_backup_key_is_idempotent(tmp_path):
 	backup_dir = os.path.join(storage_root, "backup")
 	os.makedirs(backup_dir, exist_ok=True)
 	key_file = os.path.join(backup_dir, "secret_key.txt")
-	with open(key_file, "wb") as f:
-		f.write(_SENTINEL)
+	pathlib.Path(key_file).write_bytes(_SENTINEL)
 
 	from components.defs.backup import restic
 
 	env = {"STORAGE_ROOT": storage_root}
-	with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
-		with patch("shutil.which", return_value="/usr/bin/restic"):
-			tasks = restic.make_tasks(env, "baremetal")
+	with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")), patch("shutil.which", return_value="/usr/bin/restic"):
+		tasks = restic.make_tasks(env, "baremetal")
 	fn, args = _extract_action(tasks, "backup-key")
 	_call_action(fn, args)
 
-	with open(key_file, "rb") as f:
-		assert f.read() == _SENTINEL
+	assert pathlib.Path(key_file).read_bytes() == _SENTINEL
 
 
 def test_backup_key_created_when_absent(tmp_path):
@@ -195,16 +182,14 @@ def test_backup_key_created_when_absent(tmp_path):
 	from components.defs.backup import restic
 
 	env = {"STORAGE_ROOT": storage_root}
-	with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")):
-		with patch("shutil.which", return_value="/usr/bin/restic"):
-			tasks = restic.make_tasks(env, "baremetal")
+	with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")), patch("shutil.which", return_value="/usr/bin/restic"):
+		tasks = restic.make_tasks(env, "baremetal")
 	fn, args = _extract_action(tasks, "backup-key")
 	with patch("subprocess.run", return_value=fake_openssl):
 		fn(*args)
 
 	assert os.path.exists(key_file), "backup key file must be created when absent"
-	with open(key_file) as f:
-		content = f.read()
+	content = pathlib.Path(key_file).read_text(encoding="utf-8")
 	assert len(content) > 0, "backup key file must not be empty"
 
 

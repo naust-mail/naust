@@ -38,7 +38,7 @@ _NETDATA_CONF = "/opt/netdata/etc/netdata/netdata.conf"
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	hostname = env.get("PRIMARY_HOSTNAME", "localhost")
 
 	return [
@@ -78,7 +78,8 @@ def _install() -> None:
 				h.update(chunk)
 		actual = h.hexdigest()
 		if actual != _NETDATA_SHA256:
-			raise RuntimeError(f"netdata installer SHA256 mismatch\n  expected: {_NETDATA_SHA256}\n  got:      {actual}")
+			msg = f"netdata installer SHA256 mismatch\n  expected: {_NETDATA_SHA256}\n  got:      {actual}"
+			raise RuntimeError(msg)
 		subprocess.run(
 			["sh", tmp, "--accept", "--", "--dont-start-it", "--disable-telemetry"],
 			check=True,

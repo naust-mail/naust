@@ -1,14 +1,12 @@
 """Shared wizard orchestration - step runner, confirm screen, first-user flow."""
 
-import os, sys
+import os
+import sys
 from .ui import (
 	bold,
 	lavender,
 	white_b,
-	gray_num,
 	gray_desc,
-	green,
-	red,
 	clear,
 	nav,
 	_term_width,
@@ -41,7 +39,7 @@ def confirm_screen(active, answers, value_display=None, all_steps=None, editable
 	"""
 	from .ui import read_key, Raw
 
-	display_steps = all_steps if all_steps else active
+	display_steps = all_steps or active
 	rows = []  # (key, label, display_val, is_editable)
 	active_keys = {key for key, _, _ in active}
 	if editable_keys is None:
@@ -70,11 +68,9 @@ def confirm_screen(active, answers, value_display=None, all_steps=None, editable
 			print("\033[u\033[J", end="", flush=True)
 
 		out = []
-		out.append(f"  {bold('Review your configuration')}")
-		out.append(f"  {gray_desc('Navigate to edit a value, or confirm to continue.')}")
-		out.append("")
+		out.extend((f"  {bold('Review your configuration')}", f"  {gray_desc('Navigate to edit a value, or confirm to continue.')}", ""))
 
-		for i, (key, label, val, is_active) in enumerate(rows):
+		for i, (_key, label, val, is_active) in enumerate(rows):
 			pad = " " * (col_w - len(label) - 1)
 			if i == sel:
 				out.append(f"  {lavender('❯')} {gray_desc(label + ':')}{pad}{lavender(val or '(none)', bold=True)}")
@@ -88,8 +84,7 @@ def confirm_screen(active, answers, value_display=None, all_steps=None, editable
 		else:
 			out.append(f"    {white_b('Confirm and continue')}")
 
-		out.append("")
-		out.append(f"  {gray_desc('↑↓ navigate  ·  Enter to edit / confirm  ·  Esc to go back')}")
+		out.extend(("", f"  {gray_desc('↑↓ navigate  ·  Enter to edit / confirm  ·  Esc to go back')}"))
 
 		text = "\n".join(out)
 		print(text, end="\n", flush=True)
@@ -100,9 +95,9 @@ def confirm_screen(active, answers, value_display=None, all_steps=None, editable
 		with Raw():
 			while True:
 				k = read_key()
-				if k in ('up', 'shift_tab'):
+				if k in {'up', 'shift_tab'}:
 					sel = (sel - 1) % n_items
-				elif k in ('down', 'tab'):
+				elif k in {'down', 'tab'}:
 					sel = (sel + 1) % n_items
 				elif k == 'enter':
 					if sel == CONFIRM_IDX:
@@ -160,7 +155,7 @@ def run_questions(steps, args, value_display=None, initial=None, all_steps=None,
 				sys.exit(1)
 			if result is True:
 				break
-			elif isinstance(result, tuple) and result[0] == "edit":
+			if isinstance(result, tuple) and result[0] == "edit":
 				# User picked a specific row to re-answer. Run just that step,
 				# then return to confirm regardless of what they entered.
 				# For profile installs (all_editable), steps only contains the
@@ -193,7 +188,7 @@ def run_questions(steps, args, value_display=None, initial=None, all_steps=None,
 				# Esc - go back to previous step
 				idx -= 1
 		else:
-			key, label, fn = steps[idx]
+			key, _label, fn = steps[idx]
 			try:
 				result = fn(args, answers)
 			except KeyboardInterrupt:
@@ -228,7 +223,7 @@ def write_output(path, results):
 		return "'" + v.replace("'", "'\\''") + "'"
 
 	tmp = path + ".tmp"
-	with open(tmp, "w") as f:
+	with open(tmp, "w", encoding="utf-8") as f:
 		for k, v in results.items():
 			if k.startswith("__") or isinstance(v, dict):
 				continue  # sentinel keys from multi-select steps; real values already merged
@@ -246,16 +241,16 @@ def load_conf(path):
 	"""
 	values = {}
 	try:
-		with open(path) as f:
-			for line in f:
-				line = line.strip()
+		with open(path, encoding="utf-8") as f:
+			for raw_line in f:
+				line = raw_line.strip()
 				if not line or line.startswith("#") or "=" not in line:
 					continue
 				k, _, v = line.partition("=")
 				k = k.strip()
 				v = v.strip()
 				# Strip matching outer quotes
-				if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+				if len(v) >= 2 and v[0] == v[-1] and v[0] in {"'", '"'}:
 					v = v[1:-1]
 				values[k] = v
 	except FileNotFoundError:

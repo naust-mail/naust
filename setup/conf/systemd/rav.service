@@ -1,0 +1,32 @@
+[Unit]
+Description=rav webmail
+After=network.target dovecot.service postfix.service
+
+[Service]
+EnvironmentFile=/etc/rav/config.env
+ExecStart=/usr/local/bin/rav-server
+User=rav
+Group=rav
+SupplementaryGroups=ssl-cert
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/usr/local/share/rav
+
+# Sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ReadWritePaths=${STORAGE_ROOT}/rav
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

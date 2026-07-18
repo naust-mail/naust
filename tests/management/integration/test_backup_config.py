@@ -5,10 +5,10 @@ The backup/ subdirectory is created by each test that needs it.
 """
 
 import os
-import stat
 
 import pytest
 import rtyaml
+import pathlib
 
 
 def _backup_root(env):
@@ -182,8 +182,7 @@ def test_write_backup_config_produces_valid_yaml(test_db):
 def _write_passphrase(env, content):
 	_ensure_backup_dir(env)
 	path = os.path.join(_backup_root(env), "secret_key.txt")
-	with open(path, "w", encoding="utf-8") as f:
-		f.write(content + "\n")
+	pathlib.Path(path).write_text(content + "\n", encoding="utf-8")
 	return path
 
 

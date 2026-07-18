@@ -1,4 +1,3 @@
-import pytest
 import auth.api_tokens as api_tokens_module
 from auth.api_tokens import _hash_secret, _server_key, verify_token
 
@@ -100,7 +99,7 @@ class TestVerifyTokenPrefixValidation:
 	def teardown_method(self):
 		_reset_server_key_cache()
 
-	def test_missing_miab_prefix_returns_none(self):
+	def test_missing_naust_prefix_returns_none(self):
 		from unittest.mock import patch
 
 		env = _env_with_key()
@@ -115,7 +114,7 @@ class TestVerifyTokenPrefixValidation:
 
 		env = _env_with_key()
 		with patch('auth.api_tokens.open_database') as mock_db:
-			result = verify_token("miab_", env)
+			result = verify_token("naust_", env)
 		assert result is None
 		mock_db.assert_not_called()
 

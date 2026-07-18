@@ -114,6 +114,43 @@ def test_no_helper_socket_falls_back_to_subprocess(bare_metal, monkeypatch):
 	assert ran == [["/usr/sbin/service", "dovecot", "restart"]]
 
 
+def test_config_write_delegates_to_helper(bare_metal):
+	helper = FakeHelper(bare_metal)
+	control_plane.config_write("nginx_local", "server {}\n")
+	helper.close()
+
+	req = json.loads(helper.received)
+	assert req == {"intent": "config.write", "args": {"target": "nginx_local", "content": "server {}\n"}}
+
+
+def test_config_write_falls_back_to_direct_write(bare_metal, tmp_path, monkeypatch):
+	# No helper socket: writes the file directly (pre-helper behavior).
+	target = tmp_path / "local.conf"
+	monkeypatch.setitem(control_plane._CONFIG_TARGETS, "nginx_local", str(target))
+	control_plane.config_write("nginx_local", "server {}\n")
+	assert target.read_text() == "server {}\n"
+
+
+def test_postfix_set_sends_one_intent_per_key(bare_metal):
+	# FakeHelper accepts a single connection; use two helpers back to back
+	# via a two-key dict would race, so assert with one key.
+	helper = FakeHelper(bare_metal)
+	control_plane.postfix_set({"relayhost": "[smtp.example.com]:587"})
+	helper.close()
+
+	req = json.loads(helper.received)
+	assert req == {"intent": "postfix.set", "args": {"key": "relayhost", "value": "[smtp.example.com]:587"}}
+
+
+def test_apt_upgrade_returns_helper_result(bare_metal):
+	helper = FakeHelper(bare_metal, response=b'{"ok": true, "result": "42 upgraded.\\n"}\n')
+	out = control_plane.apt_upgrade()
+	helper.close()
+
+	assert out == "42 upgraded.\n"
+	assert json.loads(helper.received)["intent"] == "host.apt_upgrade"
+
+
 def test_docker_mode_ignores_helper(monkeypatch, tmp_path):
 	monkeypatch.setattr(control_plane, "RUNTIME", "docker")
 	monkeypatch.setattr(control_plane, "HELPER_SOCKET", str(tmp_path / "helper.sock"))

@@ -38,13 +38,13 @@ def _reset_server_key_cache():
 # ---------------------------------------------------------------------------
 
 
-def test_create_token_write_scope_returns_miab_prefix(test_db):
+def test_create_token_write_scope_returns_naust_prefix(test_db):
 	_add_user("tokuser@example.com", test_db)
 	from auth.api_tokens import create_token
 
 	token = create_token("tokuser@example.com", "ci-token", "write", test_db)
 	assert isinstance(token, str)
-	assert token.startswith("miab_")
+	assert token.startswith("naust_")
 
 
 def test_create_token_read_scope(test_db):
@@ -52,7 +52,7 @@ def test_create_token_read_scope(test_db):
 	from auth.api_tokens import create_token
 
 	token = create_token("reader@example.com", "read-token", "read", test_db)
-	assert token.startswith("miab_")
+	assert token.startswith("naust_")
 
 
 def test_create_token_invalid_scope_raises(test_db):
@@ -64,12 +64,12 @@ def test_create_token_invalid_scope_raises(test_db):
 
 
 def test_create_token_plaintext_not_stored(test_db):
-	"""The plaintext miab_<secret> must never appear in the database."""
+	"""The plaintext naust_<secret> must never appear in the database."""
 	_add_user("notstore@example.com", test_db)
 	from auth.api_tokens import create_token
 
 	token = create_token("notstore@example.com", "tok", "write", test_db)
-	secret = token[len("miab_") :]
+	secret = token[len("naust_") :]
 
 	import sqlite3
 
@@ -140,14 +140,14 @@ def test_verify_token_wrong_secret_returns_none(test_db):
 	from auth.api_tokens import create_token, verify_token
 
 	create_token("vsec@example.com", "tok", "write", test_db)
-	result = verify_token("miab_wrongsecret", test_db)
+	result = verify_token("naust_wrongsecret", test_db)
 	assert result is None
 
 
-def test_verify_token_non_miab_format_returns_none(test_db):
+def test_verify_token_non_naust_format_returns_none(test_db):
 	from auth.api_tokens import verify_token
 
-	result = verify_token("not_miab_format_at_all", test_db)
+	result = verify_token("not_naust_format_at_all", test_db)
 	assert result is None
 
 

@@ -129,7 +129,7 @@ def provision_totp(email, env):
 	validate_totp_secret(secret)  # sanity check
 
 	# Make a URI that we encode within a QR code.
-	uri = pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=env["PRIMARY_HOSTNAME"] + " Mail-in-a-Box Control Panel")
+	uri = pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=env["PRIMARY_HOSTNAME"] + " Naust Control Panel")
 
 	# Generate a QR code as a base64-encode PNG image.
 	qr = qrcode.make(uri)
@@ -150,7 +150,7 @@ def _get_fido2_server(env):
 
 	# rpId is fixed to PRIMARY_HOSTNAME. Moving the admin panel to a different
 	# hostname will invalidate all registered passkeys. Users must re-register.
-	rp = PublicKeyCredentialRpEntity(id=env["PRIMARY_HOSTNAME"], name="Mail-in-a-Box")
+	rp = PublicKeyCredentialRpEntity(id=env["PRIMARY_HOSTNAME"], name="Naust")
 	return Fido2Server(rp)
 
 
@@ -316,7 +316,7 @@ def validate_auth_mfa(email, request, env):
 
 			return (True, [])
 
-		elif mfa_mode["type"] == "webauthn":
+		if mfa_mode["type"] == "webauthn":
 			# Password login cannot satisfy a WebAuthn requirement.
 			# Passkey users must authenticate via /mfa/webauthn/authenticate/begin+complete.
 			# continue (not return) so that a TOTP entry later in the list can still succeed.

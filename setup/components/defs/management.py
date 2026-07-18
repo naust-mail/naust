@@ -1,6 +1,13 @@
 """
 Management daemon (gunicorn/Flask API) and admin UI (Vue frontend).
 
+PARKED (2026-07-12): retired by the managerd cutover. This component installs
+nothing (enabled=lambda env: False) - managerd serves the API, defs/panel.py
+installs the admin frontend, and defs/boxctl.py installs the CLI. The file and
+its actions are kept in place until the source-tree cleanup pass deletes the
+Flask stack (management/, this file, naust.service, the :10222 nginx confs,
+dns_update/web_update, deploy/docker/management). Do not re-enable.
+
 Steps:
   virtualenv    - create Python venv (skipped if already exists)
   pip-install   - install Python dependencies
@@ -14,16 +21,19 @@ Backup tool installation (restic binary / duplicity pip packages) and backup
 key generation live in defs/backup/.
 """
 
+import json
 import os
 import random
 import secrets
 import shutil
 import subprocess
+import tempfile
 
 from doit.tools import config_changed
 
 from .. import artifacts, SETUP_DIR
 from ..component import Component, BAREMETAL, DOCKER
+import pathlib
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -48,15 +58,19 @@ COMPONENT = Component(
 		# python3-idna: imported at module level by mailconfig.py for domain name handling
 		"python3-idna",
 	],
-	services=["mailinabox"],
+	services=["naust"],
 	# In Docker, gunicorn is exec'd directly by the entrypoint - no supervisord.
 	# The entrypoint restarts the container to pick up changes, so no in-process
 	# restart is needed here.
 	docker_services=[],
+	# PARKED: the Flask stack is retired by the managerd cutover. Never runs;
+	# its tasks (venv, gunicorn, naust.service, api.key, cron, rsync) install
+	# nothing. Kept until the source-tree cleanup pass. See module docstring.
+	enabled=lambda _env: False,
 )
 
-_INST_DIR = "/usr/local/lib/mailinabox"
-_SHARE_DIR = "/usr/local/share/mailinabox"
+_INST_DIR = "/usr/local/lib/naust"
+_SHARE_DIR = "/usr/local/share/naust"
 _VENV = os.path.join(_INST_DIR, "env")
 
 _PIP_PACKAGES = [
@@ -145,6 +159,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 							artifacts.hash_files(nginx_conf_src) if os.path.isdir(nginx_conf_src) else "",
 							artifacts.hash_files(frontend_dist) if os.path.isdir(frontend_dist) else "",
 							artifacts.hash_files(boxctl_src) if os.path.isdir(boxctl_src) else "",
+							env.get("PRIMARY_HOSTNAME", ""),
 						])
 					)
 				],
@@ -159,6 +174,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 							boxctl_src,
 							setup_src,
 							repo_root,
+							env.get("PRIMARY_HOSTNAME", ""),
 						],
 					)
 				],
@@ -171,7 +187,7 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 						_cron,
 						[
 							# Stable per-box, unique across boxes - seeds from hostname.
-							random.Random(env.get("PRIMARY_HOSTNAME", "")).randint(0, 59),
+							random.Random(env.get("PRIMARY_HOSTNAME", "")).randint(0, 59),  # noqa: S311 -- cron jitter, not security-sensitive
 						],
 					)
 				],
@@ -193,6 +209,7 @@ def _virtualenv() -> None:
 	os.makedirs(_INST_DIR, exist_ok=True)
 	env = os.environ.copy()
 	env["DEB_PYTHON_INSTALL_LAYOUT"] = "deb"
+	print("Creating the management venv...", flush=True)
 	subprocess.run(
 		["virtualenv", "-ppython3", _VENV],
 		env=env,
@@ -209,11 +226,11 @@ def _pip_install() -> None:
 	Python versions where wheels haven't been built yet.
 	"""
 	pip = os.path.join(_VENV, "bin", "pip")
-	subprocess.run([pip, "install", "--upgrade", "pip"], check=True, capture_output=True)
+	print("Installing Python packages into the management venv...", flush=True)
+	subprocess.run([pip, "install", "--upgrade", "pip"], check=True)
 	subprocess.run(
-		[pip, "install", "--upgrade", "--prefer-binary"] + _PIP_PACKAGES,
+		[pip, "install", "--upgrade", "--prefer-binary", *_PIP_PACKAGES],
 		check=True,
-		capture_output=True,
 	)
 
 
@@ -225,14 +242,13 @@ def _start_script(repo_root: str, runtime: str = BAREMETAL) -> None:
 	regenerated on full setup. Authentication breaks with >1 gunicorn worker
 	because sessions are in-memory, so we pin to 1 worker.
 	"""
-	api_key_path = "/var/lib/mailinabox/api.key"
+	api_key_path = "/var/lib/naust/api.key"
 	os.makedirs(os.path.dirname(api_key_path), exist_ok=True)
 
 	# Generate API key on first setup. Keep it stable across daemon restarts so
 	# dns_update and web_update don't fail when called before daemon starts.
 	if not os.path.exists(api_key_path):
-		with open(api_key_path, "w") as f:
-			f.write(secrets.token_hex(16))
+		pathlib.Path(api_key_path).write_text(secrets.token_hex(16), encoding="utf-8")
 		os.chmod(api_key_path, 0o640)
 
 	# In Docker, nginx runs in a separate container so gunicorn must bind on all
@@ -249,16 +265,16 @@ def _start_script(repo_root: str, runtime: str = BAREMETAL) -> None:
 	# Look for the unit file in the repo source first (pre-install-files),
 	# then fall back to the installed location (re-runs after install-files).
 	unit_src_candidates = [
-		os.path.join(repo_root, "setup", "conf", "systemd", "mailinabox.service"),
-		os.path.join(_INST_DIR, "setup", "conf", "systemd", "mailinabox.service"),
+		os.path.join(repo_root, "setup", "conf", "systemd", "naust.service"),
+		os.path.join(_INST_DIR, "setup", "conf", "systemd", "naust.service"),
 	]
 	for src in unit_src_candidates:
 		if os.path.exists(src):
-			shutil.copy2(src, "/lib/systemd/system/mailinabox.service")
+			shutil.copy2(src, "/lib/systemd/system/naust.service")
 			break
 
 	subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
-	subprocess.run(["systemctl", "enable", "mailinabox.service"], check=True, capture_output=True)
+	subprocess.run(["systemctl", "enable", "naust.service"], check=True, capture_output=True)
 
 
 def _cron(minute: int) -> None:
@@ -269,8 +285,8 @@ def _cron(minute: int) -> None:
 	RBL checks, etc.) when many boxes run at the same time.
 	"""
 	artifacts.write_file(
-		"/etc/cron.d/mailinabox-nightly",
-		f"# Mail-in-a-Box --- Do not edit / will be overwritten on update.\n# Run nightly tasks: backup, status checks.\n{minute} 1 * * *\troot\t(cd {_INST_DIR} && management/scripts/daily_tasks.py)\n",
+		"/etc/cron.d/naust-nightly",
+		f"# Naust --- Do not edit / will be overwritten on update.\n# Run nightly tasks: backup, status checks.\n{minute} 1 * * *\troot\t(cd {_INST_DIR} && management/scripts/daily_tasks.py)\n",
 	)
 
 
@@ -284,7 +300,7 @@ def _frontend(frontend_src: str, frontend_dist: str) -> None:
 	fe_hash = artifacts.hash_files(frontend_src)
 	fe_tag = f"frontend-{fe_hash}"
 	# URL constructed from the project's github repo release endpoint.
-	fe_url = f"https://github.com/boomboompower/mailinabox/releases/download/{fe_tag}/frontend-dist.tar.gz"
+	fe_url = f"https://github.com/naust-mail/naust/releases/download/{fe_tag}/frontend-dist.tar.gz"
 
 	fetched = False
 	# Try the prebuilt artifact. The sha256 sidecar is fetched from the same
@@ -292,25 +308,28 @@ def _frontend(frontend_src: str, frontend_dist: str) -> None:
 	# tools like restic) - that's intentional: this artifact is published by our
 	# own CI from our own source, so same-source is fine. It verifies transit
 	# integrity, not provenance independent of the publisher.
-	sha_url = f"{fe_url}.sha256"
-	sha_result = subprocess.run(
-		["curl", "-fsSL", "-o", "/tmp/frontend-dist.tar.gz.sha256", sha_url],
-		check=False,
-		capture_output=True,
-	)
-	if sha_result.returncode == 0:
-		dl = subprocess.run(
-			["wget", "-q", "-O", "/tmp/frontend-dist.tar.gz", fe_url],
+	tmp_dir = tempfile.mkdtemp(prefix="naust-frontend-")
+	tmp_tarball = os.path.join(tmp_dir, "frontend-dist.tar.gz")
+	tmp_sha = os.path.join(tmp_dir, "frontend-dist.tar.gz.sha256")
+	try:
+		sha_url = f"{fe_url}.sha256"
+		sha_result = subprocess.run(
+			["curl", "-fsSL", "-o", tmp_sha, sha_url],
 			check=False,
 			capture_output=True,
 		)
-		if dl.returncode == 0:
-			try:
-				with open("/tmp/frontend-dist.tar.gz.sha256") as f:
-					expected = f.read().strip()
+		if sha_result.returncode == 0:
+			print("Downloading the prebuilt admin frontend...", flush=True)
+			dl = subprocess.run(
+				["wget", "-q", "-O", tmp_tarball, fe_url],
+				check=False,
+				capture_output=True,
+			)
+			if dl.returncode == 0:
+				expected = pathlib.Path(tmp_sha).read_text(encoding="utf-8").strip()
 				result = subprocess.run(
 					["sha256sum", "--check", "--strict"],
-					input=f"{expected}  /tmp/frontend-dist.tar.gz",
+					input=f"{expected}  {tmp_tarball}",
 					text=True,
 					capture_output=True,
 					check=False,
@@ -319,16 +338,12 @@ def _frontend(frontend_src: str, frontend_dist: str) -> None:
 					shutil.rmtree(frontend_dist, ignore_errors=True)
 					os.makedirs(frontend_dist, exist_ok=True)
 					subprocess.run(
-						["tar", "-xzf", "/tmp/frontend-dist.tar.gz", "-C", frontend_dist],
+						["tar", "-xzf", tmp_tarball, "-C", frontend_dist],
 						check=True,
 					)
 					fetched = True
-			finally:
-				for tmp in ["/tmp/frontend-dist.tar.gz", "/tmp/frontend-dist.tar.gz.sha256"]:
-					try:
-						os.unlink(tmp)
-					except FileNotFoundError:
-						pass
+	finally:
+		shutil.rmtree(tmp_dir, ignore_errors=True)
 
 	if not fetched:
 		if not os.path.isdir(frontend_src):
@@ -336,23 +351,28 @@ def _frontend(frontend_src: str, frontend_dist: str) -> None:
 			if os.path.isdir(installed_dist) and os.listdir(installed_dist):
 				# Already installed to system path, no source to rebuild from - skip.
 				return
-			raise RuntimeError(f"No prebuilt admin frontend found for this build and frontend source directory does not exist ({frontend_src}). Push to CI to publish a release artifact, or run setup from the repo root.")
+			msg = f"No prebuilt admin frontend found for this build and frontend source directory does not exist ({frontend_src}). Push to CI to publish a release artifact, or run setup from the repo root."
+			raise RuntimeError(msg)
 		print("No prebuilt admin frontend found - building from source...")
-		# Download bun to /tmp/bun-install, use it, then delete it.
+		# Download bun to a scratch dir, use it, then delete it.
 		# Avoids touching system packages or apt sources.
-		bun_install = "/tmp/bun-install"
+		bun_install = tempfile.mkdtemp(prefix="naust-bun-")
 		bun_bin = f"{bun_install}/bin/bun"
-		subprocess.run(
-			"curl -fsSL https://bun.sh/install | bash",
-			shell=True,
-			check=True,
-			env={**os.environ, "BUN_INSTALL": bun_install},
-		)
+		try:
+			subprocess.run(  # noqa: S602 - hardcoded, non-interpolated command; no injection surface
+				"curl -fsSL https://bun.sh/install | bash",
+				shell=True,
+				check=True,
+				env={**os.environ, "BUN_INSTALL": bun_install},
+			)
 
-		subprocess.run([bun_bin, "install", "--frozen-lockfile"], cwd=frontend_src, check=True)
-		subprocess.run([bun_bin, "x", "vite", "build"], cwd=frontend_src, check=True)
-
-		shutil.rmtree(bun_install, ignore_errors=True)
+			subprocess.run([bun_bin, "install", "--frozen-lockfile"], cwd=frontend_src, check=True)
+			# vite only empties its own outDir subtree; clear the whole dist/
+			# so output from an older layout never ships in the rsync.
+			shutil.rmtree(frontend_dist, ignore_errors=True)
+			subprocess.run([bun_bin, "x", "vite", "build"], cwd=frontend_src, check=True)
+		finally:
+			shutil.rmtree(bun_install, ignore_errors=True)
 
 
 def _install_files(
@@ -362,11 +382,12 @@ def _install_files(
 	boxctl_src: str,
 	setup_src: str,
 	repo_root: str,
+	primary_hostname: str,
 ) -> None:
 	"""Rsync source files to FHS system paths so the daemon runs without the repo.
 
 	After setup completes, the repo can be deleted. The daemon, web_update, and
-	boxctl all operate from /usr/local/lib/mailinabox/ and /usr/local/share/mailinabox/.
+	boxctl all operate from /usr/local/lib/naust/ and /usr/local/share/naust/.
 	"""
 	os.makedirs(f"{_SHARE_DIR}/frontend/dist", exist_ok=True)
 	os.makedirs(f"{_SHARE_DIR}/nginx-templates", exist_ok=True)
@@ -382,12 +403,22 @@ def _install_files(
 
 	rsync(frontend_dist, f"{_SHARE_DIR}/frontend/dist/")
 	rsync(nginx_conf_src, f"{_SHARE_DIR}/nginx-templates/")
+
+	# Stamp the box hostname into the panel's boot loader so first paint
+	# never waits on the API. dist/ ships a placeholder boot.js; the real
+	# file must be written here, after the rsync, because --delete would
+	# otherwise restore the placeholder on every re-install.
+	if primary_hostname:
+		artifacts.write_file(
+			f"{_SHARE_DIR}/frontend/dist/admin/boot.js",
+			f"window.__BOX__ = {{ hostname: {json.dumps(primary_hostname)} }}\ndocument.title = window.__BOX__.hostname\n",
+		)
 	rsync(management_src, f"{_INST_DIR}/management/")
 	rsync(boxctl_src, f"{_INST_DIR}/boxctl/")
 	rsync(setup_src, f"{_INST_DIR}/setup/")
 
 	# Install commit SHA for the version check in status_checks/utils.py.
-	# get_latest_miab_version() fetches the latest SHA from GitHub main branch,
+	# get_latest_naust_version() fetches the latest SHA from GitHub main branch,
 	# so the installed version must also be a full commit SHA for the comparison to work.
 	version_dest = os.path.join(_SHARE_DIR, "version")
 	result = subprocess.run(
@@ -406,13 +437,13 @@ def _boxctl(runtime: str = BAREMETAL) -> None:
 	On bare metal, boxctl is rsynced to _INST_DIR by install-files.
 	In Docker, install-files doesn't run, so point PYTHONPATH at the repo instead.
 	"""
-	pythonpath = "/opt/mailinabox/setup" if runtime == DOCKER else _INST_DIR
+	pythonpath = "/opt/naust/setup" if runtime == DOCKER else _INST_DIR
 	artifacts.write_file(
 		"/usr/local/bin/boxctl",
-		f"#!/bin/bash\nexport PYTHONPATH={pythonpath}\nexec {_VENV}/bin/python3 -m boxctl \"$@\"\n",
+		f'#!/bin/bash\nexport PYTHONPATH={pythonpath}\nexec {_VENV}/bin/python3 -m boxctl "$@"\n',
 		mode=0o755,
 	)
-	# 'mailinabox' is an alias for backward compatibility.
-	mailinabox_bin = "/usr/local/bin/mailinabox"
-	if not os.path.exists(mailinabox_bin):
-		os.symlink("/usr/local/bin/boxctl", mailinabox_bin)
+	# 'naust' is an alias for backward compatibility.
+	naust_bin = "/usr/local/bin/naust"
+	if not os.path.exists(naust_bin):
+		os.symlink("/usr/local/bin/boxctl", naust_bin)

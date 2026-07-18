@@ -128,7 +128,8 @@ def test_authenticate_complete_rejects_missing_nonce(app):
 def test_non_admin_mfa_status_ignores_user_param(app, admin_client, user_client, admin_env):
 	"""A non-admin calling POST /mfa/status with user=<admin> must receive their own
 	(empty) MFA state, not the admin's. The user= field is silently ignored."""
-	import base64, pyotp
+	import base64
+	import pyotp
 	from auth.mfa import enable_mfa
 
 	# Give the admin a TOTP credential so their MFA state is non-empty.

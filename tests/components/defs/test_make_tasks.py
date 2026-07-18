@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from components.component import BAREMETAL
-from components.runner import _discover
+from components.runner import _discover  # noqa: PLC2701
 
 _ALL_DEFS = _discover()
 _ENV = defaultdict(str)

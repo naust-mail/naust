@@ -3,7 +3,6 @@ import { ref, watch, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { Key, Plus } from 'lucide-vue-next'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import Field from '@/components/ui/Field.vue'
@@ -19,14 +18,17 @@ import Table from '@/components/ui/Table.vue'
 import TableHead from '@/components/ui/TableHead.vue'
 import Th from '@/components/ui/Th.vue'
 import TableRow from '@/components/ui/TableRow.vue'
-import { useApi } from '@/composables/useApi'
-import type { ApiToken, ApiTokenCreateResponse } from '@/types'
-
-const api = useApi()
+import { api, ApiError } from '@/api/client'
+import type {
+  APIToken,
+  APITokensResponse,
+  CreateAPITokenRequest,
+  CreateAPITokenResponse,
+} from '@/api/types.gen'
 
 const loading = ref(true)
 const loadError = ref(false)
-const tokens = ref<ApiToken[]>([])
+const tokens = ref<APIToken[]>([])
 
 // Create sheet state
 const createOpen = ref(false)
@@ -41,20 +43,15 @@ const copied = ref(false)
 
 // Revoke confirm dialog state
 const revokeOpen = ref(false)
-const revokeTarget = ref<ApiToken | null>(null)
+const revokeTarget = ref<APIToken | null>(null)
 const revoking = ref(false)
 
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
   try {
-    const res = await api.get('/admin/tokens')
-    if (!res.ok) {
-      loadError.value = true
-      toast.error('Failed to load API tokens.')
-      return
-    }
-    tokens.value = await res.json()
+    const resp = await api.get<APITokensResponse>('/api/tokens')
+    tokens.value = resp.tokens ?? []
   } catch {
     loadError.value = true
     toast.error('Failed to load API tokens.')
@@ -67,15 +64,11 @@ async function createToken(): Promise<void> {
   if (!newName.value.trim() || creating.value) return
   creating.value = true
   try {
-    const res = await api.post('/admin/tokens', {
+    const req: CreateAPITokenRequest = {
       name: newName.value.trim(),
       scope: newScope.value,
-    })
-    if (!res.ok) {
-      toast.error(await res.text())
-      return
     }
-    const data: ApiTokenCreateResponse = await res.json()
+    const data = await api.post<CreateAPITokenResponse>('/api/tokens', req)
     createOpen.value = false
     newName.value = ''
     newScope.value = 'read'
@@ -83,6 +76,8 @@ async function createToken(): Promise<void> {
     copied.value = false
     revealOpen.value = true
     await load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to create token.')
   } finally {
     creating.value = false
   }
@@ -97,7 +92,7 @@ async function copyToken(): Promise<void> {
   }
 }
 
-function openRevoke(token: ApiToken): void {
+function openRevoke(token: APIToken): void {
   revokeTarget.value = token
   revokeOpen.value = true
 }
@@ -106,21 +101,20 @@ async function confirmRevoke(): Promise<void> {
   if (!revokeTarget.value || revoking.value) return
   revoking.value = true
   try {
-    const res = await api.del(`/admin/tokens/${revokeTarget.value.id}`)
-    if (!res.ok) {
-      toast.error(await res.text())
-      return
-    }
+    await api.del(`/api/tokens/${revokeTarget.value.id}`)
     toast.success(`Token "${revokeTarget.value.name}" revoked.`)
     revokeOpen.value = false
     await load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to revoke token.')
   } finally {
     revoking.value = false
   }
 }
 
+// Timestamps arrive as RFC 3339 with timezone (Go time.Time).
 function formatDate(iso: string): string {
-  return new Date(iso + 'Z').toLocaleString(undefined, {
+  return new Date(iso).toLocaleString(undefined, {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
@@ -137,7 +131,6 @@ onMounted(load)
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="API Tokens" description="Allow external apps and automations to manage this box.">
       <template #actions>
         <Button size="sm" @click="createOpen = true"><Plus class="size-3.5" />New token</Button>
@@ -167,7 +160,7 @@ onMounted(load)
       </template>
 
       <template #empty>
-        <EmptyState title="No API tokens" description="Create a token to authenticate scripts and tools against the admin API.">
+        <EmptyState bordered title="No API tokens" description="Create a token to authenticate scripts and tools against the admin API.">
           <template #icon><Key /></template>
           <template #action><Button @click="createOpen = true">New token</Button></template>
         </EmptyState>
@@ -194,7 +187,7 @@ onMounted(load)
               {{ token.last_used ? formatDate(token.last_used) : 'Never' }}
             </td>
             <td class="px-4 py-3 text-right">
-              <Button variant="ghost" size="sm" @click="openRevoke(token)">Revoke</Button>
+              <Button variant="secondary" size="sm" @click="openRevoke(token)">Revoke</Button>
             </td>
           </TableRow>
         </tbody>
@@ -266,5 +259,4 @@ onMounted(load)
         </Button>
       </template>
     </Dialog>
-  </AppLayout>
 </template>

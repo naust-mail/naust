@@ -1,4 +1,4 @@
-#!/usr/local/lib/mailinabox/env/bin/python
+#!/usr/local/lib/naust/env/bin/python
 
 # Reads in STDIN. If the stream is not empty, mail it to the system administrator.
 
@@ -19,6 +19,7 @@ from email.mime.text import MIMEText
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.utils import load_environment
+import pathlib
 
 # Load system environment info.
 env = load_environment()
@@ -92,15 +93,6 @@ msg.attach(MIMEText(content_html, 'html'))
 # msg.set_content(content)
 # msg.add_alternative(content_html, "html")
 
-# send
-try:
-	smtpclient = smtplib.SMTP(os.environ.get('MAIL_HOST', '127.0.0.1'), 25)
-	smtpclient.ehlo()
-	smtpclient.sendmail(admin_addr, admin_addr, msg.as_string())
-	smtpclient.quit()
-except Exception:
-	_deliver_to_maildir(admin_addr, msg.as_string(), env)
-
 
 def _deliver_to_maildir(addr: str, raw_message: str, env: dict) -> None:
 	# Drop the message directly into the admin's Maildir when SMTP is unavailable.
@@ -116,11 +108,20 @@ def _deliver_to_maildir(addr: str, raw_message: str, env: dict) -> None:
 		return  # mailbox doesn't exist, nothing we can do
 
 	# Unique filename: <timestamp>.<pid>_<random>.<hostname>
-	filename = f"{int(time.time())}.{os.getpid()}_{random.randint(0, 99999)}.{socket.gethostname()}"
+	filename = f"{int(time.time())}.{os.getpid()}_{random.randint(0, 99999)}.{socket.gethostname()}"  # noqa: S311 -- Maildir filename uniqueness, not security-sensitive
 	tmp_path = os.path.join(os.path.dirname(maildir_new), 'tmp', filename)
 	new_path = os.path.join(maildir_new, filename)
 
 	os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
-	with open(tmp_path, 'w', encoding='utf-8') as f:
-		f.write(raw_message)
+	pathlib.Path(tmp_path).write_text(raw_message, encoding='utf-8')
 	os.rename(tmp_path, new_path)
+
+
+# send
+try:
+	smtpclient = smtplib.SMTP(os.environ.get('MAIL_HOST', '127.0.0.1'), 25)
+	smtpclient.ehlo()
+	smtpclient.sendmail(admin_addr, admin_addr, msg.as_string())
+	smtpclient.quit()
+except Exception:
+	_deliver_to_maildir(admin_addr, msg.as_string(), env)

@@ -7,6 +7,7 @@ from core import utils
 from core.app_context import env
 from core.auth_decorators import require_admin, read_scope
 from core.web_helpers import json_response, sanitize_error_message
+import pathlib
 
 bp = Blueprint("relay", __name__, url_prefix="/system")
 bp.before_request(require_admin)
@@ -35,7 +36,8 @@ def _relay_sasl_passwd_db() -> str:
 def relay_test():
 	# Pre-save connectivity probe. Uses STARTTLS on port 587 (submission), which
 	# is what Postfix will use. Does not save anything or touch Postfix config.
-	import smtplib, ssl as _ssl
+	import smtplib
+	import ssl as _ssl
 
 	host = request.form.get("host", "").strip()
 	port_str = request.form.get("port", "587").strip()
@@ -97,7 +99,7 @@ def relay_send_test():
 		return ("No admin email address could be determined. Ensure at least one admin user exists.", 500)
 
 	msg = EmailMessage()
-	msg["Subject"] = "Mail-in-a-Box relay test"
+	msg["Subject"] = "Naust relay test"
 	msg["From"] = admin_email
 	msg["To"] = admin_email
 	msg.set_content("This is a test email sent through your configured SMTP relay to confirm that outbound mail is working correctly.")
@@ -193,7 +195,7 @@ def _apply_relay_config(host: str, port: int, user: str, password: str) -> None:
 	Only sasl_passwd.db (Berkeley DB format, not directly human-readable) persists.
 	A blank password preserves the existing .db unchanged.
 	"""
-	from services.control_plane import RUNTIME, reload as cp_reload
+	from services.control_plane import RUNTIME
 
 	sasl_dir = _relay_sasl_dir()
 	sasl_passwd = _relay_sasl_passwd()
@@ -206,8 +208,7 @@ def _apply_relay_config(host: str, port: int, user: str, password: str) -> None:
 			# On bare metal: we postmap here and delete immediately.
 			# On Docker:     mail container handler reads, postmaps, and deletes.
 			try:
-				with open(sasl_passwd, "w", encoding="utf-8") as f:
-					f.write(f"[{host}]:{port} {user}:{password}\n")
+				pathlib.Path(sasl_passwd).write_text(f"[{host}]:{port} {user}:{password}\n", encoding="utf-8")
 				os.chmod(sasl_passwd, 0o600)
 
 				if RUNTIME != "docker":
@@ -231,36 +232,29 @@ def _apply_relay_config(host: str, port: int, user: str, password: str) -> None:
 
 			_send("postfix", "configure-relay")
 		else:
-			utils.shell(
-				"check_call",
-				[
-					"postconf",
-					"-e",
-					f"relayhost=[{host}]:{port}",
-					"smtp_sasl_auth_enable=yes",
-					f"smtp_sasl_password_maps=hash:{sasl_passwd_db[:-3]}",  # path without .db
-					"smtp_sasl_security_options=noanonymous",
-					"smtp_tls_security_level=verify",
-				],
-			)
-	else:
-		if RUNTIME == "docker":
-			from services.control_plane import _send
+			from services.control_plane import postfix_set
 
-			_send("postfix", "configure-relay")
-		else:
-			utils.shell(
-				"check_call",
-				[
-					"postconf",
-					"-e",
-					"relayhost=",
-					"smtp_sasl_auth_enable=no",
-					"smtp_sasl_password_maps=",
-					"smtp_sasl_security_options=",
-					"smtp_tls_security_level=dane",
-				],
-			)
-			for path in [sasl_passwd, sasl_passwd_db]:
-				if os.path.exists(path):
-					os.remove(path)
+			postfix_set({
+				"relayhost": f"[{host}]:{port}",
+				"smtp_sasl_auth_enable": "yes",
+				"smtp_sasl_password_maps": f"hash:{sasl_passwd_db[:-3]}",  # path without .db
+				"smtp_sasl_security_options": "noanonymous",
+				"smtp_tls_security_level": "verify",
+			})
+	elif RUNTIME == "docker":
+		from services.control_plane import _send
+
+		_send("postfix", "configure-relay")
+	else:
+		from services.control_plane import postfix_set
+
+		postfix_set({
+			"relayhost": "",
+			"smtp_sasl_auth_enable": "no",
+			"smtp_sasl_password_maps": "",
+			"smtp_sasl_security_options": "",
+			"smtp_tls_security_level": "dane",
+		})
+		for path in [sasl_passwd, sasl_passwd_db]:
+			if os.path.exists(path):
+				os.remove(path)

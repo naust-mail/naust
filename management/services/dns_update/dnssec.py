@@ -5,6 +5,7 @@ import shutil
 import tempfile
 
 from core.utils import shell, load_env_vars_from_file
+import pathlib
 
 
 def find_dnssec_signing_keys(domain, env):
@@ -40,7 +41,7 @@ def hash_dnssec_keys(domain, env):
 		with open(oldkeyfn, encoding="utf-8") as fr:
 			keydata.append(fr.read())
 	keydata = "".join(keydata).encode("utf8")
-	return hashlib.sha1(keydata).hexdigest()
+	return hashlib.sha1(keydata).hexdigest()  # noqa: S324 -- change-detection fingerprint, not security-sensitive
 
 
 def sign_zone(domain, zonefile, env):
@@ -60,7 +61,7 @@ def sign_zone(domain, zonefile, env):
 	# prevent a symlink-race attack where a local user pre-creates the path.
 	# Use mkdtemp (mode 0700) rather than predictable /tmp/<keyfn> paths to
 	# prevent a symlink-race where a local user pre-creates the path as a symlink.
-	tmpdir = tempfile.mkdtemp(prefix="miab-dnssec-", dir="/tmp")
+	tmpdir = tempfile.mkdtemp(prefix="naust-dnssec-", dir="/tmp")
 	os.chmod(tmpdir, 0o700)
 	all_keys = []
 	ksk_keys = []
@@ -71,11 +72,9 @@ def sign_zone(domain, zonefile, env):
 			for ext in (".private", ".key"):
 				# Copy the .key and .private files to patch them up.
 				oldkeyfn = os.path.join(env['STORAGE_ROOT'], 'dns/dnssec', keyfn + ext)
-				with open(oldkeyfn, encoding="utf-8") as fr:
-					keydata = fr.read()
+				keydata = pathlib.Path(oldkeyfn).read_text(encoding="utf-8")
 				keydata = keydata.replace("_domain_", domain)
-				with open(newkeyfn + ext, "w", encoding="utf-8") as fw:
-					fw.write(keydata)
+				pathlib.Path(newkeyfn + ext).write_text(keydata, encoding="utf-8")
 
 			# Put the patched key filename base (without extension) into the list of keys we'll sign with.
 			all_keys.append(newkeyfn)

@@ -176,14 +176,14 @@ def test_wrong_password_returns_401(client):
 
 
 def test_invalid_bearer_token_returns_401(client):
-	resp = client.get("/mail/users", headers={"Authorization": "Bearer miab_fake_token"})
+	resp = client.get("/mail/users", headers={"Authorization": "Bearer naust_fake_token"})
 	assert resp.status_code == 401
 
 
-def test_non_miab_bearer_token_falls_through_to_basic_auth_failure(client):
-	# A Bearer token without the miab_ prefix is not a user API token; the auth
+def test_non_naust_bearer_token_falls_through_to_basic_auth_failure(client):
+	# A Bearer token without the naust_ prefix is not a user API token; the auth
 	# layer falls through to Basic auth which fails (no Basic credentials).
-	resp = client.get("/mail/users", headers={"Authorization": "Bearer not_a_miab_token"})
+	resp = client.get("/mail/users", headers={"Authorization": "Bearer not_a_naust_token"})
 	assert resp.status_code == 401
 
 

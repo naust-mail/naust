@@ -20,6 +20,9 @@ type Request struct {
 type Response struct {
 	// OK is true when the operation completed successfully.
 	OK bool `json:"ok"`
+	// Result holds intent output when there is any (host.apt_* command
+	// output, shown in the admin panel). Empty for most intents.
+	Result string `json:"result,omitempty"`
 	// Error holds a human-readable failure reason when OK is false.
 	Error string `json:"error,omitempty"`
 }

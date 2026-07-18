@@ -1,16 +1,31 @@
 """
-Mail-in-a-Box installer - called by setup/install.sh.
+Naust installer - called by setup/install.sh.
 
 Flow:
   1. Preflight (RAM / disk)
-  2. Questions wizard  ->  writes /etc/mailinabox.conf
+  2. Questions wizard  ->  writes /etc/naust.conf
   3. System packages (apt-get, rolling log)
   4. Components (one doit run, rolling log with active-component tracking)
-  5. dns_update + web_update
-  6. boxctl bootstrap --install  (admin URL + TLS fingerprint)
+  5. boxctl bootstrap --install  (admin URL + TLS fingerprint)
 """
 
-import os, re, shutil, signal, socket, subprocess, sys, termios, threading, time, urllib.request, ipaddress
+import contextlib
+import glob
+import json
+import os
+import pathlib
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import termios
+import threading
+import time
+import urllib.request
+import ipaddress
+from collections import deque
 from datetime import datetime
 
 # ── sys.path: add setup/ so boxctl.* and components.* are importable ─────────
@@ -23,29 +38,65 @@ for _p in (_SETUP, _REPO):
 	if _p not in sys.path:
 		sys.path.insert(0, _p)
 
-from boxctl.ui import (
+from boxctl.ui import (  # noqa: E402 - must follow the sys.path insert above
 	bold,
 	gray_desc,
+	gray_num,
 	white_b,
 	green,
 	red,
 	clear,
 	_term_width,
 )
-from boxctl.questions import STEPS, VALUE_DISPLAY, PROFILES
-from boxctl.runner import run_questions, write_output, load_conf
+from boxctl.questions import STEPS, VALUE_DISPLAY, PROFILES  # noqa: E402 - must follow the sys.path insert above
+from boxctl.runner import run_questions, write_output, load_conf  # noqa: E402 - must follow the sys.path insert above
 
-CONF_PATH = "/etc/mailinabox.conf"
-LOG_LINES = 10
+CONF_PATH = "/etc/naust.conf"
 
-# doit output prefix when a task actually ran:  ".  compname:taskname"
-_TASK_RE = re.compile(r'^(?:\.  |-- )([a-z][a-z0-9_-]*):[a-z]')
 # Strip ANSI escape sequences from subprocess output before displaying.
 # apt and dpkg emit \033[K (erase-to-EOL), \033[Nm (colors) etc. which corrupt
-# our cursor-based log panel if re-emitted inside it.
+# our cursor-based rendering if re-emitted inside it.
 _ANSI_RE = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
 
-LOG_PATH = "/tmp/mailinabox-setup.log"
+# Progress rendering: running accent (soft blue), no-output observation (amber),
+# braille spinner at 10Hz. Times/counts right-align to one fixed edge so state
+# changes never shift columns.
+_SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_NO_OUTPUT_AFTER = 20  # seconds of silence before the observation appears
+_DURATIONS_PATH = "/usr/local/lib/naust/setup-durations.json"
+
+
+def _accent(s: str) -> str:
+	return f"\033[38;2;97;175;239m{s}\033[0m"
+
+
+def _amber(s: str) -> str:
+	return f"\033[38;2;255;184;108m{s}\033[0m"
+
+
+def _plain_len(s: str) -> int:
+	return len(_ANSI_RE.sub("", s))
+
+
+def _edge() -> int:
+	w = _term_width()
+	if w < 40:  # size unknown/absurd (some pseudo-terminals report 0)
+		w = 80
+	return min(w - 2, 76)
+
+
+def _rrow(left: str, right: str) -> str:
+	"""Compose a row with `right` ending at the fixed right edge."""
+	pad = _edge() - _plain_len(left) - _plain_len(right)
+	return left + " " * max(1, pad) + right
+
+
+def _fmt_mmss(sec: float) -> str:
+	m, s = divmod(int(max(0, sec)), 60)
+	return f"{m}:{s:02d}"
+
+
+LOG_PATH = "/tmp/naust-setup.log"  # noqa: S108 - fixed path so it survives across re-runs and is discoverable for support
 _logfile: "open | None" = None
 
 
@@ -57,16 +108,16 @@ def _log(line: str) -> None:
 
 
 def _open_log() -> None:
-	global _logfile
+	global _logfile  # noqa: PLW0603 - module-level log handle, set once at startup and read by _log() throughout
 	# Rotate: preserve the previous run as .prev so failure context survives a re-run,
 	# but truncate the current log so it never grows unboundedly.
 	if os.path.exists(LOG_PATH):
 		os.replace(LOG_PATH, LOG_PATH + ".prev")
-	_logfile = open(LOG_PATH, "w")
+	_logfile = open(LOG_PATH, "w", encoding="utf-8")  # noqa: SIM115 - kept open for the process lifetime, closed implicitly on exit
 	width = 72
 	ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 	_log("=" * width)
-	_log("  Mail-in-a-Box - Setup Log")
+	_log("  Naust - Setup Log")
 	_log(f"  Started: {ts}")
 	_log("=" * width)
 
@@ -77,63 +128,21 @@ def _open_log() -> None:
 def _header(subtitle: str | None = None) -> None:
 	clear()
 	suffix = f"  {gray_desc('-')}  {gray_desc(subtitle)}" if subtitle else ""
-	print(f"\n  {bold('Mail-in-a-Box')}{suffix}")
+	print(f"\n  {bold('Naust')}{suffix}")
 	print(f"  {gray_desc('─' * (_term_width() - 4))}")
 	print()
 
 
-def _redraw_log(buf: list[str], log_lines: int) -> None:
-	"""Rewrite the reserved log panel in-place (same technique as doctor.py).
+# ── Subprocess output reader (shared by both phase renderers) ────────────────
 
-	All output is batched into a single write() call so the terminal never
-	sees a partial update - important when output arrives at high speed.
+
+def _spawn(cmd: list[str], cwd: str | None, on_line) -> subprocess.Popen:
+	"""Start cmd and a reader thread that calls on_line(str) per output line.
+
+	Handles \\r-overwritten progress lines (apt) by keeping only what a
+	terminal would show, and strips ANSI. The reader thread is stored on the
+	returned proc as proc._reader for joining.
 	"""
-	width = _term_width() - 6
-	visible = buf[-log_lines:]
-	parts = [f"\033[{log_lines}A"]
-	for i in range(log_lines):
-		line = visible[i][:width] if i < len(visible) else ""
-		parts.append(f"  {gray_desc(line)}\033[K\n")
-	sys.stdout.write("".join(parts))
-	sys.stdout.flush()
-
-
-# ── Phase runner ──────────────────────────────────────────────────────────────
-
-
-def _run_phase(
-	label: str,
-	cmd: list[str],
-	track_component: bool = False,
-	timeout: int = 1800,
-	cwd: str | None = None,
-) -> bool:
-	"""
-	Run cmd as a subprocess with a 10-line rolling log.
-
-	Prints an active (↻) header, streams output into the log panel,
-	then collapses to a single ✓/✗ line on completion.
-
-	If track_component=True, parses doit task lines and updates a
-	subtitle showing the currently running component.
-	"""
-	current = [label]
-	spin = "\033[38;2;255;215;0m↻\033[0m"
-
-	def _draw_header() -> None:
-		subtitle = gray_desc(current[0]) if track_component else ""
-		suffix = f"  {subtitle}" if subtitle and current[0] != label else ""
-		sys.stdout.write(f"  {spin}  {white_b(label)}{suffix}\n")
-		sys.stdout.write(f"  {gray_desc('─' * (_term_width() - 6))}\n")
-
-	_log(f"\n=== {label} ===")
-	_draw_header()
-	for _ in range(LOG_LINES):
-		sys.stdout.write("\n")
-	sys.stdout.flush()
-
-	log_buf: list[str] = []
-
 	proc = subprocess.Popen(
 		cmd,
 		stdout=subprocess.PIPE,
@@ -147,23 +156,11 @@ def _run_phase(
 
 	def _reader() -> None:
 		partial = b""
-		last_draw = 0.0
-		_DRAW_INTERVAL = 0.05  # 20fps max - prevents cursor-storm on rapid apt output
-
-		def _maybe_redraw(force: bool = False) -> None:
-			nonlocal last_draw
-			now = time.monotonic()
-			if force or now - last_draw >= _DRAW_INTERVAL:
-				_redraw_log(log_buf, LOG_LINES)
-				last_draw = now
-
 		while True:
 			chunk = proc.stdout.read(512)
 			if not chunk:
 				break
 			data = partial + chunk
-			# Split on \n; each segment may itself contain \r-overwritten content.
-			# Keep only the last \r-separated piece (what a terminal would show).
 			*segments, partial = data.split(b"\n")
 			for seg in segments:
 				# \r within a segment: apt progress lines overwrite in place.
@@ -172,62 +169,326 @@ def _run_phase(
 				if not cr_parts:
 					continue
 				line = _ANSI_RE.sub("", cr_parts[-1].decode("utf-8", errors="replace")).rstrip()
-				if not line:
-					continue
-				_log(line)
-				if track_component:
-					m = _TASK_RE.match(line)
-					if m and m.group(1) != current[0]:
-						current[0] = m.group(1)
-						sys.stdout.write(f"\033[{LOG_LINES + 2}A")
-						_draw_header()
-						# _draw_header writes 2 lines so cursor is at log line 1;
-						# go down LOG_LINES to return to the bottom of the panel.
-						sys.stdout.write(f"\033[{LOG_LINES}B")
-						sys.stdout.flush()
-				log_buf.append(line)
-				_maybe_redraw()
-		# Flush any remaining partial line and do a final forced redraw.
+				if line:
+					on_line(line)
 		if partial:
 			line = _ANSI_RE.sub("", partial.split(b"\r")[-1].decode("utf-8", errors="replace")).rstrip()
 			if line:
-				_log(line)
-				log_buf.append(line)
-		_maybe_redraw(force=True)
+				on_line(line)
 
 	t = threading.Thread(target=_reader, daemon=True)
 	t.start()
-	try:
-		proc.wait(timeout=timeout)
-	except subprocess.TimeoutExpired:
-		proc.kill()
-		proc.wait()
-		log_buf.append(f"[timed out after {timeout // 60} minutes]")
-		_redraw_log(log_buf, LOG_LINES)
-	except (KeyboardInterrupt, SystemExit) as _exc:
-		proc.kill()
-		proc.wait()
-		# Collapse the log panel before the terminal is restored.
-		sys.stdout.write(f"\033[{LOG_LINES + 2}A")
-		sys.stdout.write(f"  {red('✗')}  {bold(label)}  {gray_desc('(cancelled)')}\033[K\n\033[J")
+	proc._reader = t  # type: ignore[attr-defined]  # noqa: SLF001 - our own attribute, stashed on Popen to smuggle the reader thread handle to the caller
+	return proc
+
+
+# ── Phase runner (single-command phases: apt, pip) ────────────────────────────
+
+
+def _run_phase(
+	label: str,
+	cmd: list[str],
+	timeout: int = 1800,
+	cwd: str | None = None,
+) -> bool:
+	"""Run cmd showing one live row: spinner, label, elapsed clock, and the
+	last output line beneath it. Collapses to a ✓/✗ row on completion; on
+	failure the last few output lines stay visible."""
+	_log(f"\n=== {label} ===")
+	started = time.monotonic()
+	ring: deque = deque(maxlen=6)
+	tail = [""]
+	last_out = [started]
+
+	def _on_line(line: str) -> None:
+		_log(line)
+		tail[0] = line
+		ring.append(line)
+		last_out[0] = time.monotonic()
+
+	proc = _spawn(cmd, cwd, _on_line)
+	plain = not sys.stdout.isatty()
+	drawn = [0]
+
+	def _draw(final_icon: str | None = None, note: str = "") -> None:
+		if plain:
+			return
+		el = time.monotonic() - started
+		lines = []
+		if final_icon is None:
+			sp = _accent(_SPIN[int(el * 10) % 10])
+			quiet = time.monotonic() - last_out[0]
+			obs = f"  {_amber(f'[no output for {int(quiet)}s]')}" if quiet >= _NO_OUTPUT_AFTER else ""
+			lines.extend((_rrow(f"  {sp}  {white_b(label)}{obs}", gray_desc(_fmt_mmss(el))), f"     {gray_desc(tail[0][: _edge() - 6])}" if tail[0] else ""))
+		else:
+			suffix = f"  {gray_desc(note)}" if note else ""
+			lines.append(_rrow(f"  {final_icon}  {bold(label)}{suffix}", gray_desc(_fmt_mmss(el))))
+		buf = (f"\033[{drawn[0]}A" if drawn[0] else "") + "".join(ln + "\033[K\n" for ln in lines) + "\033[J"
+		sys.stdout.write(buf)
 		sys.stdout.flush()
-		raise _exc
-	t.join()
+		drawn[0] = len(lines)
 
-	ok = proc.returncode == 0
+	timed_out = False
+	try:
+		while proc.poll() is None:
+			if time.monotonic() - started > timeout:
+				proc.kill()
+				proc.wait()
+				timed_out = True
+				break
+			_draw()
+			time.sleep(0.1)
+	except (KeyboardInterrupt, SystemExit):
+		proc.kill()
+		proc.wait()
+		_draw(final_icon=red("✗"), note="(cancelled)")
+		raise
+	proc.wait()
+	proc._reader.join()  # type: ignore[attr-defined]  # noqa: SLF001 - our own attribute, see _spawn()
+
+	ok = proc.returncode == 0 and not timed_out
+	if timed_out:
+		_log(f"[timed out after {timeout // 60} minutes]")
+		ring.append(f"[timed out after {timeout // 60} minutes]")
 	_log(f"=== {label} {'ok' if ok else 'FAILED'} ===")
-
-	# Collapse: rewind past log + separator + header, write result, clear below.
-	sys.stdout.write(f"\033[{LOG_LINES + 2}A")
-	icon = green("✓") if ok else red("✗")
-	sys.stdout.write(f"  {icon}  {bold(label)}\033[K\n")
-	if not ok and log_buf:
-		# Show the last few lines so the user can see what failed.
-		width = _term_width() - 8
-		for line in log_buf[-3:]:
+	if plain:
+		print(f"  {label}: {'ok' if ok else 'FAILED'} ({_fmt_mmss(time.monotonic() - started)})")
+		if not ok:
+			for line in list(ring)[-4:]:
+				print(f"     {line}")
+		return ok
+	_draw(final_icon=green("✓") if ok else red("✗"))
+	if not ok:
+		width = _edge() - 6
+		for line in list(ring)[-4:]:
 			sys.stdout.write(f"     {gray_desc(line[:width])}\033[K\n")
-	sys.stdout.write("\033[J")
-	sys.stdout.flush()
+		sys.stdout.write("\033[J")
+		sys.stdout.flush()
+	return ok
+
+
+# ── Components phase: event-driven checklist renderer ─────────────────────────
+
+
+def _run_components(timeout: int = 2700) -> bool:
+	"""Run the component runner, rendering a live checklist from its @@ event
+	lines: every component visible with state (queued / running / done /
+	failed), live output tail and elapsed clock per running component, honest
+	step counter, and a no-output observation on quiet steps. Failures stay
+	expanded with their own last output lines; nothing scrolls away."""
+	cmd = [sys.executable, "-m", "components.runner"]
+	_log("\n=== Components ===")
+	started = time.monotonic()
+	lock = threading.Lock()
+
+	order: list[str] = []
+	comps: dict[str, dict] = {}
+	steps = {"done": 0, "total": 0}
+	current: list[str | None] = [None]  # component owning raw output lines
+	pre_tail = [""]  # raw output before the plan arrives (component apt installs)
+	restarts = {"active": False, "current": "", "failed": []}
+
+	try:
+		with open(_DURATIONS_PATH, encoding="utf-8") as f:
+			hist = json.load(f)
+	except (OSError, ValueError):
+		hist = {}
+
+	def _on_line(line: str) -> None:
+		_log(line)
+		with lock:
+			if line.startswith("@@plan "):
+				parts = line.split()
+				if len(parts) >= 3:
+					name = parts[1]
+					comps[name] = {
+						"tasks": len(parts) - 2,
+						"done": 0,
+						"state": "pending",
+						"current": "",
+						"started": None,
+						"ended": None,
+						"tail": "",
+						"ring": deque(maxlen=6),
+						"fail_lines": [],
+						"failed_task": "",
+						"last_out": 0.0,
+					}
+					order.append(name)
+					steps["total"] += len(parts) - 2
+				return
+			if line.startswith("@@ev "):
+				parts = line.split()
+				kind = parts[1] if len(parts) > 1 else ""
+				if kind in {"start", "done", "cached", "fail"} and len(parts) > 2 and ":" in parts[2]:
+					comp, task = parts[2].split(":", 1)
+					c = comps.get(comp)
+					if c is None:
+						return
+					now = time.monotonic()
+					if kind == "start":
+						if c["state"] != "failed":
+							c["state"] = "running"
+						c["current"] = task
+						if c["started"] is None:
+							c["started"] = now
+						c["last_out"] = now
+						current[0] = comp
+					else:
+						steps["done"] += 1  # attempted - keeps the bar honest
+						if kind == "fail":
+							c["state"] = "failed"
+							c["failed_task"] = task
+							c["fail_lines"] = list(c["ring"])[-4:]
+							c["ended"] = now
+						else:
+							c["done"] += 1
+							if c["done"] >= c["tasks"] and c["state"] != "failed":
+								c["state"] = "done"
+								c["ended"] = now
+				elif kind == "phase" and len(parts) > 2 and parts[2] == "restarts":
+					restarts["active"] = True
+					current[0] = None
+				elif kind == "restart-start" and len(parts) > 2:
+					restarts["current"] = parts[2]
+				elif kind == "restart-fail" and len(parts) > 2:
+					restarts["failed"].append(parts[2])
+				return
+			# Raw output line: attach to whichever component is running.
+			c = comps.get(current[0]) if current[0] else None
+			if c is not None and c["state"] == "running":
+				c["tail"] = line
+				c["ring"].append(line)
+				c["last_out"] = time.monotonic()
+			elif not order:
+				pre_tail[0] = line
+
+	proc = _spawn(cmd, _SETUP, _on_line)
+	plain = not sys.stdout.isatty()
+	drawn = [0]
+
+	def _eta_text() -> str:
+		known = [n for n in order if n in hist]
+		if not order or steps["total"] == 0 or len(known) < 0.6 * len(order):
+			return ""
+		avg = sum(hist[n] for n in known) / len(known)
+		remaining = sum(hist.get(n, avg) for n in order if comps[n]["state"] not in {"done", "failed"})
+		if remaining >= 90:
+			return f"about {int(remaining // 60) + 1} min remaining"
+		if remaining >= 5:
+			return "under a minute remaining"
+		return ""
+
+	def _rows(final: bool) -> list[str]:
+		now = time.monotonic()
+		el = now - started
+		spin = _accent(_SPIN[int(el * 10) % 10])
+		total = steps["total"]
+		done_n = steps["done"]
+		pct = int(done_n * 100 / total) if total else 0
+		barw = 40
+		fill = int(barw * pct / 100)
+		bar = _accent("█" * fill) + gray_num("░" * (barw - fill))
+		lines = [
+			_rrow(f"  {bar}", f"{white_b(f'{pct:3d}%')}   {gray_desc(f'{done_n} / {total} steps')}"),
+			_rrow(f"  {gray_desc(_eta_text())}", gray_desc(f"elapsed {_fmt_mmss(el)}")),
+			"",
+		]
+		if not order:
+			# Runner is still installing component packages - plan not emitted yet.
+			lines.append(_rrow(f"  {spin}  {white_b('Component packages')}", gray_desc(_fmt_mmss(el))))
+			if pre_tail[0]:
+				lines.append(f"     {gray_desc(pre_tail[0][: _edge() - 6])}")
+			return lines
+		for name in order:
+			c = comps[name]
+			if c["state"] == "pending":
+				label = "not run" if final else "queued"
+				lines.append(_rrow(f"  {gray_num('□')}  {gray_desc(name)}", gray_desc(label)))
+			elif c["state"] == "running":
+				celapsed = _fmt_mmss(now - c["started"]) if c["started"] else ""
+				quiet = now - c["last_out"] if c["last_out"] else 0
+				left = f"  {_amber('!')}  {white_b(name)}  {gray_desc(c['current'])}  {_amber(f'[no output for {int(quiet)}s]')}" if quiet >= _NO_OUTPUT_AFTER else f"  {spin}  {white_b(name)}  {gray_desc(c['current'])}"
+				lines.append(_rrow(left, gray_desc(celapsed)))
+				if c["tail"]:
+					lines.append(f"        {gray_desc('│ ' + c['tail'][: _edge() - 10])}")
+			elif c["state"] == "done":
+				dur = _fmt_mmss(c["ended"] - c["started"]) if c["started"] and c["ended"] else "cached"
+				lines.append(_rrow(f"  {green('✓')}  {name}", gray_desc(f"{c['done']}/{c['tasks']}   {dur}")))
+			else:  # failed
+				lines.append(_rrow(f"  {red('✗')}  {white_b(name)}  {gray_desc(c['failed_task'])}", gray_desc(f"{c['done']}/{c['tasks']}")))
+				lines.extend(f"        {red('│')} {gray_desc(fl[: _edge() - 10])}" for fl in c["fail_lines"])
+				lines.append(f"        {gray_desc(f'(full output: {LOG_PATH})')}")
+		if restarts["active"]:
+			if restarts["failed"]:
+				lines.append(_rrow(f"  {red('✗')}  Service restarts", red(", ".join(restarts["failed"]))))
+			elif final:
+				lines.append(_rrow(f"  {green('✓')}  Service restarts", ""))
+			else:
+				lines.append(_rrow(f"  {spin}  {white_b('Service restarts')}  {gray_desc(restarts['current'])}", ""))
+		return lines
+
+	def _draw(final: bool = False) -> None:
+		if plain:
+			return
+		with lock:
+			lines = _rows(final)
+		# Collapse leading done components into one row if the block would
+		# outgrow the terminal.
+		try:
+			avail = os.get_terminal_size().lines - 4
+		except OSError:
+			avail = 40
+		if avail <= 4:  # size unknown/absurd (some pseudo-terminals report 0)
+			avail = 40
+		if len(lines) > avail:
+			done_names = [n for n in order if comps[n]["state"] == "done"]
+			if done_names:
+				head, rest = lines[:3], lines[3:]
+				kept = [ln for ln in rest if not any(f"  {name}" in _ANSI_RE.sub("", ln) and "✓" in ln for name in done_names)]
+				summary = _rrow(f"  {green('✓')}  {len(done_names)} components installed", "")
+				lines = [*head, summary, *kept]
+		buf = (f"\033[{drawn[0]}A" if drawn[0] else "") + "".join(ln + "\033[K\n" for ln in lines) + "\033[J"
+		sys.stdout.write(buf)
+		sys.stdout.flush()
+		drawn[0] = len(lines)
+
+	timed_out = False
+	try:
+		while proc.poll() is None:
+			if time.monotonic() - started > timeout:
+				proc.kill()
+				proc.wait()
+				timed_out = True
+				break
+			_draw()
+			time.sleep(0.1)
+	except (KeyboardInterrupt, SystemExit):
+		proc.kill()
+		proc.wait()
+		_draw(final=True)
+		sys.stdout.write(f"  {red('✗')}  {bold('Components')}  {gray_desc('(cancelled)')}\033[K\n")
+		sys.stdout.flush()
+		raise
+	proc.wait()
+	proc._reader.join()  # type: ignore[attr-defined]  # noqa: SLF001 - our own attribute, see _spawn()
+
+	ok = proc.returncode == 0 and not timed_out
+	if timed_out:
+		_log(f"[timed out after {timeout // 60} minutes]")
+	_log(f"=== Components {'ok' if ok else 'FAILED'} ===")
+	if plain:
+		with lock:
+			for name in order:
+				c = comps[name]
+				print(f"  {name}: {c['state']} ({c['done']}/{c['tasks']})")
+				if c["state"] == "failed":
+					for fl in c["fail_lines"]:
+						print(f"     {fl}")
+		print(f"  Components: {'ok' if ok else 'FAILED'} ({_fmt_mmss(time.monotonic() - started)})")
+		return ok
+	# Final frame stays on screen - the history is the summary.
+	_draw(final=True)
 	return ok
 
 
@@ -249,15 +510,12 @@ def _detect_public_ip(version: int) -> str:
 	]
 	services = services_v6 if version == 6 else services_v4
 	for url in services:
-		try:
-			with urllib.request.urlopen(url, timeout=3) as r:
-				ip = r.read().decode().strip()
-				parsed = ipaddress.ip_address(ip)
+		with contextlib.suppress(Exception), urllib.request.urlopen(url, timeout=3) as r:
+			ip = r.read().decode().strip()
+			parsed = ipaddress.ip_address(ip)
 
-				if parsed.version == version:
-					return ip
-		except Exception:
-			pass
+			if parsed.version == version:
+				return ip
 	return ""
 
 
@@ -269,7 +527,7 @@ def _detect_private_ip(version: int) -> str:
 		with socket.socket(family, socket.SOCK_DGRAM) as s:
 			s.connect(target)
 			return s.getsockname()[0]
-	except Exception:
+	except Exception:  # noqa: BLE001 - best-effort network probe, empty string means "couldn't detect"
 		return ""
 
 
@@ -277,52 +535,44 @@ def _detect_private_ip(version: int) -> str:
 
 
 def _preflight() -> bool:
-	import shutil
 
 	OK, WARN, ERR = "ok", "warn", "err"
 	checks: list[tuple[str, str, str]] = []
 
-	try:
-		with open("/proc/meminfo") as f:
-			for line in f:
-				if line.startswith("MemTotal:"):
-					mb = int(line.split()[1]) // 1024
-					if mb < 256:
-						checks.append((ERR, "RAM", f"{mb} MB - 512 MB minimum required"))
-					elif mb < 512:
-						checks.append((WARN, "RAM", f"{mb} MB - 512 MB recommended"))
-					else:
-						checks.append((OK, "RAM", f"{mb} MB available"))
-					break
-	except Exception:
-		pass
+	with contextlib.suppress(Exception), open("/proc/meminfo", encoding="utf-8") as f:
+		for line in f:
+			if line.startswith("MemTotal:"):
+				mb = int(line.split()[1]) // 1024
+				if mb < 256:
+					checks.append((ERR, "RAM", f"{mb} MB - 512 MB minimum required"))
+				elif mb < 512:
+					checks.append((WARN, "RAM", f"{mb} MB - 512 MB recommended"))
+				else:
+					checks.append((OK, "RAM", f"{mb} MB available"))
+				break
 
-	try:
+	with contextlib.suppress(Exception):
 		# Check the partitions that actually receive install artifacts.
 		low: list[str] = []
 		warn: list[str] = []
-		for mount in ("/", "/home", "/var", "/tmp"):
-			try:
+		for mount in ("/", "/home", "/var", "/tmp"):  # noqa: S108 - checking free space on the mount, not writing a file
+			with contextlib.suppress(Exception):
 				free_mb = shutil.disk_usage(mount).free // (1024**2)
 				if free_mb < 500:
 					low.append(f"{mount} ({free_mb} MB)")
 				elif free_mb < 1024:
 					warn.append(f"{mount} ({free_mb} MB)")
-			except Exception:
-				pass
 		if low:
 			checks.append((ERR, "Disk", f"< 500 MB free on: {', '.join(low)} - 1 GB recommended"))
 		elif warn:
 			checks.append((WARN, "Disk", f"< 1 GB free on: {', '.join(warn)}"))
 		else:
 			checks.append((OK, "Disk", "sufficient free space on all partitions"))
-	except Exception:
-		pass
 
 	if not checks:
 		return True
 
-	_ICON = {
+	ICON = {
 		OK: "\033[38;2;95;255;135m✓\033[0m",
 		WARN: "\033[38;2;255;215;0m!\033[0m",
 		ERR: "\033[38;2;255;85;85m✗\033[0m",
@@ -336,7 +586,7 @@ def _preflight() -> bool:
 		print(f"  {gray_desc('─' * (_term_width() - 4))}")
 		for status, lbl, msg in checks:
 			pad = " " * (label_w - len(lbl))
-			print(f"  {_ICON[status]}  {lbl}{pad}{gray_desc(msg)}")
+			print(f"  {ICON[status]}  {lbl}{pad}{gray_desc(msg)}")
 		print()
 
 	if any_err:
@@ -358,7 +608,7 @@ def _choose_profile() -> str:
 		"Which installation profile would you like to use?",
 		"Recommended and Original pre-fill all settings. You can still adjust anything before confirming.",
 		[
-			("Recommended", "Modern stack: oxi.email, rspamd, restic, Beszel, external DNS, Radicale.", "recommended"),
+			("Recommended", "Modern stack: rav, rspamd, restic, Beszel, external DNS, Radicale.", "recommended"),
 			("Original", "Classic stack: Roundcube, SpamAssassin, duplicity, Munin, self-hosted DNS, Radicale, FileBrowser.", "original"),
 			("Custom", "Step through every option and choose yourself.", "custom"),
 		],
@@ -384,13 +634,11 @@ def main() -> None:
 		sys.exit("Interactive terminal required.")
 
 	if not noninteractive:
-		_saved = termios.tcgetattr(sys.stdin.fileno())
+		saved = termios.tcgetattr(sys.stdin.fileno())
 
-		def _restore(sig, frame):
-			try:
-				termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, _saved)
-			except Exception:
-				pass
+		def _restore(_sig, _frame):
+			with contextlib.suppress(Exception):
+				termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
 			print("\033[?25h", end="", flush=True)
 			sys.exit(1)
 
@@ -409,9 +657,9 @@ def main() -> None:
 
 	import fcntl
 
-	_install_lockfile = open("/tmp/mailinabox-install.lock", "w")
+	install_lockfile = open("/tmp/naust-install.lock", "w", encoding="utf-8")  # noqa: S108, SIM115 - fixed path so concurrent runs can find and flock it; held for the process lifetime
 	try:
-		fcntl.flock(_install_lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
+		fcntl.flock(install_lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
 	except BlockingIOError:
 		sys.exit("Another setup run is already in progress.")
 
@@ -461,7 +709,7 @@ def main() -> None:
 			"ENABLE_FILEBROWSER": e.get("ENABLE_FILEBROWSER", initial.get("ENABLE_FILEBROWSER", "true")),
 			"ENABLE_RADICALE": e.get("ENABLE_RADICALE", initial.get("ENABLE_RADICALE", "true")),
 			"ENABLE_CLAMAV": e.get("ENABLE_CLAMAV", initial.get("ENABLE_CLAMAV", "false")),
-			"WEBMAIL_CLIENT": e.get("WEBMAIL_CLIENT", initial.get("WEBMAIL_CLIENT", "oxi")),
+			"WEBMAIL_CLIENT": e.get("WEBMAIL_CLIENT", initial.get("WEBMAIL_CLIENT", "rav")),
 			"SPAM_FILTER": e.get("SPAM_FILTER", initial.get("SPAM_FILTER", "rspamd")),
 			"DNS_MODE": e.get("DNS_MODE", initial.get("DNS_MODE", "self")),
 			"BACKUP_TOOL": e.get("BACKUP_TOOL", initial.get("BACKUP_TOOL", "restic")),
@@ -509,7 +757,7 @@ def main() -> None:
 			print("\n  Setup cancelled.\n")
 			sys.exit(0)
 
-	# ── Build and write /etc/mailinabox.conf ──────────────────────────────────
+	# ── Build and write /etc/naust.conf ──────────────────────────────────
 	storage_user = initial.get("STORAGE_USER", "user-data")
 	storage_root = initial.get("STORAGE_ROOT", f"/home/{storage_user}")
 
@@ -525,7 +773,7 @@ def main() -> None:
 		"ENABLE_FILEBROWSER": answers.get("ENABLE_FILEBROWSER", initial.get("ENABLE_FILEBROWSER", "true")),
 		"ENABLE_RADICALE": answers.get("ENABLE_RADICALE", initial.get("ENABLE_RADICALE", "true")),
 		"ENABLE_CLAMAV": answers.get("ENABLE_CLAMAV", initial.get("ENABLE_CLAMAV", "false")),
-		"WEBMAIL_CLIENT": answers.get("WEBMAIL_CLIENT", initial.get("WEBMAIL_CLIENT", "oxi")),
+		"WEBMAIL_CLIENT": answers.get("WEBMAIL_CLIENT", initial.get("WEBMAIL_CLIENT", "rav")),
 		"SPAM_FILTER": answers.get("SPAM_FILTER", initial.get("SPAM_FILTER", "rspamd")),
 		"DNS_MODE": answers.get("DNS_MODE", initial.get("DNS_MODE", "self")),
 		"BACKUP_TOOL": answers.get("BACKUP_TOOL", initial.get("BACKUP_TOOL", "restic")),
@@ -551,7 +799,7 @@ def main() -> None:
 		os.chmod(d, 0o755)
 		d = os.path.dirname(d)
 	# Stamp migration number on first install.
-	ver_file = os.path.join(storage_root, "mailinabox.version")
+	ver_file = os.path.join(storage_root, "naust.version")
 	if not os.path.exists(ver_file):
 		migrate = os.path.join(_SETUP, "migrate.py")
 		if os.path.exists(migrate):
@@ -561,32 +809,17 @@ def main() -> None:
 				text=True,
 			)
 			if r.returncode == 0 and r.stdout.strip():
-				with open(ver_file, "w") as fh:
-					fh.write(r.stdout.strip() + "\n")
+				pathlib.Path(ver_file).write_text(r.stdout.strip() + "\n", encoding="utf-8")
 				subprocess.run(
 					["chown", f"{storage_user}:{storage_user}", ver_file],
 					capture_output=True,
 				)
 
-	# Install boxctl and component runner to a stable system path so they work
-	# after the repo/tarball is deleted or moved.
-	_BOXCTL_LIB = "/usr/local/lib/mailinabox"
-	for src, dst in [
-		(os.path.join(_SETUP, "boxctl"), os.path.join(_BOXCTL_LIB, "boxctl")),
-		(os.path.join(_SETUP, "components"), os.path.join(_BOXCTL_LIB, "components")),
-	]:
-		if os.path.exists(dst):
-			shutil.rmtree(dst)
-		shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-
-	# Put mailinabox / boxctl on PATH. Always write so the wrapper is refreshed on re-install.
-	for name, content in [
-		("/usr/local/bin/mailinabox", "#!/bin/bash\nexec boxctl \"$@\"\n"),
-		("/usr/local/bin/boxctl", f"#!/bin/bash\nexec python3 {_BOXCTL_LIB}/boxctl/__main__.py \"$@\"\n"),
-	]:
-		with open(name, "w") as fh:
-			fh.write(content)
-		os.chmod(name, 0o755)
+	# boxctl (the operator CLI) is a Go binary put on PATH by the boxctl
+	# component below, which also creates the `naust` alias. The Python installer
+	# is no longer persisted to /usr/local/lib/naust: re-running setup fetches the
+	# current release (`python3 setup/boxctl update`) until the installer itself
+	# is rewritten in Go.
 
 	# ── Install screen ────────────────────────────────────────────────────────
 	if not noninteractive:
@@ -634,35 +867,28 @@ def main() -> None:
 		errors.append("packages")
 
 	if not errors:
-		# Ensure doit is available in system Python.
+		# Ensure doit is available in system Python. --break-system-packages
+		# (PEP 668) only exists on Ubuntu 23.04+ pip; 22.04's pip exits on
+		# the unknown flag, so pass it only where the environment is
+		# externally managed.
+		pip_install = [sys.executable, "-m", "pip", "install"]
+		if glob.glob("/usr/lib/python3*/EXTERNALLY-MANAGED"):
+			pip_install.append("--break-system-packages")
 		if not _run_phase(
 			"Python dependencies",
-			[sys.executable, "-m", "pip", "install", "--break-system-packages", "-q", "doit"],
+			[*pip_install, "-q", "doit"],
 		):
 			errors.append("python-deps")
 
-	if not errors:
-		# Run as a module so relative imports inside runner.py work.
-		# cwd=_SETUP makes `components` importable as a top-level package.
-		if not _run_phase(
-			"Components",
-			[sys.executable, "-m", "components.runner"],
-			track_component=True,
-			timeout=2700,  # 45 min for first install
-			cwd=_SETUP,
-		):
-			errors.append("components")
+	# Run as a module so relative imports inside runner.py work.
+	# cwd=_SETUP (set in _run_components) makes `components` importable.
+	if not errors and not _run_components(timeout=2700):  # 45 min for first install
+		errors.append("components")
 
-	if not errors:
-		for label, path in [
-			("DNS update", "/usr/local/lib/mailinabox/dns_update"),
-			("Web config", "/usr/local/lib/mailinabox/web_update"),
-		]:
-			if os.path.exists(path):
-				if not _run_phase(label, [path]):
-					errors.append(label.lower().replace(" ", "-"))
-			else:
-				errors.append(f"{label.lower()} not installed (component may have failed)")
+	# No dns_update/web_update poke here: nginx sites and nsd zones
+	# converge inside naust-managerd on startup, and the legacy tools
+	# would overwrite them with the retired Flask stack's config
+	# (duplicate nginx server names, stomped zone files).
 
 	# ── Result ────────────────────────────────────────────────────────────────
 	if errors:
@@ -673,21 +899,24 @@ def main() -> None:
 	ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 	width = 72
 	_log("\n" + "=" * width)
-	_log("  Mail-in-a-Box - Setup Complete")
+	_log("  Naust - Setup Complete")
 	_log(f"  Finished: {ts}")
-	_log(f"  Next step: sudo boxctl bootstrap")
+	_log("  Next step: sudo boxctl bootstrap")
 	_log("=" * width)
 	print(f"\n  {green('✓')}  {bold('Setup complete.')}\n")
 
-	# Show admin URL, setup code, and TLS fingerprint.
-	# Not logged - the setup code is a credential.
+	# Show admin URL, setup code, and TLS fingerprint via the installed operator
+	# binary - the sole owner of the setup-code token, so there is one code path
+	# whether setup mints it or an operator re-mints it later. Not logged: the
+	# setup code is a credential. Inherits our stdout so the panel renders in place.
 	try:
-		from boxctl.bootstrap import run as _bootstrap
-
-		_bootstrap(show_cert=True, install=True, from_installer=True)
-	except Exception:
-		# Bootstrap can fail if the management service isn't up yet.
-		# Give the user a clear next step rather than silent nothing.
+		subprocess.run(
+			["/usr/local/bin/boxctl", "bootstrap", "--install", "--show-cert"],
+			check=True,
+		)
+	except Exception:  # noqa: BLE001 - bootstrap can fail many ways; user gets a clear manual fallback either way
+		# Bootstrap can fail if managerd isn't up yet. Give the user a clear
+		# next step rather than silent nothing.
 		print(f"  {gray_desc('─' * (_term_width() - 4))}")
 		print(f"  To finish setup, run:  {bold('sudo boxctl bootstrap')}")
 		print(f"  {gray_desc('─' * (_term_width() - 4))}")

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:0;background-color:#f4f4f5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;">
+  <tr>
+    <td align="center" style="padding:40px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+        <tr>
+          <td style="background-color:#ffffff;border:1px solid #e4e4e7;border-radius:10px;padding:36px 40px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#27272a;">
+            <p style="margin:0 0 4px;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#71717a;">{{.Hostname}}</p>
+            <h1 style="margin:0 0 16px;font-size:24px;font-weight:600;color:#18181b;">Welcome!</h1>
+            <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">
+              Your mail server is up and running.
+            </p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 24px;">
+              <tr>
+                <td style="padding:10px 0;border-top:1px solid #f4f4f5;font-size:14px;color:#71717a;width:120px;">Admin panel</td>
+                <td style="padding:10px 0;border-top:1px solid #f4f4f5;font-size:14px;"><a href="{{.AdminURL}}" style="color:#2563eb;text-decoration:none;">{{.AdminURL}}</a></td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;border-top:1px solid #f4f4f5;font-size:14px;color:#71717a;">Webmail</td>
+                <td style="padding:10px 0;border-top:1px solid #f4f4f5;font-size:14px;"><a href="{{.WebmailURL}}" style="color:#2563eb;text-decoration:none;">{{.WebmailURL}}</a></td>
+              </tr>
+            </table>
+            <p style="margin:0{{if .Key}} 0 28px{{end}};font-size:14px;line-height:1.6;color:#52525b;">
+              Mail apps on your phone or computer can usually configure
+              themselves; just enter your address and password.
+            </p>
+{{if .Key}}
+            <h2 style="margin:0 0 8px;font-size:15px;font-weight:600;color:#18181b;">Your backup recovery key</h2>
+            <p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#52525b;">
+              Backups of this server are encrypted. Restoring them after a
+              disaster requires the secret key below; without it, backups
+              are unreadable.
+            </p>
+            <div style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;background-color:#f4f4f5;border:1px solid #e4e4e7;border-radius:6px;padding:14px 16px;word-break:break-all;color:#18181b;">{{.Key}}</div>
+            <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#71717a;">
+              Keep a copy somewhere that is not this server: a password
+              manager is ideal. Keeping this email in a mail app on another
+              device also works. One caution: if you forward your mail to
+              another provider, this key travels with it.
+            </p>
+{{end}}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 8px 0;text-align:center;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;color:#a1a1aa;">
+            Sent once by {{.Hostname}} when it was first set up.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

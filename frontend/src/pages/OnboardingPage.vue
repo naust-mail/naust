@@ -3,18 +3,17 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useAuthStore } from '@/stores/auth'
-import { useConfigStore } from '@/stores/config'
+import { api, ApiError } from '@/api/client'
 import Button from '@/components/ui/Button.vue'
 import Code from '@/components/ui/Code.vue'
 import Input from '@/components/ui/Input.vue'
 import Card from '@/components/ui/Card.vue'
 import PageBackground from '@/components/ui/PageBackground.vue'
-import type { BootstrapCodeError } from '@/types'
+import type { BootstrapRequest, LoginResponse } from '@/api/types.gen'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-const config = useConfigStore()
 
 const code = ref('')
 
@@ -26,7 +25,9 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const loading = ref(false)
-const attemptsRemaining = ref<number | null>(null)
+// Server-crafted failure line ("incorrect setup code; 3 attempts
+// remaining"), shown inline under the code field.
+const codeError = ref<string | null>(null)
 
 async function submit(): Promise<void> {
   if (loading.value) return
@@ -37,45 +38,29 @@ async function submit(): Promise<void> {
   }
 
   loading.value = true
-  attemptsRemaining.value = null
+  codeError.value = null
 
   try {
-    const fd = new FormData()
-    fd.append('code', code.value.replace(/\s/g, '').toUpperCase())
-    fd.append('email', email.value.trim())
-    fd.append('password', password.value)
-
-    const res = await fetch('/admin/bootstrap/setup', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: fd,
-    })
-
-    if (res.ok) {
-      auth.clearBootstrap()
-      await router.push('/login')
-      toast.success('Account created. Sign in to continue.')
-      return
+    const req: BootstrapRequest = {
+      code: code.value,
+      email: email.value.trim(),
+      password: password.value,
     }
-
-    const data: BootstrapCodeError = await res.json().catch(() => ({ error: 'not_found' as const }))
-
-    if (data.error === 'invalid_code') {
-      attemptsRemaining.value = data.attempts_remaining ?? null
-      toast.error(
-        attemptsRemaining.value !== null
-          ? `Incorrect code. ${attemptsRemaining.value} ${attemptsRemaining.value === 1 ? 'attempt' : 'attempts'} remaining.`
-          : 'Incorrect code.',
-      )
-    } else if (data.error === 'expired') {
-      toast.error('Bootstrap code expired. Run: sudo boxctl bootstrap')
-    } else if (data.error === 'locked') {
-      toast.error('Too many failed attempts. Run: sudo boxctl bootstrap to get a new code.')
+    const resp = await api.post<LoginResponse>('/api/bootstrap', req)
+    // The server set the session cookie: straight into the panel.
+    auth.handleAuthSuccess(resp.user)
+    auth.clearBootstrap()
+    await router.push('/system-status')
+    toast.success('Admin account created.')
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.hints.includes('invalid-code')) {
+        codeError.value = e.message
+      }
+      toast.error(e.message)
     } else {
-      toast.error('No active bootstrap session. Run: sudo boxctl bootstrap')
+      toast.error('Something went wrong. Please try again.')
     }
-  } catch {
-    toast.error('Something went wrong. Please try again.')
   } finally {
     loading.value = false
   }
@@ -84,9 +69,9 @@ async function submit(): Promise<void> {
 
 <template>
   <PageBackground class="flex items-center justify-center p-4">
-    <Card class="w-full max-w-sm p-6">
+    <Card padding="lg" class="w-full max-w-sm">
       <h1 class="text-2xl font-semibold text-center mb-1">
-        {{ config.hostname || 'Mail-in-a-Box' }}
+        {{ auth.hostname || 'Naust' }}
       </h1>
       <p class="text-sm text-muted text-center mb-7">Initial setup</p>
 
@@ -108,8 +93,8 @@ async function submit(): Promise<void> {
             class="font-mono tracking-widest uppercase"
             required
           />
-          <p v-if="attemptsRemaining !== null" class="mt-1.5 text-xs text-red-600 dark:text-red-400">
-            {{ attemptsRemaining }} {{ attemptsRemaining === 1 ? 'attempt' : 'attempts' }} remaining before lockout.
+          <p v-if="codeError" class="mt-1.5 text-xs text-error">
+            {{ codeError }}
           </p>
         </div>
 

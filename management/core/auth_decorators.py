@@ -42,7 +42,7 @@ def _is_read_scope(endpoint: str) -> bool:
 def resolve_caller(req):
 	"""
 	Resolve credentials from the request. Tries in order:
-	  1. Bearer token (miab_ prefix) - user API token
+	  1. Bearer token (naust_ prefix) - user API token
 	  2. Basic Auth - master API key or legacy basic auth
 	  3. HttpOnly admin_session cookie
 
@@ -55,7 +55,7 @@ def resolve_caller(req):
 
 	if auth_header.startswith('Bearer '):
 		token = auth_header[7:].strip()
-		if token.startswith('miab_'):
+		if token.startswith('naust_'):
 			from auth.api_tokens import verify_token
 
 			result = verify_token(token, env)
@@ -187,7 +187,7 @@ def require_user_route(viewfunc):
 			return _unauthorized_response(error)
 		request.user_email = email
 		request.user_privs = privs
-		request.token_scope = 'full'
+		request.token_scope = 'full'  # noqa: S105 -- access scope label, not a secret
 		request.caller_token_id = None
 		return viewfunc(*args, **kwargs)
 

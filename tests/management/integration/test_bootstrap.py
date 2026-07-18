@@ -5,7 +5,6 @@ so no mocks are needed for the bootstrap function itself. has_admin_users() and
 the alias creation are also covered here.
 """
 
-import pytest
 
 # bootstrap_first_admin does not call kick(); bootstrap tests need no kick mock.
 

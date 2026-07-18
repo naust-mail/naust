@@ -35,14 +35,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-pip \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install --break-system-packages --quiet doit exclusiveprocess
 
-COPY . /opt/mailinabox
-WORKDIR /opt/mailinabox
+COPY . /opt/naust
+WORKDIR /opt/naust
 
 COPY deploy/docker/optional/filebrowser/supervisord.conf /etc/supervisor/conf.d/filebrowser.conf
-COPY deploy/docker/optional/filebrowser/handlers/ /etc/miab/handlers/
+COPY deploy/docker/optional/filebrowser/handlers/ /etc/naust/handlers/
 COPY deploy/docker/control-socket-server.py /usr/local/sbin/control-socket-server
 COPY deploy/docker/optional/filebrowser/entrypoint.sh /entrypoint.sh
-RUN chmod +x /usr/local/sbin/control-socket-server /etc/miab/handlers/* /entrypoint.sh
+RUN chmod +x /usr/local/sbin/control-socket-server /etc/naust/handlers/* /entrypoint.sh
 
 # FileBrowser listens on port 8080 (internal only - nginx proxies /files).
 EXPOSE 8080

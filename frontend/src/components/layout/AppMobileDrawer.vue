@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { useUiStore } from '@/stores/ui'
+import { useModalKeyboard } from '@/composables/useModalKeyboard'
 import AppSidebar from './AppSidebar.vue'
 
 const ui = useUiStore()
+const panelRef = ref<HTMLElement | null>(null)
+
+useModalKeyboard(computed(() => ui.mobileSidebarOpen), panelRef, () => ui.closeMobileSidebar())
 </script>
 
 <template>
@@ -30,7 +35,7 @@ const ui = useUiStore()
       leave-to-class="-translate-x-full"
       leave-active-class="transition-transform duration-[200ms] ease-in"
     >
-      <div v-if="ui.mobileSidebarOpen" class="fixed inset-y-0 left-0 z-50 w-[260px] md:hidden">
+      <div v-if="ui.mobileSidebarOpen" ref="panelRef" class="fixed inset-y-0 left-0 z-50 w-[260px] md:hidden">
         <AppSidebar class="flex" force-expanded />
       </div>
     </Transition>

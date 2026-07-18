@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
+import { UI_SIZE_HEIGHT, UI_SIZE_TEXT, type UiSize } from '@/components/ui/sizes'
 
 defineOptions({ inheritAttrs: false })
 
 const model = defineModel<string>()
-const props = withDefaults(defineProps<{ disabled?: boolean; size?: 'sm' | 'md' }>(), { size: 'md' })
+const props = withDefaults(defineProps<{ disabled?: boolean; size?: UiSize }>(), { size: 'md' })
 
-const selectClass = computed(() =>
-  props.size === 'sm'
-    ? 'w-full h-8 rounded-lg py-0 px-3 pr-8 text-xs border border-border-input bg-subtle text-text outline-none focus:border-accent ring-2 ring-transparent focus:ring-accent-ring transition-colors appearance-none'
-    : 'w-full rounded-lg py-2 px-3 pr-8 text-sm border border-border-input bg-subtle text-text outline-none focus:border-accent ring-2 ring-transparent focus:ring-accent-ring transition-colors appearance-none'
+const paddingBySize: Record<UiSize, string> = { sm: 'px-3', md: 'px-3', lg: 'px-4' }
+
+const selectClass = computed(
+  () =>
+    `w-full ${UI_SIZE_HEIGHT[props.size]} rounded-lg ${paddingBySize[props.size]} pr-8 ${UI_SIZE_TEXT[props.size]} border border-border-input bg-subtle text-text outline-none focus:border-accent ring-2 ring-transparent focus:ring-accent-ring transition-colors appearance-none`,
 )
 </script>
 

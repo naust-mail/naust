@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
-import { ShieldCheck, Upload } from 'lucide-vue-next'
+import { ShieldCheck, Upload, RefreshCw } from 'lucide-vue-next'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import Button from '@/components/ui/Button.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SectionHeader from '@/components/ui/SectionHeader.vue'
@@ -19,10 +18,19 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import Sheet from '@/components/ui/Sheet.vue'
 import Textarea from '@/components/ui/Textarea.vue'
 import StatusIcon from '@/components/shared/StatusIcon.vue'
-import { useApi } from '@/composables/useApi'
-import type { SslDomainStatus, SslStatus, SslProvisionResult } from '@/types'
+import { api, ApiError } from '@/api/client'
+import type {
+  SSLCSRRequest,
+  SSLCSRResponse,
+  SSLDomainInfo,
+  SSLInstallRequest,
+  SSLProvisionRequest,
+  SSLStatusResponse,
+} from '@/api/types.gen'
 
-const api = useApi()
+// Provisioning runs in the background; ACME rounds take tens of
+// seconds, so a relaxed poll is plenty.
+const POLL_INTERVAL_MS = 4_000
 
 // Country codes are only needed when the install-cert sheet opens.
 // Dynamic import keeps them out of the initial bundle.
@@ -35,10 +43,10 @@ async function ensureCountryCodes(): Promise<void> {
 
 const loading = ref(true)
 const loadError = ref(false)
-const domains = ref<SslDomainStatus[]>([])
-const canProvision = ref<string[]>([])
-const provisioning = ref(false)
-const provisionResult = ref<SslProvisionResult | null>(null)
+const domains = ref<SSLDomainInfo[]>([])
+const running = ref(false)
+const lastError = ref('')
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // Install cert sheet
 const installOpen = ref(false)
@@ -50,15 +58,94 @@ const pastedCert = ref('')
 const pastedChain = ref('')
 const installing = ref(false)
 
+const needsAttention = computed(() =>
+  domains.value.filter(d => d.cert !== 'valid').map(d => d.domain),
+)
+
+function certIcon(d: SSLDomainInfo): 'ok' | 'warning' | 'error' {
+  switch (d.cert) {
+    case 'valid':
+      return 'ok'
+    case 'expiring':
+    case 'self-signed':
+      return 'warning'
+    default:
+      return 'error'
+  }
+}
+
+function certLabel(d: SSLDomainInfo): string {
+  const until = d.not_after
+    ? new Date(d.not_after).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    : ''
+  switch (d.cert) {
+    case 'valid':
+      return until ? `Valid until ${until}` : 'Valid'
+    case 'expiring':
+      return until ? `Expires soon (${until})` : 'Expires soon'
+    case 'expired':
+      return 'Expired'
+    case 'self-signed':
+      return 'Self-signed certificate'
+    default:
+      return 'No certificate'
+  }
+}
+
+function lastRunLabel(d: SSLDomainInfo): string | null {
+  if (!d.last_status) return null
+  const detail = d.last_detail ? ` - ${d.last_detail}` : ''
+  return `Last run: ${d.last_status}${detail}`
+}
+
+function applyResponse(data: SSLStatusResponse): void {
+  domains.value = data.domains ?? []
+  running.value = data.running
+  lastError.value = data.last_error ?? ''
+}
+
+// A handful of transient blips are expected; a run of failures this long
+// means the backend is actually down, so give up rather than leaving the
+// page polling (and "Provision" disabled) forever with no way out.
+const MAX_CONSECUTIVE_POLL_FAILURES = 5
+
+function startPolling(): void {
+  if (pollTimer !== null) return
+  let consecutiveFailures = 0
+  pollTimer = setInterval(async () => {
+    try {
+      const data = await api.get<SSLStatusResponse>('/api/ssl')
+      consecutiveFailures = 0
+      applyResponse(data)
+      if (!data.running) {
+        stopPolling()
+        toast.info('Certificate provisioning finished.')
+      }
+    } catch {
+      consecutiveFailures++
+      if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+        stopPolling()
+        running.value = false
+        toast.error('Lost contact with the server during certificate provisioning. Try again once it is reachable.')
+      }
+    }
+  }, POLL_INTERVAL_MS)
+}
+
+function stopPolling(): void {
+  if (pollTimer !== null) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
-  provisionResult.value = null
   try {
-    const res = await api.get('/admin/ssl/status')
-    const data: SslStatus = await res.json()
-    canProvision.value = data.can_provision
-    domains.value = data.status
+    const data = await api.get<SSLStatusResponse>('/api/ssl')
+    applyResponse(data)
+    if (data.running) startPolling()
   } catch {
     loadError.value = true
     toast.error('Failed to load TLS certificate status.')
@@ -68,29 +155,14 @@ async function load(): Promise<void> {
 }
 
 async function provision(): Promise<void> {
-  if (provisioning.value) return
-  provisioning.value = true
-  provisionResult.value = null
+  if (running.value) return
   try {
-    const res = await api.post('/admin/ssl/provision')
-    const data: SslProvisionResult = await res.json()
-    provisionResult.value = data
-    const installed = data.requests.filter(r => r.result === 'installed').length
-    const errors = data.requests.filter(r => r.result === 'error').length
-    if (installed > 0) {
-      toast.success(`${installed} certificate${installed > 1 ? 's' : ''} provisioned.`)
-      await load()
-    }
-    if (errors > 0) {
-      toast.error(`${errors} domain${errors > 1 ? 's' : ''} failed to provision.`)
-    }
-    if (data.requests.length === 0) {
-      toast.info('No domains needed provisioning.')
-    }
-  } catch {
-    toast.error('Failed to provision certificates.')
-  } finally {
-    provisioning.value = false
+    const req: SSLProvisionRequest = { domains: [] }
+    await api.post('/api/ssl/provision', req)
+    running.value = true
+    startPolling()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to start provisioning.')
   }
 }
 
@@ -104,21 +176,26 @@ async function openInstall(domain?: string): Promise<void> {
   installOpen.value = true
 }
 
+let csrRequestId = 0
+
 async function fetchCsr(): Promise<void> {
   if (!selectedDomain.value || !selectedCc.value) return
+  const requestId = ++csrRequestId
   loadingCsr.value = true
   csr.value = ''
   try {
-    const res = await api.post(`/admin/ssl/csr/${encodeURIComponent(selectedDomain.value)}`, {
-      countrycode: selectedCc.value,
-    })
-    if (res.ok) {
-      csr.value = await res.text()
+    const req: SSLCSRRequest = {
+      domain: selectedDomain.value,
+      country_code: selectedCc.value,
     }
+    const resp = await api.post<SSLCSRResponse>('/api/ssl/csr', req)
+    // Domain/country may have changed again while this was in flight;
+    // only the most recent request is allowed to write the result.
+    if (requestId === csrRequestId) csr.value = resp.csr
   } catch {
-    // CSR fetch failed silently; user can retry
+    // CSR fetch failed silently; user can retry by reselecting.
   } finally {
-    loadingCsr.value = false
+    if (requestId === csrRequestId) loadingCsr.value = false
   }
 }
 
@@ -126,23 +203,17 @@ async function installCert(): Promise<void> {
   if (!selectedDomain.value || !pastedCert.value || installing.value) return
   installing.value = true
   try {
-    const res = await api.post('/admin/ssl/install', {
+    const req: SSLInstallRequest = {
       domain: selectedDomain.value,
       cert: pastedCert.value,
       chain: pastedChain.value,
-    })
-    const text = await res.text()
-    if (!res.ok) {
-      toast.error(text)
-      return
     }
-    if (/^OK($|\n)/.test(text)) {
-      toast.success('Certificate installed successfully.')
-      installOpen.value = false
-      await load()
-    } else {
-      toast.error(text)
-    }
+    await api.post('/api/ssl/install', req)
+    toast.success('Certificate installed successfully.')
+    installOpen.value = false
+    await load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Failed to install certificate.')
   } finally {
     installing.value = false
   }
@@ -151,48 +222,39 @@ async function installCert(): Promise<void> {
 watch([selectedDomain, selectedCc], fetchCsr)
 
 onMounted(load)
+onUnmounted(stopPolling)
 </script>
 
 <template>
-  <AppLayout>
     <PageHeader title="TLS Certificates" description="Keep your domains trusted and connections encrypted.">
       <template #actions>
         <Button variant="secondary" size="sm" @click="openInstall()"><Upload class="size-3.5" />Install Certificate</Button>
       </template>
     </PageHeader>
 
-    <!-- Status explanation -->
     <SectionHeader title="Certificate Status" />
 
-    <!-- Provision card -->
-    <Card v-if="!loading && canProvision.length > 0" class="p-5 mb-6">
-      <h2 class="text-base font-semibold mb-1">Provision certificates</h2>
-      <p class="text-sm text-muted mb-3">
-        {{ canProvision.join(', ') }}
-        {{ canProvision.length === 1 ? 'is' : 'are' }} eligible for a free Let's Encrypt certificate.
-      </p>
-      <Button :disabled="provisioning" @click="provision">
-        {{ provisioning ? 'Provisioning...' : 'Provision' }}
-      </Button>
+    <!-- Run-level failure of the last provisioning attempt -->
+    <Card v-if="lastError" padding="sm" class="mb-6 border-error-border bg-error-bg animate-fade-in">
+      <p class="text-sm font-medium text-error-fg">Last provisioning run failed</p>
+      <p class="text-sm text-error-fg mt-1">{{ lastError }}</p>
+    </Card>
 
-      <!-- Provision results -->
-      <div v-if="provisionResult" class="mt-4 space-y-3">
-        <div
-          v-for="(req, i) in provisionResult.requests"
-          :key="i"
-          class="rounded-lg px-4 py-3 text-sm"
-          :class="req.result === 'installed'
-            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200'
-            : req.result === 'skipped'
-              ? 'bg-surface text-muted'
-              : 'bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-200'"
-        >
-          <p class="font-medium">{{ req.domains.join(', ') }}</p>
-          <p v-if="req.message">{{ req.message }}</p>
-          <p v-if="req.result === 'installed'">Certificate installed successfully.</p>
-          <p v-else-if="req.result === 'skipped'">Skipped - certificate already up to date.</p>
-        </div>
-      </div>
+    <!-- Provision card -->
+    <Card v-if="!loading && (needsAttention.length > 0 || running)" padding="md" class="mb-6 animate-fade-in">
+      <SectionHeader title="Provision certificates" />
+      <p class="text-sm text-muted mb-3">
+        <template v-if="running">A provisioning run is in progress...</template>
+        <template v-else>
+          {{ needsAttention.join(', ') }}
+          {{ needsAttention.length === 1 ? 'needs' : 'need' }} a certificate.
+          Free Let's Encrypt certificates are provisioned automatically where DNS allows.
+        </template>
+      </p>
+      <Button :disabled="running" @click="provision">
+        <RefreshCw v-if="running" class="size-4 mr-1.5 animate-spin" />
+        {{ running ? 'Provisioning...' : 'Provision' }}
+      </Button>
     </Card>
 
     <!-- Domain table -->
@@ -202,7 +264,7 @@ onMounted(load)
           <TableHead>
             <Th>Domain</Th>
             <Th>Status</Th>
-            <th scope="col" class="px-4 py-3"></th>
+            <Th />
           </TableHead>
           <tbody>
             <TableRow v-for="i in 5" :key="i">
@@ -215,7 +277,7 @@ onMounted(load)
       </template>
 
       <template #empty>
-        <EmptyState title="No domains" description="No web domains are configured.">
+        <EmptyState bordered title="No domains" description="No web domains are configured.">
           <template #icon><ShieldCheck /></template>
         </EmptyState>
       </template>
@@ -224,23 +286,25 @@ onMounted(load)
         <TableHead>
           <Th>Domain</Th>
           <Th>Status</Th>
-          <th scope="col" class="px-4 py-3"></th>
+          <Th />
         </TableHead>
         <tbody>
           <TableRow v-for="d in domains" :key="d.domain">
             <td class="px-4 py-3 font-medium text-sm">
-              <a v-if="d.status !== 'not-applicable'" :href="`https://${d.domain}`" target="_blank" class="hover:underline">{{ d.domain }}</a>
-              <span v-else class="text-faint">{{ d.domain }}</span>
+              <a :href="`https://${d.domain}`" target="_blank" class="hover:underline">{{ d.domain }}</a>
             </td>
             <td class="px-4 py-3 text-sm text-muted">
-              <div class="flex items-start gap-2">
-                <StatusIcon v-if="d.status !== 'not-applicable'" :status="d.status === 'success' ? 'ok' : d.status" class="mt-0.5 shrink-0" />
-                <span>{{ d.text }}</span>
+              <div class="flex items-center gap-2">
+                <StatusIcon :status="certIcon(d)" class="shrink-0 mr-1" />
+                <span>
+                  {{ certLabel(d) }}
+                  <span v-if="lastRunLabel(d)" class="block text-xs text-faint">{{ lastRunLabel(d) }}</span>
+                </span>
               </div>
             </td>
             <td class="px-4 py-3 text-right">
-              <Button v-if="d.status !== 'not-applicable'" variant="ghost" size="sm" @click="openInstall(d.domain)">
-                {{ d.status === 'success' ? 'Replace' : 'Install' }}
+              <Button variant="secondary" size="sm" @click="openInstall(d.domain)">
+                {{ d.cert === 'valid' ? 'Replace' : 'Install' }}
               </Button>
             </td>
           </TableRow>
@@ -253,11 +317,7 @@ onMounted(load)
       <div class="space-y-5">
         <Field label="Domain" for="installDomain">
           <Select id="installDomain" v-model="selectedDomain">
-            <option
-              v-for="d in domains.filter(d => d.status !== 'not-applicable')"
-              :key="d.domain"
-              :value="d.domain"
-            >{{ d.domain }}</option>
+            <option v-for="d in domains" :key="d.domain" :value="d.domain">{{ d.domain }}</option>
           </Select>
         </Field>
 
@@ -312,5 +372,4 @@ onMounted(load)
         </Button>
       </div>
     </Sheet>
-  </AppLayout>
 </template>

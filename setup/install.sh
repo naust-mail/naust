@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mail-in-a-Box installer entry point.
+# Naust installer entry point.
 # Bootstraps Python then hands off to setup/boxctl/install.py.
 
 set -e
@@ -15,7 +15,7 @@ fi
 
 # Ensure Python 3 is available before we can do anything else.
 if ! command -v python3 &>/dev/null; then
-    echo "Installing Python 3..."
+    echo "Installing Python 3..."update
     apt-get -qq update
     apt-get -qq install -y python3 python3-pip python3-venv
 fi

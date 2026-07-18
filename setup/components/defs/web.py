@@ -20,6 +20,7 @@ The iOS/autoconfig/autodiscover/mta-sts files are hostname + mode dependent,
 so they re-run when PRIMARY_HOSTNAME or MTA_STS_MODE changes.
 """
 
+import contextlib
 import os
 import shutil
 import subprocess
@@ -28,7 +29,8 @@ import uuid
 from doit.tools import config_changed
 
 from .. import artifacts, SETUP_DIR
-from ..component import Component
+from ..component import Component, DOCKER
+import pathlib
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -89,6 +91,11 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 			"name": "www-root",
 			"uptodate": [config_changed(f"{storage_root}:{storage_user}:{artifacts.fn_stamp(_www_root)}")],
 			"actions": [(_www_root, [storage_root, storage_user, web_conf_dir])],
+		},
+		{
+			"name": "managed-sites",
+			"uptodate": [config_changed(f"{runtime}:{artifacts.fn_stamp(_managed_sites)}")],
+			"actions": [(_managed_sites, [runtime])],
 		},
 		{
 			"name": "logrotate",
@@ -158,13 +165,9 @@ def _ssl_conf(ssl_conf_src: str, storage_root: str, runtime: str) -> None:
 	# Docker uses 127.0.0.11 (Docker's embedded DNS); bare metal uses 127.0.0.1 (unbound).
 	# Using a variable in proxy_pass requires a resolver so nginx defers DNS lookup to
 	# request time instead of crashing at startup when an optional service isn't running.
-	if runtime == "docker":
-		resolver_line = "resolver 127.0.0.11 valid=10s ipv6=off;"
-	else:
-		resolver_line = "resolver 127.0.0.1 valid=86400 ipv6=off;"
+	resolver_line = "resolver 127.0.0.11 valid=10s ipv6=off;" if runtime == "docker" else "resolver 127.0.0.1 valid=86400 ipv6=off;"
 
-	with open(ssl_conf_src) as fh:
-		content = fh.read()
+	content = pathlib.Path(ssl_conf_src).read_text(encoding="utf-8")
 	content = content.replace("STORAGE_ROOT", storage_root)
 	content = content.replace("NGINX_RESOLVER_LINE", resolver_line)
 	artifacts.write_file("/etc/nginx/conf.d/ssl.conf", content)
@@ -178,43 +181,39 @@ def _static_files(web_conf_dir: str, hostname: str, mta_sts_mode: str) -> None:
 	UUID fields in ios-profile.xml are randomised on every regeneration - that is
 	intentional; the profile is re-imported by clients only when its UUID changes.
 	"""
-	os.makedirs("/var/lib/mailinabox", exist_ok=True)
-	os.chmod("/var/lib/mailinabox", 0o755)
+	os.makedirs("/var/lib/naust", exist_ok=True)
+	os.chmod("/var/lib/naust", 0o755)
 
 	for name in ["admin-down.html", "500.html"]:
-		shutil.copy2(os.path.join(web_conf_dir, name), f"/var/lib/mailinabox/{name}")
+		shutil.copy2(os.path.join(web_conf_dir, name), f"/var/lib/naust/{name}")
 
 	# iOS mobile configuration profile: UUIDs are randomised each run so that
 	# the profile UUID changes → clients notice and re-import the profile.
-	with open(os.path.join(web_conf_dir, "ios-profile.xml")) as fh:
-		ios_content = fh.read()
+	ios_content = pathlib.Path(os.path.join(web_conf_dir, "ios-profile.xml")).read_text(encoding="utf-8")
 	for i in range(1, 5):
 		ios_content = ios_content.replace(f"UUID{i}", str(uuid.uuid4()).upper())
 	ios_content = ios_content.replace("PRIMARY_HOSTNAME", hostname)
-	artifacts.write_file("/var/lib/mailinabox/mobileconfig.xml", ios_content, mode=0o644)
+	artifacts.write_file("/var/lib/naust/mobileconfig.xml", ios_content, mode=0o644)
 
 	# Mozilla autoconfig: served at /.well-known/autoconfig/mail/config-v1.1.xml.
 	# Format: https://wiki.mozilla.org/Thunderbird:Autoconfiguration:ConfigFileFormat
-	with open(os.path.join(web_conf_dir, "mozilla-autoconfig.xml")) as fh:
-		mozilla_content = fh.read().replace("PRIMARY_HOSTNAME", hostname)
-	artifacts.write_file("/var/lib/mailinabox/mozilla-autoconfig.xml", mozilla_content, mode=0o644)
+	mozilla_content = pathlib.Path(os.path.join(web_conf_dir, "mozilla-autoconfig.xml")).read_text(encoding="utf-8").replace("PRIMARY_HOSTNAME", hostname)
+	artifacts.write_file("/var/lib/naust/mozilla-autoconfig.xml", mozilla_content, mode=0o644)
 
 	# Outlook autodiscover: served at /autodiscover/autodiscover.xml and
 	# /.well-known/autoconfig/autodiscover.xml for Outlook and compatible clients.
-	with open(os.path.join(web_conf_dir, "autodiscover.xml")) as fh:
-		autodiscover_content = fh.read().replace("PRIMARY_HOSTNAME", hostname)
-	artifacts.write_file("/var/lib/mailinabox/autodiscover.xml", autodiscover_content, mode=0o644)
+	autodiscover_content = pathlib.Path(os.path.join(web_conf_dir, "autodiscover.xml")).read_text(encoding="utf-8").replace("PRIMARY_HOSTNAME", hostname)
+	artifacts.write_file("/var/lib/naust/autodiscover.xml", autodiscover_content, mode=0o644)
 
 	# mta-sts: served at /.well-known/mta-sts.txt. Default mode is "enforce".
-	# Set MTA_STS_MODE=testing in /etc/mailinabox.conf to get reports without
+	# Set MTA_STS_MODE=testing in /etc/naust.conf to get reports without
 	# enforcement if unsure (messages still delivered), or "none" to disable.
 	# Hostname is punycode-encoded for international domain support.
 	result = subprocess.run(["idn2", hostname], capture_output=True, text=True, check=False)
 	puny_hostname = result.stdout.strip() if result.returncode == 0 else hostname
 
-	with open(os.path.join(web_conf_dir, "mta-sts.txt")) as fh:
-		mta_sts_content = fh.read().replace("MODE", mta_sts_mode).replace("PRIMARY_HOSTNAME", puny_hostname)
-	artifacts.write_file("/var/lib/mailinabox/mta-sts.txt", mta_sts_content, mode=0o644)
+	mta_sts_content = pathlib.Path(os.path.join(web_conf_dir, "mta-sts.txt")).read_text(encoding="utf-8").replace("MODE", mta_sts_mode).replace("PRIMARY_HOSTNAME", puny_hostname)
+	artifacts.write_file("/var/lib/naust/mta-sts.txt", mta_sts_content, mode=0o644)
 
 
 def _www_root(storage_root: str, storage_user: str, web_conf_dir: str) -> None:
@@ -237,6 +236,35 @@ def _www_root(storage_root: str, storage_user: str, web_conf_dir: str) -> None:
 		subprocess.run(["chown", "-R", storage_user, www_dir], check=True)
 
 
+def _managed_sites(runtime: str) -> None:
+	"""Create the Go daemon's managed sites directory and its include.
+
+	helperd's web.sync_sites intent reconciles /etc/nginx/naust.d/;
+	this include makes nginx read it. Safe while the directory is empty
+	(a glob with no matches is a no-op), so it can be installed before
+	the Go web stack takes over.
+
+	The legacy local.conf (upstream Mail-in-a-Box's web_update output) is
+	removed here on bare metal: nginx treats duplicate server names as a
+	warning, not an error, and conf.d sorts local.conf before
+	naust-sites.conf, so a leftover copy silently shadows every managed
+	site. It is machine-generated from data that managerd re-renders into
+	naust.d, so nothing user-authored is lost. In Docker, management no
+	longer writes local.conf at all (Flask is retired there), so this
+	stays a bare-metal-only cleanup step - deleting it in Docker would
+	just race whatever ran before this one, for no benefit.
+	"""
+	os.makedirs("/etc/nginx/naust.d", exist_ok=True)
+	os.chmod("/etc/nginx/naust.d", 0o755)
+	artifacts.write_file(
+		"/etc/nginx/conf.d/naust-sites.conf",
+		"include /etc/nginx/naust.d/*.conf;\n",
+	)
+	if runtime != DOCKER:
+		with contextlib.suppress(FileNotFoundError):
+			os.remove("/etc/nginx/conf.d/local.conf")
+
+
 def _logrotate() -> None:
 	"""Write nginx logrotate config using copytruncate.
 
@@ -252,7 +280,7 @@ def _logrotate() -> None:
 
 def _web_update(src: str) -> None:
 	"""Install web_update to a fixed path so boxctl doesn't depend on the repo."""
-	dest = "/usr/local/lib/mailinabox/web_update"
+	dest = "/usr/local/lib/naust/web_update"
 	shutil.copy2(src, dest)
 	os.chmod(dest, 0o755)
 

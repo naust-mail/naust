@@ -2,10 +2,6 @@
 Tests for artifacts.hash_files().
 """
 
-import os
-
-import pytest
-
 from components.artifacts import hash_files
 
 

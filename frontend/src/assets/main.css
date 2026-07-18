@@ -27,6 +27,25 @@
   --color-accent-fg:    var(--accent-fg);
   --color-accent-ring:  var(--accent-ring);
 
+  /* Destructive scale - shared across palettes, but themeable like accent */
+  --color-destructive:       var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-fg:    var(--destructive-fg);
+
+  /* Status scale - icons, badges, and banners. Shared across palettes, themeable like accent. */
+  --color-success:        var(--success);
+  --color-success-bg:     var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-success-fg:     var(--success-fg);
+  --color-warning:        var(--warning);
+  --color-warning-bg:     var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-warning-fg:     var(--warning-fg);
+  --color-error:          var(--error);
+  --color-error-bg:       var(--error-bg);
+  --color-error-border:   var(--error-border);
+  --color-error-fg:       var(--error-fg);
+
   /* Gray palette scale */
   --color-gray-50:  var(--p-50);
   --color-gray-100: var(--p-100);
@@ -70,6 +89,37 @@
 
 .animate-fade-in {
   animation: fade-in 120ms ease-in both;
+}
+
+/* Shared crossfade for swapping the whole content of a fixed spot (e.g. an
+   AsyncState loading/error/empty/content slot, a multi-step form). Pair with
+   `<Transition name="crossfade">` around a `:key`-toggled single child, inside
+   a `relative overflow-hidden` wrapper so the entering state's height is what
+   the container uses instead of collapsing through zero first. */
+.crossfade-enter-active {
+  transition: opacity 0.2s ease;
+}
+.crossfade-leave-active {
+  transition: opacity 0.2s ease;
+  position: absolute;
+  inset: 0;
+}
+.crossfade-enter-from,
+.crossfade-leave-to {
+  opacity: 0;
+}
+
+/* Global kill switch: nothing in the app (Vue <Transition> classes,
+   Tailwind transition-* utilities, sidebar/dialog/sheet animations)
+   opts out of prefers-reduced-motion individually, so cut every
+   animation and transition to effectively-instant here instead. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /*
@@ -147,6 +197,25 @@
   --accent-hover: #1c1c1c;
   --accent-fg:    #ffffff;
   --accent-ring:  rgb(0 0 0 / 0.12);
+
+  /* Destructive - light */
+  --destructive:       #dc2626;
+  --destructive-hover: #b91c1c;
+  --destructive-fg:    #ffffff;
+
+  /* Status - light */
+  --success:        #10b981;
+  --success-bg:      hsl(158 55% 91%);
+  --success-border:  #6ee7b7;
+  --success-fg:      #065f46;
+  --warning:        #eab308;
+  --warning-bg:      hsl(48 35% 90%);
+  --warning-border:  hsl(45 32% 80%);
+  --warning-fg:      #854d0e;
+  --error:          #ef4444;
+  --error-bg:        hsl(0 70% 92%);
+  --error-border:    #fca5a5;
+  --error-fg:        #991b1b;
 }
 
 /* Zinc dark mode overrides */
@@ -154,7 +223,7 @@
   --color-bg:             #171717;
   --color-sidebar:        #202020;
   --color-surface:        #262626;
-  --color-surface-raised: #0d0d0d;
+  --color-surface-raised: #363636;
   --color-subtle:         #262626;
   --color-border:         #333333;
   --color-border-input:   #4d4d4d;
@@ -162,8 +231,8 @@
   --color-text:           #ebebeb;
   --color-muted:          #b4b4b4;
   --color-faint:          #9b9b9b;
-  --color-hover:          #262626;
-  --color-hover-subtle:   #333333;
+  --color-hover:          hsl(0 0% 22%);
+  --color-hover-subtle:   hsl(0 0% 18%);
   --color-skeleton:       #333333;
 
   /* Accent - dark: white */
@@ -171,10 +240,29 @@
   --accent-hover: #e0e0e0;
   --accent-fg:    #000000;
   --accent-ring:  rgb(255 255 255 / 0.12);
+
+  /* Destructive - dark: brighter red so it doesn't crush against dark surfaces */
+  --destructive:       #ef4444;
+  --destructive-hover: #dc2626;
+  --destructive-fg:    #ffffff;
+
+  /* Status - dark */
+  --success:        #34d399;
+  --success-bg:      hsl(160 55% 20% / 0.4);
+  --success-border:  #047857;
+  --success-fg:      #a7f3d0;
+  --warning:        #facc15;
+  --warning-bg:      hsl(30 55% 20% / 0.4);
+  --warning-border:  #a16207;
+  --warning-fg:      #fef08a;
+  --error:          #f87171;
+  --error-bg:        hsl(0 55% 20% / 0.4);
+  --error-border:    #b91c1c;
+  --error-fg:        #fecaca;
 }
 
-/* ─── Oxi - Warm Industrial Copper ──────────────────────────────────────── */
-[data-palette='oxi'] {
+/* ─── rav - Warm Industrial Copper ──────────────────────────────────────── */
+[data-palette='rav'] {
   --p-50:  hsl(30 20% 97%);
   --p-100: hsl(30 15% 92%);
   --p-200: hsl(30 12% 86%);
@@ -207,13 +295,30 @@
   --accent-hover: hsl(20 70% 43%);
   --accent-fg:    #ffffff;
   --accent-ring:  hsl(20 70% 50% / 0.22);
+
+  /* Status - warm-shifted to sit next to the copper accent instead of clashing */
+  --destructive:       hsl(8 65% 45%);
+  --destructive-hover: hsl(8 65% 38%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(90 45% 35%);
+  --success-bg:      hsl(90 35% 90%);
+  --success-border:  hsl(90 30% 75%);
+  --success-fg:      hsl(90 45% 22%);
+  --warning:        hsl(35 85% 45%);
+  --warning-bg:      hsl(35 32% 89%);
+  --warning-border:  hsl(35 30% 78%);
+  --warning-fg:      hsl(30 60% 25%);
+  --error:          hsl(8 65% 45%);
+  --error-bg:        hsl(8 60% 91%);
+  --error-border:    hsl(8 50% 78%);
+  --error-fg:        hsl(8 60% 28%);
 }
 
-.dark[data-palette='oxi'] {
+.dark[data-palette='rav'] {
   --color-bg:             hsl(20 10%  9%);
   --color-sidebar:        hsl(20 10% 12%);
   --color-surface:        hsl(20 10% 14%);
-  --color-surface-raised: hsl(20 10%  5%);
+  --color-surface-raised: hsl(20 10% 19%);
   --color-subtle:         hsl(20 10% 14%);
   --color-border:         hsl(20 12% 18%);
   --color-border-input:   hsl(20 10% 28%);
@@ -221,9 +326,25 @@
   --color-text:           hsl(30 15% 92%);
   --color-muted:          hsl(22  8% 62%);
   --color-faint:          hsl(20  6% 50%);
-  --color-hover:          hsl(20 10% 14%);
-  --color-hover-subtle:   hsl(20 12% 18%);
+  --color-hover:          hsl(20 10% 21%);
+  --color-hover-subtle:   hsl(20 10% 17%);
   --color-skeleton:       hsl(20 12% 18%);
+
+  --destructive:       hsl(8 60% 55%);
+  --destructive-hover: hsl(8 60% 47%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(90 40% 55%);
+  --success-bg:      hsl(90 35% 20% / 0.4);
+  --success-border:  hsl(90 30% 30%);
+  --success-fg:      hsl(90 35% 80%);
+  --warning:        hsl(35 80% 55%);
+  --warning-bg:      hsl(35 45% 20% / 0.4);
+  --warning-border:  hsl(35 50% 32%);
+  --warning-fg:      hsl(35 70% 80%);
+  --error:          hsl(8 60% 55%);
+  --error-bg:        hsl(8 45% 20% / 0.4);
+  --error-border:    hsl(8 45% 32%);
+  --error-fg:        hsl(8 55% 82%);
 }
 
 /* ─── Indigo - Cool Blue-Violet ──────────────────────────────────────────── */
@@ -260,13 +381,31 @@
   --accent-hover: #4f52d6;
   --accent-fg:    #ffffff;
   --accent-ring:  rgb(99 102 241 / 0.22);
+
+  /* Status - success cool-shifted to match the blue-violet accent; error/destructive
+     stay close to true red (slightly warmed toward violet) so danger still reads first */
+  --destructive:       hsl(352 60% 50%);
+  --destructive-hover: hsl(352 60% 43%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(165 55% 38%);
+  --success-bg:      hsl(165 45% 90%);
+  --success-border:  hsl(165 35% 76%);
+  --success-fg:      hsl(165 45% 24%);
+  --warning:        hsl(45 75% 45%);
+  --warning-bg:      hsl(45 30% 89%);
+  --warning-border:  hsl(45 28% 78%);
+  --warning-fg:      hsl(42 55% 26%);
+  --error:          hsl(352 60% 50%);
+  --error-bg:        hsl(352 50% 91%);
+  --error-border:    hsl(352 42% 80%);
+  --error-fg:        hsl(352 48% 30%);
 }
 
 .dark[data-palette='indigo'] {
   --color-bg:             hsl(240 10%  9%);
   --color-sidebar:        hsl(240 10% 11%);
   --color-surface:        hsl(240 10% 13%);
-  --color-surface-raised: hsl(240 10%  5%);
+  --color-surface-raised: hsl(240 10% 17%);
   --color-subtle:         hsl(240 10% 13%);
   --color-border:         hsl(240 12% 18%);
   --color-border-input:   hsl(240 10% 28%);
@@ -274,9 +413,25 @@
   --color-text:           hsl(240 15% 94%);
   --color-muted:          hsl(240  8% 62%);
   --color-faint:          hsl(240  6% 50%);
-  --color-hover:          hsl(240 10% 13%);
-  --color-hover-subtle:   hsl(240 12% 18%);
+  --color-hover:          hsl(240 10% 20%);
+  --color-hover-subtle:   hsl(240 10% 16%);
   --color-skeleton:       hsl(240 12% 18%);
+
+  --destructive:       hsl(352 58% 60%);
+  --destructive-hover: hsl(352 58% 52%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(165 50% 55%);
+  --success-bg:      hsl(165 35% 20% / 0.4);
+  --success-border:  hsl(165 30% 30%);
+  --success-fg:      hsl(165 40% 80%);
+  --warning:        hsl(45 70% 58%);
+  --warning-bg:      hsl(45 40% 20% / 0.4);
+  --warning-border:  hsl(45 40% 32%);
+  --warning-fg:      hsl(42 60% 80%);
+  --error:          hsl(352 58% 60%);
+  --error-bg:        hsl(352 40% 20% / 0.4);
+  --error-border:    hsl(352 34% 32%);
+  --error-fg:        hsl(352 52% 82%);
 }
 
 /* ─── Nord - Arctic Steel Blue ───────────────────────────────────────────── */
@@ -314,13 +469,30 @@
   --accent-hover: #6aabbe;
   --accent-fg:    #2E3440;
   --accent-ring:  rgb(136 192 208 / 0.25);
+
+  /* Status - darkened Nord Aurora hues (nord11/13/14) for AA text contrast on white */
+  --destructive:       hsl(354 42% 48%);
+  --destructive-hover: hsl(354 42% 41%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(92 28% 38%);
+  --success-bg:      hsl(92 30% 90%);
+  --success-border:  hsl(92 25% 75%);
+  --success-fg:      hsl(92 30% 24%);
+  --warning:        hsl(39 55% 45%);
+  --warning-bg:      hsl(39 30% 89%);
+  --warning-border:  hsl(39 28% 78%);
+  --warning-fg:      hsl(39 55% 28%);
+  --error:          hsl(354 42% 48%);
+  --error-bg:        hsl(354 45% 91%);
+  --error-border:    hsl(354 35% 78%);
+  --error-fg:        hsl(354 45% 30%);
 }
 
 .dark[data-palette='nord'] {
   --color-bg:             hsl(220 16% 12%);
   --color-sidebar:        hsl(220 17% 14%);
   --color-surface:        hsl(220 17% 16%);
-  --color-surface-raised: hsl(220 16%  7%);
+  --color-surface-raised: hsl(220 17% 20%);
   --color-subtle:         hsl(220 17% 16%);
   --color-border:         hsl(220 18% 20%);
   --color-border-input:   hsl(218 16% 27%);
@@ -328,9 +500,26 @@
   --color-text:           hsl(218 22% 92%);
   --color-muted:          hsl(218 12% 60%);
   --color-faint:          hsl(218 10% 48%);
-  --color-hover:          hsl(220 17% 16%);
-  --color-hover-subtle:   hsl(220 18% 20%);
+  --color-hover:          hsl(220 17% 23%);
+  --color-hover-subtle:   hsl(220 17% 19%);
   --color-skeleton:       hsl(220 18% 20%);
+
+  /* Status - authentic Nord Aurora: nord11 red, nord13 yellow, nord14 green */
+  --destructive:       #BF616A;
+  --destructive-hover: #ab525a;
+  --destructive-fg:    #ffffff;
+  --success:        #A3BE8C;
+  --success-bg:      hsl(92 30% 20% / 0.4);
+  --success-border:  hsl(92 20% 30%);
+  --success-fg:      hsl(92 30% 80%);
+  --warning:        #EBCB8B;
+  --warning-bg:      hsl(39 35% 20% / 0.4);
+  --warning-border:  hsl(39 30% 32%);
+  --warning-fg:      hsl(39 60% 84%);
+  --error:          #BF616A;
+  --error-bg:        hsl(354 35% 20% / 0.4);
+  --error-border:    hsl(354 25% 32%);
+  --error-fg:        hsl(354 45% 84%);
 }
 
 /* ─── Emerald - Deep Forest Green ───────────────────────────────────────── */
@@ -367,13 +556,30 @@
   --accent-hover: hsl(152 42% 29%);
   --accent-fg:    #ffffff;
   --accent-ring:  hsl(152 42% 36% / 0.22);
+
+  /* Status - success uses a different green hue than accent so the two stay distinguishable */
+  --destructive:       hsl(0 65% 48%);
+  --destructive-hover: hsl(0 65% 41%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(142 55% 36%);
+  --success-bg:      hsl(142 40% 90%);
+  --success-border:  hsl(142 35% 75%);
+  --success-fg:      hsl(142 45% 22%);
+  --warning:        hsl(45 80% 42%);
+  --warning-bg:      hsl(45 30% 89%);
+  --warning-border:  hsl(45 28% 78%);
+  --warning-fg:      hsl(40 55% 26%);
+  --error:          hsl(0 65% 48%);
+  --error-bg:        hsl(0 55% 91%);
+  --error-border:    hsl(0 45% 78%);
+  --error-fg:        hsl(0 55% 30%);
 }
 
 .dark[data-palette='emerald'] {
   --color-bg:             hsl(152 11%  8%);
   --color-sidebar:        hsl(152 11% 11%);
   --color-surface:        hsl(152 11% 13%);
-  --color-surface-raised: hsl(152 11%  5%);
+  --color-surface-raised: hsl(152 11% 18%);
   --color-subtle:         hsl(152 11% 13%);
   --color-border:         hsl(152 12% 17%);
   --color-border-input:   hsl(152 10% 26%);
@@ -381,9 +587,25 @@
   --color-text:           hsl(150 18% 92%);
   --color-muted:          hsl(150  7% 60%);
   --color-faint:          hsl(150  5% 48%);
-  --color-hover:          hsl(152 11% 13%);
-  --color-hover-subtle:   hsl(152 12% 17%);
+  --color-hover:          hsl(152 11% 20%);
+  --color-hover-subtle:   hsl(152 11% 16%);
   --color-skeleton:       hsl(152 12% 17%);
+
+  --destructive:       hsl(0 60% 58%);
+  --destructive-hover: hsl(0 60% 50%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(142 50% 55%);
+  --success-bg:      hsl(142 35% 20% / 0.4);
+  --success-border:  hsl(142 30% 30%);
+  --success-fg:      hsl(142 40% 78%);
+  --warning:        hsl(45 75% 55%);
+  --warning-bg:      hsl(45 40% 20% / 0.4);
+  --warning-border:  hsl(45 45% 32%);
+  --warning-fg:      hsl(42 60% 78%);
+  --error:          hsl(0 60% 58%);
+  --error-bg:        hsl(0 40% 20% / 0.4);
+  --error-border:    hsl(0 40% 32%);
+  --error-fg:        hsl(0 55% 80%);
 }
 
 /* ─── Catppuccin - Warm Lavender ─────────────────────────────────────────── */
@@ -421,13 +643,30 @@
   --accent-hover: #b389f0;
   --accent-fg:    #1e1e2e;
   --accent-ring:  rgb(203 166 247 / 0.25);
+
+  /* Status - darkened Catppuccin green/yellow/red for AA text contrast on white */
+  --destructive:       hsl(343 65% 52%);
+  --destructive-hover: hsl(343 65% 44%);
+  --destructive-fg:    #ffffff;
+  --success:        hsl(115 40% 40%);
+  --success-bg:      hsl(115 45% 90%);
+  --success-border:  hsl(115 35% 76%);
+  --success-fg:      hsl(115 40% 24%);
+  --warning:        hsl(41 65% 45%);
+  --warning-bg:      hsl(41 30% 89%);
+  --warning-border:  hsl(41 28% 78%);
+  --warning-fg:      hsl(38 55% 26%);
+  --error:          hsl(343 65% 52%);
+  --error-bg:        hsl(343 55% 91%);
+  --error-border:    hsl(343 45% 80%);
+  --error-fg:        hsl(343 50% 30%);
 }
 
 .dark[data-palette='catppuccin'] {
   --color-bg:             hsl(234 14% 10%);
   --color-sidebar:        hsl(233 14% 12%);
   --color-surface:        hsl(232 14% 14%);
-  --color-surface-raised: hsl(234 14%  6%);
+  --color-surface-raised: hsl(233 14% 18%);
   --color-subtle:         hsl(232 14% 14%);
   --color-border:         hsl(232 16% 18%);
   --color-border-input:   hsl(232 12% 26%);
@@ -435,9 +674,26 @@
   --color-text:           hsl(220 18% 92%);
   --color-muted:          hsl(228  8% 60%);
   --color-faint:          hsl(228  6% 48%);
-  --color-hover:          hsl(232 14% 14%);
-  --color-hover-subtle:   hsl(232 16% 18%);
+  --color-hover:          hsl(232 14% 21%);
+  --color-hover-subtle:   hsl(232 14% 17%);
   --color-skeleton:       hsl(232 16% 18%);
+
+  /* Status - authentic Catppuccin Mocha: green, yellow, red */
+  --destructive:       #F38BA8;
+  --destructive-hover: #ee6f92;
+  --destructive-fg:    #1e1e2e;
+  --success:        #A6E3A1;
+  --success-bg:      hsl(115 30% 20% / 0.4);
+  --success-border:  hsl(115 25% 32%);
+  --success-fg:      hsl(115 45% 82%);
+  --warning:        #F9E2AF;
+  --warning-bg:      hsl(41 35% 20% / 0.4);
+  --warning-border:  hsl(41 35% 34%);
+  --warning-fg:      hsl(41 70% 85%);
+  --error:          #F38BA8;
+  --error-bg:        hsl(343 35% 20% / 0.4);
+  --error-border:    hsl(343 30% 34%);
+  --error-fg:        hsl(343 60% 85%);
 }
 
 @layer base {
@@ -455,6 +711,12 @@
   [type='checkbox'],
   [type='radio'] {
     accent-color: var(--accent);
+  }
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
   }
   .page a {
     text-decoration-color: var(--accent);

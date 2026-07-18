@@ -37,6 +37,5 @@ def _unit_files() -> list[str]:
 def test_systemd_unit_file_is_readable(unit: str):
 	path = os.path.join(_SYSTEMD_DIR, unit)
 	assert os.path.isfile(path), f"Unit file missing: {path!r}"
-	with open(path) as f:
-		content = f.read()
+	content = Path(path).read_text(encoding="utf-8")
 	assert content.strip(), f"Unit file is empty: {path!r}"

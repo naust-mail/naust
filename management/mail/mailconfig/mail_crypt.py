@@ -45,7 +45,7 @@ _RECOVERY_TOTAL_LEN = 16
 _RECOVERY_CODE_COUNT = 4
 
 # HKDF info string domain-separates recovery/app-password key derivation.
-_HKDF_INFO = b"mailinabox mail_crypt slot v1"
+_HKDF_INFO = b"naust mail_crypt slot v1"
 
 # Argon2id parameters (spec-locked): time=3, memory=64 MiB, parallelism=4.
 _ARGON2_TIME = 3
@@ -93,7 +93,7 @@ def _generate_one_recovery_code() -> str:
 			break
 	chars = [_CROCKFORD[v] for v in data_values] + [_CROCKFORD[cs]]
 	raw = "".join(chars)
-	return "-".join(raw[i:i + 4] for i in range(0, _RECOVERY_TOTAL_LEN, 4))
+	return "-".join(raw[i : i + 4] for i in range(0, _RECOVERY_TOTAL_LEN, 4))
 
 
 def generate_recovery_codes() -> list[str]:

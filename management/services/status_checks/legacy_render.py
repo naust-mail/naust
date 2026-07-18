@@ -2,7 +2,7 @@
 # {type, text, detail, extra} list SystemStatusPage.vue renders.
 
 _LABEL_OVERRIDES = {
-	"miab-version": "Version Check",
+	"naust-version": "Version Check",
 	"ufw": "Firewall",
 	"filebrowser": "FileBrowser",
 	"fail2ban": "Fail2ban",
@@ -19,7 +19,7 @@ _ACRONYM_FIX = {
 	"Tls": "TLS",
 	"Ssh": "SSH",
 	"Imap": "IMAP",
-	"Miab": "MIAB",
+	"Miab": "NAUST",
 	"Rbl": "RBL",
 	"Ipv4": "IPv4",
 	"Ipv6": "IPv6",

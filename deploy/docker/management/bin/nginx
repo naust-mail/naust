@@ -1,0 +1,18 @@
+#!/bin/bash
+# Docker shim for helperd: intercepts `nginx -t` and routes it through the
+# cross-container control-socket-server bridge. The real nginx binary and
+# config tree live in the nginx container, not here.
+#
+# websync.go execs this by fixed absolute path (/usr/sbin/nginx -t), not via
+# $PATH lookup, so this shim is installed directly at /usr/sbin/nginx (there
+# is no real nginx binary in this container to shadow).
+
+set -euo pipefail
+
+if [ "${1:-}" != "-t" ]; then
+	echo "nginx shim: unsupported argument '${1:-}' (only -t is intercepted)" >&2
+	exit 1
+fi
+
+exec python3 /usr/local/lib/naust/_socket_send.py \
+	"${STORAGE_ROOT:-/home/user-data}/sockets/nginx.sock" nginx test

@@ -1,13 +1,19 @@
 #!/usr/bin/python3
 #
 # This is a command-line script for calling management APIs
-# on the Mail-in-a-Box control panel backend. The script
-# reads /var/lib/mailinabox/api.key for the backend's
+# on the Naust control panel backend. The script
+# reads /var/lib/naust/api.key for the backend's
 # root API key. This file is readable only by root, so this
 # tool can only be used as root.
 
-import sys, getpass, urllib.request, urllib.error, json, csv
+import sys
+import getpass
+import urllib.request
+import urllib.error
+import json
+import csv
 import contextlib
+import pathlib
 
 
 def mgmt(cmd, data=None, is_json=False):
@@ -23,7 +29,7 @@ def mgmt(cmd, data=None, is_json=False):
 		if e.code == 401:
 			with contextlib.suppress(Exception):
 				print(e.read().decode("utf8"))
-			print("The management daemon refused access. The API key file may be out of sync. Try 'service mailinabox restart'.", file=sys.stderr)
+			print("The management daemon refused access. The API key file may be out of sync. Try 'service naust restart'.", file=sys.stderr)
 		elif hasattr(e, 'read'):
 			print(e.read().decode('utf8'), file=sys.stderr)
 		else:
@@ -51,14 +57,14 @@ def read_password():
 
 def setup_key_auth(mgmt_uri):
 	try:
-		with open('/var/lib/mailinabox/api.key', encoding='utf-8') as f:
+		with open('/var/lib/naust/api.key', encoding='utf-8') as f:
 			key = f.read().strip()
 	except FileNotFoundError:
 		print("Management daemon is not running yet. Wait for startup to complete and try again.")
 		sys.exit(1)
 
 	auth_handler = urllib.request.HTTPBasicAuthHandler()
-	auth_handler.add_password(realm='Mail-in-a-Box Management Server', uri=mgmt_uri, user=key, passwd='')
+	auth_handler.add_password(realm='Naust Management Server', uri=mgmt_uri, user=key, passwd='')
 	opener = urllib.request.build_opener(auth_handler)
 	urllib.request.install_opener(opener)
 
@@ -158,10 +164,12 @@ elif sys.argv[1] == "user" and len(sys.argv) in {5, 6} and sys.argv[2:4] == ["mf
 elif sys.argv[1] == "user" and len(sys.argv) == 5 and sys.argv[2:4] == ["encryption", "status"]:
 	email = sys.argv[4]
 	import os as _os
+
 	_sys_path_base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 	sys.path.insert(0, _sys_path_base)
 	from core.utils import load_environment
 	from mail.mailconfig.database import open_database
+
 	_env = load_environment()
 	conn, c = open_database(_env, with_connection=True)
 	try:
@@ -183,18 +191,16 @@ elif sys.argv[1] == "user" and len(sys.argv) == 5 and sys.argv[2:4] == ["encrypt
 
 elif sys.argv[1] == "user" and len(sys.argv) == 4 and sys.argv[2:4] == ["encryption", "list"]:
 	import os as _os
+
 	_sys_path_base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 	sys.path.insert(0, _sys_path_base)
 	from core.utils import load_environment
 	from mail.mailconfig.database import open_database
+
 	_env = load_environment()
 	conn, c = open_database(_env, with_connection=True)
 	try:
-		c.execute(
-			"SELECT u.email, mk.slot_type FROM users u"
-			" JOIN mail_keys mk ON mk.user_id = u.id"
-			" ORDER BY u.email, mk.slot_type"
-		)
+		c.execute("SELECT u.email, mk.slot_type FROM users u JOIN mail_keys mk ON mk.user_id = u.id ORDER BY u.email, mk.slot_type")
 		rows = c.fetchall()
 	finally:
 		conn.close()
@@ -219,10 +225,12 @@ elif sys.argv[1] == "user" and len(sys.argv) == 5 and sys.argv[2:4] == ["encrypt
 		print("Confirmation did not match. Aborting.")
 		sys.exit(1)
 	import os as _os
+
 	_sys_path_base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 	sys.path.insert(0, _sys_path_base)
 	from core.utils import load_environment
 	from mail.mailconfig.database import open_database
+
 	_env = load_environment()
 	conn, c = open_database(_env, with_connection=True)
 	try:
@@ -255,9 +263,8 @@ elif sys.argv[1] == "alias" and sys.argv[2] == "remove" and len(sys.argv) == 4:
 elif sys.argv[1] == "filebrowser" and len(sys.argv) == 3 and sys.argv[2] in {"enable", "disable", "status"}:
 	import re
 
-	conf = "/etc/mailinabox.conf"
-	with open(conf, encoding="utf-8") as f:
-		content = f.read()
+	conf = "/etc/naust.conf"
+	content = pathlib.Path(conf).read_text(encoding="utf-8")
 	current = re.search(r'^ENABLE_FILEBROWSER=(.*)$', content, re.MULTILINE)
 	current_val = current.group(1).strip() if current else "true"
 
@@ -265,13 +272,11 @@ elif sys.argv[1] == "filebrowser" and len(sys.argv) == 3 and sys.argv[2] in {"en
 		print("FileBrowser is", "enabled" if current_val == "true" else "disabled")
 	elif sys.argv[2] == "enable":
 		content = re.sub(r'^ENABLE_FILEBROWSER=.*$', 'ENABLE_FILEBROWSER=true', content, flags=re.MULTILINE)
-		with open(conf, "w", encoding="utf-8") as f:
-			f.write(content)
-		print("FileBrowser enabled. Run 'sudo mailinabox' to install and start it.")
+		pathlib.Path(conf).write_text(content, encoding="utf-8")
+		print("FileBrowser enabled. Run 'sudo naust' to install and start it.")
 	elif sys.argv[2] == "disable":
 		content = re.sub(r'^ENABLE_FILEBROWSER=.*$', 'ENABLE_FILEBROWSER=false', content, flags=re.MULTILINE)
-		with open(conf, "w", encoding="utf-8") as f:
-			f.write(content)
+		pathlib.Path(conf).write_text(content, encoding="utf-8")
 		import os
 
 		sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

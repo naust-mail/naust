@@ -1,7 +1,7 @@
 """
 API token (PAT) management for the admin control panel.
 
-Tokens are formatted as miab_<secret> where secret is 256 bits of entropy. Only
+Tokens are formatted as naust_<secret> where secret is 256 bits of entropy. Only
 the HMAC-SHA256 of the secret (keyed by a server-side pepper) is stored - never
 the plaintext. The plaintext is returned once at creation and never retrievable
 again. Because the HMAC is deterministic, verify_token recomputes it and does an
@@ -80,7 +80,7 @@ def create_token(email: str, name: str, scope: str, env) -> str:
 		conn.close()
 		raise ValueError("Database error while creating token.") from e
 	conn.close()
-	return f"miab_{secret}"
+	return f"naust_{secret}"
 
 
 def list_tokens(email: str, env) -> list:
@@ -114,7 +114,7 @@ def revoke_all_tokens(email: str, env) -> None:
 
 
 def verify_token(plaintext: str, env):
-	"""Verify a plaintext token of the form miab_<secret>.
+	"""Verify a plaintext token of the form naust_<secret>.
 
 	Returns (email, scope, token_id) on success, None on failure.
 
@@ -125,9 +125,9 @@ def verify_token(plaintext: str, env):
 
 	last_used is updated at most once per 60 seconds to avoid a database write
 	on every request when tokens are used for automation."""
-	if not plaintext.startswith("miab_"):
+	if not plaintext.startswith("naust_"):
 		return None
-	secret = plaintext[len("miab_") :]
+	secret = plaintext[len("naust_") :]
 	if not secret:
 		return None
 	token_hash = _hash_secret(secret, env)

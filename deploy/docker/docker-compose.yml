@@ -1,4 +1,4 @@
-# Mail-in-a-Box - Docker Compose
+# Naust - Docker Compose
 #
 # Multi-container deployment that mirrors the bare-metal service layout.
 # Each container runs one logical service group and shares a named volume
@@ -9,7 +9,7 @@
 #   docker compose -f docker/docker-compose.yml up -d
 #
 # Optional services are gated by profiles:
-#   --profile oxi          webmail (oxi.email)
+#   --profile rav webmail (rav)
 #   --profile filebrowser  FileBrowser file manager
 #   --profile radicale     Radicale CardDAV/CalDAV
 #   --profile munin        Munin system monitoring
@@ -19,17 +19,17 @@
 networks:
   # Fixed subnet so the dns container can have a stable IP that other
   # containers reference as their DNS resolver.
-  miab-internal:
+  naust-internal:
     driver: bridge
     ipam:
       config:
         - subnet: 172.28.0.0/24
           ip_range: 172.28.0.128/25
 
-  # Isolated network shared only by nginx and webmail. Keeping oxi off the
+  # Isolated network shared only by nginx and webmail. Keeping rav off the
   # main internal network means no other container can reach it to spoof
   # X-Real-IP headers, even if compromised. nginx bridges both networks.
-  oxi-internal:
+  rav-internal:
     driver: bridge
     ipam:
       config:
@@ -49,14 +49,14 @@ volumes:
 
 services:
   dns:
-    image: ghcr.io/boomboompower/mailinabox-dns:latest
+    image: ghcr.io/naust-mail/naust-dns:latest
     build:
       context: ../..
       dockerfile: deploy/docker/dns/Dockerfile
-    container_name: miab-dns
+    container_name: naust-dns
     restart: unless-stopped
     networks:
-      miab-internal:
+      naust-internal:
         # Static IP so every other container can hard-code this as their
         # DNS resolver without a chicken-and-egg dependency on service
         # discovery.
@@ -81,10 +81,10 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: miab-redis
+    container_name: naust-redis
     restart: unless-stopped
     networks:
-      - miab-internal
+      - naust-internal
     volumes:
       - redis-data:/data
     healthcheck:
@@ -94,14 +94,14 @@ services:
       retries: 10
 
   rspamd:
-    image: ghcr.io/boomboompower/mailinabox-rspamd:latest
+    image: ghcr.io/naust-mail/naust-rspamd:latest
     build:
       context: ../..
       dockerfile: deploy/docker/rspamd/Dockerfile
-    container_name: miab-rspamd
+    container_name: naust-rspamd
     restart: unless-stopped
     networks:
-      - miab-internal
+      - naust-internal
     dns:
       - 172.28.0.2
     volumes:
@@ -124,14 +124,14 @@ services:
       start_period: 60s
 
   mail:
-    image: ghcr.io/boomboompower/mailinabox-mail:latest
+    image: ghcr.io/naust-mail/naust-mail:latest
     build:
       context: ../..
       dockerfile: deploy/docker/mail/Dockerfile
-    container_name: miab-mail
+    container_name: naust-mail
     restart: unless-stopped
     networks:
-      - miab-internal
+      - naust-internal
     dns:
       - 172.28.0.2
     ports:
@@ -165,21 +165,21 @@ services:
       start_period: 300s
 
   management:
-    image: ghcr.io/boomboompower/mailinabox-management:latest
+    image: ghcr.io/naust-mail/naust-management:latest
     build:
       context: ../..
       dockerfile: deploy/docker/management/Dockerfile
       args:
         BACKUP_TOOL: ${BACKUP_TOOL:-restic}
-    container_name: miab-management
+    container_name: naust-management
     restart: unless-stopped
     networks:
-      - miab-internal
+      - naust-internal
     dns:
       - 172.28.0.2
-    # Port 10222 is internal-only; nginx proxies /admin and the API.
+    # Port 10223 (managerd) is internal-only; nginx proxies /admin and the API.
     expose:
-      - "10222"
+      - "10223"
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
@@ -193,28 +193,31 @@ services:
       WEBMAIL_HOST: webmail
       FILEBROWSER_HOST: filebrowser
       BESZEL_HUB_HOST: beszel-hub
+      RSPAMD_HOST: rspamd
+      REDIS_HOST: redis
+      NGINX_HOST: nginx
     depends_on:
       mail:
         condition: service_healthy
       dns:
         condition: service_started
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo '' > /dev/tcp/127.0.0.1/10222"]
+      test: ["CMD", "bash", "-c", "echo '' > /dev/tcp/127.0.0.1/10223"]
       interval: 3s
       timeout: 2s
       retries: 20
       start_period: 5s
 
   nginx:
-    image: ghcr.io/boomboompower/mailinabox-nginx:latest
+    image: ghcr.io/naust-mail/naust-nginx:latest
     build:
       context: ../..
       dockerfile: deploy/docker/nginx/Dockerfile
-    container_name: miab-nginx
+    container_name: naust-nginx
     restart: unless-stopped
     networks:
-      - miab-internal
-      - oxi-internal
+      - naust-internal
+      - rav-internal
     dns:
       - 172.28.0.2
     ports:
@@ -237,21 +240,21 @@ services:
       start_period: 15s
 
   # ---------------------------------------------------------------------------
-  # Optional: oxi.email webmail  (--profile oxi)
+  # Optional: rav  (--profile rav)
   # ---------------------------------------------------------------------------
 
   webmail:
-    image: ghcr.io/boomboompower/mailinabox-webmail:latest
+    image: ghcr.io/naust-mail/naust-webmail:latest
     build:
       context: ../..
       dockerfile: deploy/docker/webmail/Dockerfile
-    container_name: miab-webmail
+    container_name: rav
     restart: unless-stopped
     profiles:
-      - oxi
+      - rav
     networks:
-      - miab-internal
-      - oxi-internal
+      - naust-internal
+      - rav-internal
     dns:
       - 172.28.0.2
     expose:
@@ -262,11 +265,11 @@ services:
       - .env
     environment:
       RUNTIME: docker
-      # oxi connects to Dovecot and Postfix by container service name.
+      # rav connects to Dovecot and Postfix by container service name.
       IMAP_HOST: mail
       SMTP_HOST: mail
-      # Only trust forwarded IP headers from connections arriving on oxi-internal,
-      # which only nginx can reach. Other miab-internal containers connect on a
+      # Only trust forwarded IP headers from connections arriving on rav-internal,
+      # which only nginx can reach. Other naust-internal containers connect on a
       # separate interface and are not in the trusted range.
       TRUSTED_PROXIES: "172.29.0.0/29"
     depends_on:
@@ -284,16 +287,16 @@ services:
   # ---------------------------------------------------------------------------
 
   filebrowser:
-    image: ghcr.io/boomboompower/mailinabox-filebrowser:latest
+    image: ghcr.io/naust-mail/naust-filebrowser:latest
     build:
       context: ../..
       dockerfile: deploy/docker/optional/filebrowser/Dockerfile
-    container_name: miab-filebrowser
+    container_name: naust-filebrowser
     restart: unless-stopped
     profiles:
       - filebrowser
     networks:
-      - miab-internal
+      - naust-internal
     dns:
       - 172.28.0.2
     expose:
@@ -321,16 +324,16 @@ services:
   # ---------------------------------------------------------------------------
 
   radicale:
-    image: ghcr.io/boomboompower/mailinabox-radicale:latest
+    image: ghcr.io/naust-mail/naust-radicale:latest
     build:
       context: ../..
       dockerfile: deploy/docker/optional/radicale/Dockerfile
-    container_name: miab-radicale
+    container_name: naust-radicale
     restart: unless-stopped
     profiles:
       - radicale
     networks:
-      - miab-internal
+      - naust-internal
     dns:
       - 172.28.0.2
     expose:
@@ -358,19 +361,22 @@ services:
   # ---------------------------------------------------------------------------
 
   munin:
-    image: ghcr.io/boomboompower/mailinabox-munin:latest
+    image: ghcr.io/naust-mail/naust-munin:latest
     build:
       context: ../..
       dockerfile: deploy/docker/monitoring/Dockerfile
-    container_name: miab-munin
+    container_name: naust-munin
     restart: unless-stopped
     profiles:
       - munin
     networks:
-      - miab-internal
+      - naust-internal
     dns:
       - 172.28.0.2
     expose:
+      # 4948: muninweb (rendered site + graph CGI, fronted by nginx at cutover)
+      - "4948"
+      # 4949: munin-node collection protocol
       - "4949"
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
@@ -395,16 +401,16 @@ services:
   # ---------------------------------------------------------------------------
 
   clamav:
-    image: ghcr.io/boomboompower/mailinabox-clamav:latest
+    image: ghcr.io/naust-mail/naust-clamav:latest
     build:
       context: ../..
       dockerfile: deploy/docker/optional/clamav/Dockerfile
-    container_name: miab-clamav
+    container_name: naust-clamav
     restart: unless-stopped
     profiles:
       - clamav
     networks:
-      - miab-internal
+      - naust-internal
     expose:
       - "7357"
     healthcheck:
@@ -419,16 +425,16 @@ services:
   # ---------------------------------------------------------------------------
 
   beszel-hub:
-    image: ghcr.io/boomboompower/mailinabox-beszel-hub:latest
+    image: ghcr.io/naust-mail/naust-beszel-hub:latest
     build:
       context: ../..
       dockerfile: deploy/docker/beszel-hub/Dockerfile
-    container_name: miab-beszel-hub
+    container_name: naust-beszel-hub
     restart: unless-stopped
     profiles:
       - beszel
     networks:
-      - miab-internal
+      - naust-internal
     dns:
       - 172.28.0.2
     expose:
@@ -452,16 +458,16 @@ services:
       start_period: 20s
 
   beszel-agent:
-    image: ghcr.io/boomboompower/mailinabox-beszel-agent:latest
+    image: ghcr.io/naust-mail/naust-beszel-agent:latest
     build:
       context: ../..
       dockerfile: deploy/docker/beszel-agent/Dockerfile
-    container_name: miab-beszel-agent
+    container_name: naust-beszel-agent
     restart: unless-stopped
     profiles:
       - beszel
     networks:
-      - miab-internal
+      - naust-internal
     expose:
       - "45876"
     volumes:

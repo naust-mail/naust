@@ -3,7 +3,7 @@ from urllib.parse import urlsplit, urlunsplit
 from .config import get_backup_config, get_target_type, get_passphrase
 
 # duplicity lives in the management venv so system pip is never touched.
-DUPLICITY = "/usr/local/lib/mailinabox/env/bin/duplicity"
+DUPLICITY = "/usr/local/lib/naust/env/bin/duplicity"
 
 
 def get_duplicity_target_url(config):
@@ -42,8 +42,8 @@ def get_duplicity_additional_args(env):
 			port = 22
 
 		return [
-			f"--ssh-options='-i /root/.ssh/id_rsa_miab -p {port}'",
-			f"--rsync-options='-e \"/usr/bin/ssh -oStrictHostKeyChecking=no -oBatchMode=yes -p {port} -i /root/.ssh/id_rsa_miab\"'",
+			f"--ssh-options='-i /root/.ssh/id_rsa_naust -p {port}'",
+			f"--rsync-options='-e \"/usr/bin/ssh -oStrictHostKeyChecking=no -oBatchMode=yes -p {port} -i /root/.ssh/id_rsa_naust\"'",
 		]
 	if get_target_type(config) == 's3':
 		# See note about hostname in get_duplicity_target_url.

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-source /etc/mailinabox.conf
+source /etc/naust.conf
 
 case "$1" in
     reload)

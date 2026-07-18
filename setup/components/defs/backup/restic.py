@@ -18,7 +18,7 @@ import tempfile
 from doit.tools import config_changed
 
 from ...component import Component
-from . import backup_key_task
+from . import backup_key_task, ssh_key_task
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -42,15 +42,15 @@ COMPONENT = Component(
 
 # Pinned fallback: only used when apt-cache show restic fails.
 # Update both together when bumping.
-_RESTIC_VERSION = "0.19.0"
-_RESTIC_SHA256 = "13176fe6d89d4357947a2cd107218ab2873a5f9d8e1ac2d4cd1c8e07e6839c21"
+_RESTIC_VERSION = "0.19.1"
+_RESTIC_SHA256 = "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c"
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
-	tasks = [backup_key_task(env["STORAGE_ROOT"])]
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
+	tasks = [backup_key_task(env["STORAGE_ROOT"]), ssh_key_task(env["STORAGE_ROOT"])]
 
 	# Only needed when apt doesn't carry restic - the batched apt install in the
 	# runner handles the apt case via COMPONENT.packages.
@@ -78,8 +78,10 @@ def _install_restic() -> None:
 	asset. Update both _RESTIC_VERSION and _RESTIC_SHA256 together when bumping.
 	"""
 	url = f"https://github.com/restic/restic/releases/download/v{_RESTIC_VERSION}/restic_{_RESTIC_VERSION}_linux_amd64.bz2"
-	bz2_path = "/tmp/restic.bz2"
+	bz2_fd, bz2_path = tempfile.mkstemp(suffix=".bz2")
+	os.close(bz2_fd)
 	try:
+		print(f"Downloading restic {_RESTIC_VERSION}...", flush=True)
 		subprocess.run(["wget", "-q", "-O", bz2_path, url], check=True)
 
 		# Verify SHA256.
@@ -91,7 +93,8 @@ def _install_restic() -> None:
 			check=False,
 		)
 		if result.returncode != 0:
-			raise RuntimeError(f"restic SHA256 mismatch: {result.stderr.strip()}")
+			msg = f"restic SHA256 mismatch: {result.stderr.strip()}"
+			raise RuntimeError(msg)
 
 		# Decompress and install.
 		with open(bz2_path, "rb") as src, tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as tmp:

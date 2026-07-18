@@ -2,7 +2,6 @@
 #   POST /auth/verify - internal credential check for Radicale/FileBrowser, with rate limiter
 #   GET  /auth/methods - login path discovery, must not leak user existence
 
-from unittest.mock import patch
 
 _KICK = "mail.mailconfig.sync.kick"
 _DOVEADM = "mail.mailconfig.users.dovecot_quota_recalc"

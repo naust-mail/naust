@@ -6,11 +6,13 @@ Status values: OK, WARN, ERR, OFF.
 """
 
 import datetime
+import glob
 import os
 import re
 import socket
 import pathlib
 import subprocess
+import contextlib
 
 OK = "ok"
 WARN = "warn"
@@ -90,9 +92,10 @@ def _smtp_unix_present() -> bool | None:
 				parts = line.split()
 				if len(parts) >= 2 and parts[0] == "smtp" and parts[1] == "unix":
 					return True
-		return False
 	except OSError:
 		return None  # can't read master.cf - skip check rather than false-positive
+	else:
+		return False
 
 
 # -- Service checks -------------------------------------------------------------
@@ -159,24 +162,24 @@ def check_spam(conf):
 
 
 def check_webmail(conf):
-	client = conf.get("WEBMAIL_CLIENT", "oxi")
+	client = conf.get("WEBMAIL_CLIENT", "rav")
 	if client == "none":
 		return OFF, "No webmail configured"
-	if client == "oxi":
-		if not _systemd_active("oxi-email"):
-			return ERR, "oxi-email service not running"
+	if client == "rav":
+		if not _systemd_active("rav"):
+			return ERR, "rav service not running"
 		if not _port_open("127.0.0.1", 3001):
-			return WARN, "oxi-email running but not responding on port 3001"
+			return WARN, "rav running but not responding on port 3001"
 		# HTTP probe to confirm the app is actually serving responses
 		try:
-			import urllib.request  # noqa: PLC0415
+			import urllib.request
 
 			with urllib.request.urlopen("http://127.0.0.1:3001/", timeout=3) as resp:
 				if resp.status >= 500:
-					return WARN, f"oxi-email responding with HTTP {resp.status}"
+					return WARN, f"rav responding with HTTP {resp.status}"
 		except Exception:  # noqa: BLE001
-			return WARN, "oxi-email port open but HTTP probe failed"
-		return OK, "oxi.email running"
+			return WARN, "rav port open but HTTP probe failed"
+		return OK, "rav running"
 	# php-fpm service name varies by version; find any active unit matching the pattern
 	r = subprocess.run(
 		["systemctl", "list-units", "--state=active", "--no-legend", "--plain", "php*-fpm.service"],
@@ -302,9 +305,8 @@ def check_nginx(_conf):
 			)
 			return ERR, f"nginx not running - config error: {first_err}"
 		return ERR, "nginx not running"
-	local_conf = "/etc/nginx/conf.d/local.conf"
-	if not os.path.exists(local_conf) or os.path.getsize(local_conf) == 0:
-		return WARN, "No domain config generated yet - run web_update"
+	if not glob.glob("/etc/nginx/naust.d/*.conf"):
+		return WARN, "No site config generated yet - is naust-managerd running?"
 	if not _port_open("127.0.0.1", 443):
 		# Distinguish nothing listening vs TLS-level failure.
 		if not _port_open("127.0.0.1", 80):
@@ -386,9 +388,10 @@ def _netdata_api_ok(port: int = 19999) -> bool:
 			if b'"version"' in data:
 				break
 		conn.close()
-		return b'"version"' in data
 	except OSError:
 		return False
+	else:
+		return b'"version"' in data
 
 
 def _munin_node_responsive() -> bool:
@@ -479,10 +482,8 @@ def check_monitoring(conf):
 				return WARN, "munin-node running but no RRD data yet (cron may not have run)"
 			mtimes = []
 			for f in rrds:
-				try:
+				with contextlib.suppress(OSError):
 					mtimes.append(f.stat().st_mtime)
-				except OSError:
-					pass
 			if mtimes:
 				age_min = (datetime.datetime.now().timestamp() - max(mtimes)) / 60
 				if age_min > 12:
@@ -532,10 +533,10 @@ def check_system(conf):
 
 
 def check_management(_conf):
-	if not _systemd_active("mailinabox"):
+	if not _systemd_active("naust-managerd"):
 		return ERR, "Management daemon not running"
-	if not _port_open("127.0.0.1", 10222):
-		return WARN, "Service active but API port 10222 not responding"
+	if not _port_open("127.0.0.1", 10223):
+		return WARN, "Service active but API port 10223 not responding"
 	return OK, "Running"
 
 
@@ -544,12 +545,14 @@ def check_relay(conf):
 	settings_path = os.path.join(storage_root, "settings.yaml")
 	try:
 		import yaml
-
+	except ImportError:
+		return WARN, "PyYAML not installed - cannot read relay settings"
+	try:
 		with open(settings_path, encoding="utf-8") as f:
 			settings = yaml.safe_load(f) or {}
 	except FileNotFoundError:
 		return OFF, "No relay configured"
-	except Exception:
+	except Exception:  # noqa: BLE001 - malformed/unreadable settings.yaml, surfaced as a health-check warning not a crash
 		return WARN, "Cannot read settings.yaml"
 
 	relay = settings.get("smtp_relay", {}) if isinstance(settings, dict) else {}

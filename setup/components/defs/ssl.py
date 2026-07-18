@@ -48,7 +48,7 @@ _TOOLS_DIR = os.path.join(SETUP_DIR, "tools")
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	ssl_dir = os.path.join(storage_root, "ssl")
 	key = os.path.join(ssl_dir, "ssl_private_key.pem")
@@ -91,7 +91,15 @@ def _generate_key(key: str) -> None:
 	PID, fixed-time clocks). system.sh seeds /dev/urandom via haveged/rng-tools
 	before this runs, so we should be fine in practice.
 	"""
-	os.makedirs(os.path.dirname(key), exist_ok=True)
+	ssl_dir = os.path.dirname(key)
+	os.makedirs(ssl_dir, exist_ok=True)
+	# Explicit chmod: os.makedirs's mode is masked by the ambient umask, which
+	# isn't controlled here. The directory must stay world-traversable so
+	# services like rav (via the ssl-cert group) can reach ssl_certificate.pem
+	# inside it - a restrictive umask (e.g. 027) would otherwise block that
+	# even though the cert file itself is correctly group-readable.
+	os.chmod(ssl_dir, 0o755)
+	print("Generating a 2048-bit RSA private key...", flush=True)
 	old_umask = os.umask(0o177)
 	try:
 		subprocess.run(
@@ -114,8 +122,8 @@ def _generate_cert(env: dict, key: str, ssl_dir: str, cert_link: str) -> None:
 	hostname = env.get("PRIMARY_HOSTNAME", "localhost")
 
 	san_parts = [f"DNS:{hostname}"]
-	for extra in os.environ.get("SSL_EXTRA_SANS", "").split(","):
-		extra = extra.strip()
+	for raw_extra in os.environ.get("SSL_EXTRA_SANS", "").split(","):
+		extra = raw_extra.strip()
 		if extra:
 			san_parts.append(f"IP:{extra}" if extra[0].isdigit() else f"DNS:{extra}")
 
@@ -123,7 +131,7 @@ def _generate_cert(env: dict, key: str, ssl_dir: str, cert_link: str) -> None:
 
 	with tempfile.NamedTemporaryFile(suffix=".csr", delete=False) as f:
 		csr = f.name
-	with tempfile.NamedTemporaryFile(mode="w", suffix=".ext", delete=False) as f:
+	with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w", suffix=".ext", delete=False) as f:
 		f.write(f"subjectAltName={','.join(san_parts)}\n")
 		ext = f.name
 	try:
@@ -146,7 +154,7 @@ def _generate_cert(env: dict, key: str, ssl_dir: str, cert_link: str) -> None:
 		os.unlink(ext)
 
 	# Cert is public data (transmitted in every TLS handshake). Make it readable
-	# by the ssl-cert group so services like oxi can verify loopback TLS connections
+	# by the ssl-cert group so services like rav can verify loopback TLS connections
 	# without a copy. Private key stays 0600/root.
 	shutil.chown(dated, group="ssl-cert")
 	os.chmod(dated, 0o640)
@@ -160,16 +168,16 @@ def _generate_cert(env: dict, key: str, ssl_dir: str, cert_link: str) -> None:
 def _install_cron(cleanup_src: str) -> None:
 	"""Copy ssl_cleanup to a fixed system path and write the daily cron job.
 
-	Installing to /usr/local/lib/mailinabox/ means the cron survives the
+	Installing to /usr/local/lib/naust/ means the cron survives the
 	setup repo being deleted after install.
 	"""
-	dest = "/usr/local/lib/mailinabox/ssl_cleanup"
+	dest = "/usr/local/lib/naust/ssl_cleanup"
 	if os.path.exists(cleanup_src):
 		shutil.copy2(cleanup_src, dest)
 		os.chmod(dest, 0o755)
 
 	artifacts.write_file(
-		"/etc/cron.daily/mailinabox-ssl-cleanup",
-		f"#!/bin/bash\n# Mail-in-a-Box - remove SSL certs that expired more than 7 days ago.\n{dest}\n",
+		"/etc/cron.daily/naust-ssl-cleanup",
+		f"#!/bin/bash\n# Naust - remove SSL certs that expired more than 7 days ago.\n{dest}\n",
 		mode=0o755,
 	)

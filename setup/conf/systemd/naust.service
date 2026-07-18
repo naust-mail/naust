@@ -1,0 +1,12 @@
+[Unit]
+Description=Naust System Management Service
+After=network.target
+Before=postfix.service dovecot.service
+
+[Service]
+Type=idle
+IgnoreSIGPIPE=False
+ExecStart=/usr/local/lib/naust/start
+
+[Install]
+WantedBy=multi-user.target

@@ -3,12 +3,13 @@
 import json
 import os
 import secrets
+import shutil
 import sqlite3
 import sys
 import time
 import uuid
 
-BARE_METAL_CONF = "/etc/mailinabox.conf"
+BARE_METAL_CONF = "/etc/naust.conf"
 
 
 def run(show_cert: bool = False, install: bool = False, from_installer: bool = False) -> None:
@@ -23,9 +24,9 @@ def run(show_cert: bool = False, install: bool = False, from_installer: bool = F
 
 	conf = {}
 	try:
-		with open(BARE_METAL_CONF) as f:
-			for ln in f:
-				ln = ln.strip()
+		with open(BARE_METAL_CONF, encoding="utf-8") as f:
+			for raw_ln in f:
+				ln = raw_ln.strip()
 				if not ln or ln.startswith('#') or '=' not in ln:
 					continue
 				k, _, v = ln.partition('=')
@@ -41,18 +42,18 @@ def run(show_cert: bool = False, install: bool = False, from_installer: bool = F
 		print(f"\n  {red('STORAGE_ROOT or PRIMARY_HOSTNAME missing from config. Has setup been run?')}\n")
 		sys.exit(1)
 
-	db_path = os.path.join(storage_root, 'mail/db/users.sqlite')
+	db_path = os.path.join(storage_root, 'control/manager.sqlite')
 	if not os.path.exists(db_path):
-		print(f"\n  {red('Database not found. Has setup been run?')}\n")
+		print(f"\n  {red('Database not found. Is naust-managerd running? Has setup been run?')}\n")
 		sys.exit(1)
 
 	conn = sqlite3.connect(db_path)
-	rows = conn.execute("SELECT privileges FROM users").fetchall()
+	admins = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0]
 	conn.close()
-	if any('admin' in row[0].split('\n') for row in rows):
+	if admins > 0:
 		if install:
 			print()
-			print(f"  {bold('Mail-in-a-Box setup complete.')}")
+			print(f"  {bold('Naust setup complete.')}")
 			print(f"  {line()}")
 			print(f"  {'Admin panel':<18} {lavender(f'https://{hostname}/admin')}")
 			if show_cert:
@@ -74,16 +75,19 @@ def run(show_cert: bool = False, install: bool = False, from_installer: bool = F
 		print(f"\n  {red('An admin account already exists. Bootstrap is not available.')}\n")
 		sys.exit(1)
 
-	_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-	code = ''.join(secrets.choice(_CODE_CHARS) for _ in range(8))
+	CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+	code = ''.join(secrets.choice(CODE_CHARS) for _ in range(8))
 	token_id = str(uuid.uuid4())
 	expires_at = int(time.time()) + 15 * 60
 
-	token_path = os.path.join(storage_root, 'bootstrap.token')
+	# Lives in the daemon-owned control/ directory: managerd must be able
+	# to bump the attempt counter and delete the file once consumed.
+	token_path = os.path.join(storage_root, 'control', 'bootstrap.token')
 	tmp_path = token_path + '.tmp'
 	fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
 	with os.fdopen(fd, 'w') as f:
 		json.dump({'uuid': token_id, 'code': code, 'expires': expires_at, 'attempts': 0}, f)
+	shutil.chown(tmp_path, 'naust', 'naust')
 	os.replace(tmp_path, token_path)
 
 	url = f"https://{hostname}/admin/setup?code={code}"
@@ -95,7 +99,7 @@ def run(show_cert: bool = False, install: bool = False, from_installer: bool = F
 	display_code = f"{code[:4]} {code[4:]}"
 
 	print()
-	print(f"  {bold('Welcome to Mail-in-a-Box')}")
+	print(f"  {bold('Welcome to Naust')}")
 	print(f"  {line()}")
 	print(f"  {'Setup code':<{col}} {green(bold(display_code))}")
 	print(f"  {'Open':<{col}} {lavender(url)}")

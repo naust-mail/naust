@@ -6,7 +6,6 @@ so tests run without system daemons.
 
 from unittest.mock import patch
 
-import pytest
 
 # kick is imported lazily via `from .sync import kick` inside each function.
 _KICK_ALIAS = "mail.mailconfig.sync.kick"

@@ -10,7 +10,6 @@
 
 from unittest.mock import patch
 
-import pytest
 
 _TOKEN_KEY_CACHE = "auth.api_tokens._server_key_cache"
 
@@ -37,7 +36,7 @@ def test_create_token_returns_plaintext_token(admin_client, admin_env):
 	resp = admin_client.post("/tokens", data={"name": "ci-token", "scope": "write"})
 	data = resp.get_json()
 	assert "token" in data
-	assert data["token"].startswith("miab_")
+	assert data["token"].startswith("naust_")
 
 
 def test_create_token_read_scope(admin_client, admin_env):
@@ -45,7 +44,7 @@ def test_create_token_read_scope(admin_client, admin_env):
 	resp = admin_client.post("/tokens", data={"name": "read-token", "scope": "read"})
 	assert resp.status_code == 200
 	data = resp.get_json()
-	assert data["token"].startswith("miab_")
+	assert data["token"].startswith("naust_")
 
 
 def test_create_token_missing_name_returns_400(admin_client, admin_env):
@@ -246,7 +245,6 @@ def test_write_scope_token_cannot_grant_admin_privilege(app, admin_client, admin
 	Adding a regular user is allowed; only the privilege-escalation route is restricted."""
 	_reset_token_cache()
 	# First add the user via Basic auth (full scope) so the account exists.
-	from unittest.mock import patch
 
 	with patch("mail.mailconfig.sync.kick", return_value="ok"), patch("mail.mailconfig.users.dovecot_quota_recalc"):
 		admin_client.post("/mail/users/add", data={"email": "privtarget@box.example.com", "password": "Password123!"})

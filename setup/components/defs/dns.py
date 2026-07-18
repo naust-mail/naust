@@ -21,7 +21,7 @@ import subprocess
 from doit.tools import config_changed, run_once
 
 from .. import artifacts, SETUP_DIR
-from ..component import Component, DOCKER
+from ..component import Component
 
 # ── Component declaration ─────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ _TOOLS_DIR = os.path.join(SETUP_DIR, "tools")
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 
-def make_tasks(env: dict, runtime: str) -> list[dict]:
+def make_tasks(env: dict, _runtime: str) -> list[dict]:
 	storage_root = env["STORAGE_ROOT"]
 	dnssec_dir = os.path.join(storage_root, "dns", "dnssec")
 	dns_update_src = os.path.join(_TOOLS_DIR, "dns_update")
@@ -156,7 +156,7 @@ def _configure(env: dict, dns_update_src: str) -> None:
 	ip_lines = "".join(f"  ip-address: {ip}\n" for ip in filter(None, [env.get("PRIVATE_IP", ""), env.get("PRIVATE_IPV6", "")]))
 	artifacts.write_file(
 		"/etc/nsd/nsd.conf",
-		"# Do not edit. Overwritten by Mail-in-a-Box setup.\n"
+		"# Do not edit. Overwritten by Naust setup.\n"
 		"server:\n"
 		"  hide-version: yes\n"
 		'  logfile: "/var/log/nsd.log"\n'
@@ -179,18 +179,13 @@ def _configure(env: dict, dns_update_src: str) -> None:
 		"/var/log/nsd.log {\n  weekly\n  missingok\n  rotate 12\n  compress\n  delaycompress\n  notifempty\n}\n",
 	)
 
-	# Install dns_update to a fixed path so cron and the management daemon can
-	# call it after the setup repo is deleted.
-	dest = "/usr/local/lib/mailinabox/dns_update"
+	# Install dns_update to a fixed path. Vestigial: managerd now re-signs zones
+	# natively (ldns-signzone via its daily applier kick), so this tool has no
+	# runtime caller and its former daily cron is retired. Kept until the
+	# tree-cleanup pass removes setup/tools/dns_update.
+	dest = "/usr/local/lib/naust/dns_update"
 	if os.path.exists(dns_update_src):
 		shutil.copy2(dns_update_src, dest)
 		os.chmod(dest, 0o755)
-
-	# DNSSEC signatures have a 30-day validity window; re-sign daily.
-	artifacts.write_file(
-		"/etc/cron.daily/mailinabox-dnssec",
-		f"#!/bin/bash\n# Mail-in-a-Box - re-sign DNS zones before DNSSEC signatures expire.\n{dest}\n",
-		mode=0o755,
-	)
 
 	artifacts.ufw_allow("domain")

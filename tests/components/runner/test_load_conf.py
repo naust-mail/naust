@@ -5,7 +5,6 @@ Covers key-value parsing, quote stripping, and the missing-file behavior
 (returns {} instead of raising, matching boxctl.runner.load_conf behavior).
 """
 
-import pytest
 from components.runner import load_conf
 
 
@@ -66,7 +65,7 @@ def test_empty_file(tmp_path):
 
 def test_missing_file_returns_empty_dict():
 	"""Missing file must return {} not raise FileNotFoundError."""
-	result = load_conf("/nonexistent/path/to/mailinabox.conf")
+	result = load_conf("/nonexistent/path/to/naust.conf")
 	assert result == {}
 
 
