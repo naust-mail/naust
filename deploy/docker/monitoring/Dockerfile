@@ -2,7 +2,7 @@
 # site and wraps munin-cgi-graph). Stdlib-only, so this stage downloads no
 # modules. Bare metal installs this via the daemon component; Docker images
 # ship their binaries at image build time.
-FROM golang:1.22 AS daemon-builder
+FROM golang:1.25 AS daemon-builder
 
 COPY daemon /daemon
 RUN cd /daemon && CGO_ENABLED=0 go build -o /muninweb ./cmd/muninweb

@@ -32,12 +32,6 @@ def _build_tasks_for(component_name: str) -> list[dict]:
 # ── build: True filtering ─────────────────────────────────────────────────────
 
 
-def test_management_has_two_build_safe_tasks():
-	tasks = _build_tasks_for("management")
-	names = [t["name"] for t in tasks]
-	assert names == ["virtualenv", "pip-install"]
-
-
 def test_duplicity_has_two_build_safe_tasks():
 	tasks = _build_tasks_for("duplicity")
 	assert [t["name"] for t in tasks] == ["virtualenv", "pip-install"]
@@ -103,13 +97,13 @@ def test_build_calls_ensure_installed_with_component_packages():
 	from components.runner import build
 
 	with patch("components.runner.pkg.ensure_installed") as mock_install, patch("components.runner._run_doit"):
-		build(["management"])
+		build(["duplicity"])
 
 	mock_install.assert_called_once()
 	installed = set(mock_install.call_args[0][0])
-	# management COMPONENT.packages
+	# duplicity COMPONENT.packages
 	assert "virtualenv" in installed
-	assert "certbot" in installed
+	assert "python3-pip" in installed
 
 
 def test_build_skips_ensure_installed_when_no_packages():
@@ -132,17 +126,17 @@ def test_build_does_not_call_run_doit_when_no_build_tasks():
 	mock_doit.assert_not_called()
 
 
-def test_build_calls_run_doit_for_management():
-	"""management has build-safe tasks, so _run_doit must be called."""
+def test_build_calls_run_doit_for_duplicity():
+	"""duplicity has build-safe tasks, so _run_doit must be called."""
 	from components.runner import build
 
 	with patch("components.runner.pkg.ensure_installed"), patch("components.runner._run_doit") as mock_doit:
-		build(["management"])
+		build(["duplicity"])
 
 	mock_doit.assert_called_once()
 	component_tasks = mock_doit.call_args[0][0]
-	assert "management" in component_tasks
-	task_names = [t["name"] for t in component_tasks["management"]]
+	assert "duplicity" in component_tasks
+	task_names = [t["name"] for t in component_tasks["duplicity"]]
 	assert "virtualenv" in task_names
 	assert "pip-install" in task_names
 

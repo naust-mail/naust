@@ -140,4 +140,4 @@ indent-style = "tab"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["setup", "management"]
+pythonpath = ["setup"]

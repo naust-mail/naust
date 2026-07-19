@@ -19,12 +19,12 @@ def _main(component_names):
 
 
 def test_known_component_calls_ensure_installed():
-	mock_install = _main(["management"])
+	mock_install = _main(["postfix"])
 	mock_install.assert_called_once()
 	packages = mock_install.call_args[0][0]
-	# management COMPONENT.packages includes at least these
-	assert "virtualenv" in packages
-	assert "certbot" in packages
+	# postfix COMPONENT.packages includes at least these
+	assert "postfix" in packages
+	assert "ca-certificates" in packages
 
 
 def test_component_with_no_packages_does_not_call_ensure_installed():
@@ -35,14 +35,14 @@ def test_component_with_no_packages_does_not_call_ensure_installed():
 
 def test_multiple_components_batched_into_one_call():
 	"""Packages from multiple components must be batched into a single install call."""
-	mock_install = _main(["ssl", "management"])
+	mock_install = _main(["ssl", "postfix"])
 	# Either called once (batched) or not called if union is empty.
 	assert mock_install.call_count <= 1
 	if mock_install.call_count == 1:
 		pkgs = mock_install.call_args[0][0]
-		# ssl has openssl, management has virtualenv etc.
+		# ssl has openssl, postfix has postfix etc.
 		assert "openssl" in pkgs
-		assert "virtualenv" in pkgs
+		assert "postfix" in pkgs
 
 
 def test_unknown_component_exits_nonzero():
@@ -55,7 +55,7 @@ def test_unknown_component_exits_nonzero():
 
 def test_packages_are_sorted():
 	"""Sorted package list ensures deterministic apt-get invocations."""
-	mock_install = _main(["management"])
+	mock_install = _main(["postfix"])
 	if mock_install.call_count == 1:
 		packages = mock_install.call_args[0][0]
 		assert packages == sorted(packages), "packages passed to ensure_installed must be sorted"

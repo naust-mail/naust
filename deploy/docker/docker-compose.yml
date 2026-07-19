@@ -67,7 +67,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
     healthcheck:
@@ -107,7 +108,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       REDIS_HOST: redis
@@ -143,7 +145,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       RSPAMD_HOST: rspamd
@@ -183,7 +186,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       MAIL_HOST: mail
@@ -226,7 +230,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
     depends_on:
@@ -262,7 +267,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       # rav connects to Dovecot and Postfix by container service name.
@@ -304,7 +310,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       MANAGEMENT_HOST: management
@@ -342,7 +349,8 @@ services:
       - storage:${STORAGE_ROOT:-/home/user-data}
       - radicale-collections:/var/lib/radicale
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       MANAGEMENT_HOST: management
@@ -381,7 +389,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
     depends_on:
@@ -442,7 +451,8 @@ services:
     volumes:
       - storage:${STORAGE_ROOT:-/home/user-data}
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       TRUSTED_AUTH_HEADER: X-Beszel-User
@@ -477,7 +487,8 @@ services:
       - /sys:/sys:ro
     pid: "host"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       RUNTIME: docker
       HUB_URL: http://beszel-hub:8090

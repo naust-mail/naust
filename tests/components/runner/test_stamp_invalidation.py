@@ -44,7 +44,7 @@ def _noopify(graph: dict[str, list[dict]]) -> dict[str, list[dict]]:
 # Components that must be cached on a second unchanged run. These all use
 # config_changed(fn_stamp(...)) or config_changed(version_stamp) - their
 # uptodate result is purely stamp-driven with no filesystem side conditions.
-_MUST_CACHE = {"postfix", "rspamd", "dovecot", "dns", "ssl", "management", "users", "nginx"}
+_MUST_CACHE = {"postfix", "rspamd", "dovecot", "dns", "ssl", "users", "nginx"}
 
 
 def test_stamps_prevent_reruns(tmp_path):
