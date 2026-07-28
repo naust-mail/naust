@@ -63,13 +63,13 @@ func (s *Server) handleChecksRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.Checks.RunNow(checks.RunRequest{
-	    Checks: req.Checks,
-	    Category: req.Category,
-	    Domain: req.Domain,
+		Checks:   req.Checks,
+		Category: req.Category,
+		Domain:   req.Domain,
 	}) {
-        writeError(w, http.StatusConflict, "checks already running")
-        return
-    }
+		writeError(w, http.StatusConflict, "checks already running")
+		return
+	}
 	w.WriteHeader(http.StatusAccepted)
 }
 

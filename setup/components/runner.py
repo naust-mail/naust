@@ -18,6 +18,7 @@ uptodate conventions:
   targets=['/path']          - re-run if output file is missing
   [False]                    - always run (configure steps)
 """
+
 from __future__ import annotations
 
 import grp

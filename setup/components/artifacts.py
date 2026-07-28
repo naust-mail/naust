@@ -1,6 +1,7 @@
 """
 Helpers used in component configure functions. No stamp logic here - that's handled by doit.
 """
+
 from __future__ import annotations
 
 import hashlib

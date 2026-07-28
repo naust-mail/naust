@@ -2,6 +2,7 @@
 Component registry. Each defs/*.py file exposes a COMPONENT instance and a
 make_tasks(env, runtime) function. The runner imports all defs and uses these.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

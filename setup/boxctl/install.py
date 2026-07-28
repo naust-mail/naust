@@ -8,6 +8,7 @@ Flow:
   4. Components (one doit run, rolling log with active-component tracking)
   5. boxctl bootstrap --install  (admin URL + TLS fingerprint)
 """
+
 from __future__ import annotations
 
 import contextlib

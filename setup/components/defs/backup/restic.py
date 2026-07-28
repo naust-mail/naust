@@ -9,6 +9,7 @@ Steps:
   backup-key  - generate backup encryption key (skipped if exists)
   restic      - install restic binary if not available via apt [conditional]
 """
+
 from __future__ import annotations
 
 import os

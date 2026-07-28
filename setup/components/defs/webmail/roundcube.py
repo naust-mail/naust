@@ -16,6 +16,7 @@ Steps:
   db-init       - initialise/upgrade Roundcube SQLite schema via initdb.sh
   carddav-db    - run rcmcarddav SQLite migrations (only when ENABLE_RADICALE=true)
 """
+
 from __future__ import annotations
 
 import os

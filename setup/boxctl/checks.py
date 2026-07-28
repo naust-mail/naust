@@ -4,6 +4,7 @@ Health check functions for boxctl doctor.
 Each check_* function takes a conf dict and returns (status, msg).
 Status values: OK, WARN, ERR, OFF.
 """
+
 from __future__ import annotations
 
 import datetime

@@ -16,8 +16,11 @@ type fakeChecks struct {
 	busy     bool
 }
 
-func (f *fakeChecks) RunNow(req checks.RunRequest) { f.requests = append(f.requests, req) }
-func (f *fakeChecks) Busy() bool                   { return f.busy }
+func (f *fakeChecks) RunNow(req checks.RunRequest) bool {
+	f.requests = append(f.requests, req)
+	return true
+}
+func (f *fakeChecks) Busy() bool { return f.busy }
 
 func TestChecksStatus(t *testing.T) {
 	s, _ := newTestServer(t)

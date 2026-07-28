@@ -11,6 +11,7 @@ Steps:
 
 Baremetal only: the Docker image bakes the built bundle in at image-build time.
 """
+
 from __future__ import annotations
 
 import json

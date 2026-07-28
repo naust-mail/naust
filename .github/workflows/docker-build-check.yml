@@ -16,6 +16,10 @@ on:
       - 'frontend/**'
       - 'setup/components/defs/filter/**'
 
+# Read-only CI: verification builds only, no push to any registry.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

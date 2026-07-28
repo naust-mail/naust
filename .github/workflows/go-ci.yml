@@ -17,6 +17,10 @@ on:
       - 'daemon/**'
       - '.github/workflows/go-ci.yml'
 
+# Read-only CI: build, vet, and test. No writes to the repo or releases.
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest

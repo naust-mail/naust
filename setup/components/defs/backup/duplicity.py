@@ -12,6 +12,7 @@ Steps:
   virtualenv   - create the dedicated backup venv (skipped if it exists)
   pip-install  - install duplicity and its backend deps into the backup venv
 """
+
 from __future__ import annotations
 
 import os

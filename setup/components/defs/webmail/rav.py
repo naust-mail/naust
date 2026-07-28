@@ -11,6 +11,7 @@ Steps:
   dirs    - create and chown STORAGE_ROOT/rav data directory
   config  - write /etc/rav/config.env runtime config + systemd unit
 """
+
 from __future__ import annotations
 
 import os

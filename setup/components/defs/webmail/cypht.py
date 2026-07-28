@@ -8,6 +8,7 @@ Steps:
   logrotate - write logrotate config for auth log
   config    - write .env and run config_gen.php (every run)
 """
+
 from __future__ import annotations
 
 import os

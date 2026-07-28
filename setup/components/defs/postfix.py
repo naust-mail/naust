@@ -38,6 +38,7 @@ Steps and their stamps - each group re-runs only when its specific inputs change
 Tasks are chained via task_dep to ensure sequential writes to main.cf/master.cf
 (editconf does a full read-modify-write so concurrent edits would corrupt files).
 """
+
 from __future__ import annotations
 
 import os

@@ -24,6 +24,7 @@ by name (helperd, managerd, muninweb, boxctl) with no verification whatsoever -
 the operator vouches for them. Anything missing from the dir follows the
 normal fetch-or-build path.
 """
+
 from __future__ import annotations
 
 import hashlib

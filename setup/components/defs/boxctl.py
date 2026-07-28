@@ -16,6 +16,7 @@ This component no longer persists the Python installer sources on disk. Re-runni
 setup fetches the current release; offline re-setup returns when the installer
 itself is rewritten in Go.
 """
+
 from __future__ import annotations
 
 import os

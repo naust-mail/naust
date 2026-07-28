@@ -12,6 +12,7 @@ TRUSTED_AUTH_HEADER so users never see a Beszel login screen.
 The single trusted-header user is seeded on first boot by beszel-seed.service
 via the create-user API - no password is ever persisted. USER_CREATION is off.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -146,13 +147,7 @@ def _install_units(storage_root: str, primary_hostname: str, runtime: str) -> No
 	# the script's own docstring for why that can't happen at setup time.
 	data_dir = os.path.join(storage_root, "beszel")
 	agent_host = "beszel-agent" if runtime == DOCKER else "127.0.0.1"
-	seed = (
-		pathlib.Path(_SEED_SCRIPT_TPL)
-		.read_text(encoding="utf-8")
-		.replace("${DATA_DIR}", data_dir)
-		.replace("${AGENT_HOST}", agent_host)
-		.replace("${SYSTEM_NAME}", primary_hostname)
-	)
+	seed = pathlib.Path(_SEED_SCRIPT_TPL).read_text(encoding="utf-8").replace("${DATA_DIR}", data_dir).replace("${AGENT_HOST}", agent_host).replace("${SYSTEM_NAME}", primary_hostname)
 	artifacts.write_file("/usr/local/lib/beszel-seed.py", seed, mode=0o755)
 
 	for unit in ("beszel-hub.service", "beszel-agent.service", "beszel-seed.service", "beszel-hub-restart.service"):

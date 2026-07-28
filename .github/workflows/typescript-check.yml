@@ -15,6 +15,10 @@ on:
       - 'frontend/**'
       - '.github/workflows/typescript-check.yml'
 
+# Read-only CI: type-check only. No writes to the repo.
+permissions:
+  contents: read
+
 jobs:
   typecheck:
     runs-on: ubuntu-latest

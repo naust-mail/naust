@@ -87,15 +87,7 @@ def main() -> int:
 				token = line.removeprefix("TOKEN=").strip()
 				break
 
-	config_yaml = (
-		"systems:\n"
-		f"  - name: {SYSTEM_NAME}\n"
-		f"    host: {AGENT_HOST}\n"
-		"    port: 45876\n"
-		f"    token: {token}\n"
-		"    users:\n"
-		f"      - {email}\n"
-	)
+	config_yaml = f"systems:\n  - name: {SYSTEM_NAME}\n    host: {AGENT_HOST}\n    port: 45876\n    token: {token}\n    users:\n      - {email}\n"
 	pathlib.Path(CONFIG_FILE).write_text(config_yaml, encoding="utf-8")
 	os.chmod(CONFIG_FILE, 0o640)
 

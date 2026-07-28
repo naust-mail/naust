@@ -23,6 +23,10 @@ on:
       - 'setup/components/defs/filter/**'
       - '.github/workflows/python-ci.yml'
 
+# Read-only CI: lint and test. No writes to the repo.
+permissions:
+  contents: read
+
 jobs:
   lint-and-test:
     strategy:
@@ -39,7 +43,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:

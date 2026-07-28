@@ -31,6 +31,7 @@ Whole config files we own live as ${VAR} templates in setup/conf/dovecot/<dialec
 this file keeps only the logic (version dispatch, conditional blocks, edits to
 distro-owned files).
 """
+
 from __future__ import annotations
 
 import os

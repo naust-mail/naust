@@ -21,6 +21,7 @@ and opens up mail store read access for the backup engine.
 
 Bare metal only: Docker wires managerd into its own container.
 """
+
 from __future__ import annotations
 
 import grp
