@@ -19,6 +19,7 @@ Port order 0: must run before ssl (10) which must run before dns/postfix/dovecot
 unbound writes /etc/resolv.conf → 127.0.0.1 so subsequent components resolve DNS
 through our validating resolver rather than the system stub.
 """
+from __future__ import annotations
 
 import os
 import shutil

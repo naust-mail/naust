@@ -10,12 +10,18 @@ component (defs/daemon.py), which owns all Go binaries as one artifact set.
 
 Steps:
   user - create the naust system user and its group memberships
-  dirs - create and hand over the directories managerd writes
+  dirs - create and hand over the directories managerd owns outright
   key  - generate the mailcrypt unwrap secret (only when encryption is on)
   unit - install and enable the systemd unit [dep: user, dirs, binary]
 
+post_install (runs after every component's doit tasks, not a doit step -
+see _post_install): re-owns secrets other components had to create
+root-owned before the naust user existed (ssl/backup/dnssec key material),
+and opens up mail store read access for the backup engine.
+
 Bare metal only: Docker wires managerd into its own container.
 """
+from __future__ import annotations
 
 import grp
 import os
@@ -149,6 +155,28 @@ def _dirs(storage_root: str) -> None:
 		os.chmod(path, mode)
 		os.chown(path, uid, gid)
 
+
+def _post_install(env: dict, _runtime: str) -> None:
+	"""Fix up ownership of paths other components write to, once every
+	component's doit tasks (not just managerd's own) have actually finished.
+
+	This can't be a doit task: ssl/backup/dns's secret-generating tasks run
+	before the naust user exists (managerd:user runs late, by default
+	port_order), so they're created root-owned of necessity. port_order only
+	controls doit task *registration* order, not execution order - there is
+	no task_dep forcing those tasks to finish before a doit-based sweep here
+	would run, so a doit task here could walk ssl/ before ssl:key has
+	written the private key and never get a second chance to re-sweep it.
+	Running as a plain post_install hook instead guarantees every
+	component's doit tasks are done first, race-free.
+	"""
+	storage_root = env["STORAGE_ROOT"]
+	try:
+		uid = pwd.getpwnam(_USER).pw_uid
+		gid = grp.getgrnam(_USER).gr_gid
+	except KeyError:
+		return  # managerd:user didn't run (component disabled) - nothing to fix
+
 	# Existing secrets and key material created root-owned by earlier
 	# components move to the daemon that actually uses them. Recursive:
 	# backup/ holds the encryption key and ssh identity, ssl/ holds the
@@ -173,6 +201,9 @@ def _dirs(storage_root: str) -> None:
 	]:
 		if os.path.isdir(path):
 			subprocess.run(["chmod", "g+rX", path], check=True)
+
+
+COMPONENT.post_install = _post_install
 
 
 def _unwrap_key() -> None:

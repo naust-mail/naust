@@ -11,6 +11,7 @@ import (
 
 	"naust/daemon/internal/api"
 	"naust/daemon/internal/auth"
+	"naust/daemon/internal/mailaddr"
 	entuser "naust/daemon/internal/store/ent/user"
 )
 
@@ -106,11 +107,11 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	if err := validateUserEmail(req.Email); err != nil {
+	if err := mailaddr.UserEmail(req.Email); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := validatePassword(req.Password); err != nil {
+	if err := mailaddr.Password(req.Password); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

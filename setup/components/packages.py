@@ -2,6 +2,7 @@
 Single batched apt-get install across all enabled components. No-op in Docker
 (packages are pre-baked into the container image).
 """
+from __future__ import annotations
 
 import os
 import subprocess

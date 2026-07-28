@@ -10,10 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"naust/daemon/internal/helper"
 	"naust/daemon/internal/store"
 	"naust/daemon/internal/store/ent"
-	"naust/daemon/internal/web"
+	"naust/daemon/internal/webrender"
 )
 
 // fakeHelper records sync calls and returns an empty inventory.
@@ -129,7 +128,7 @@ func TestBuildHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	byDomain := map[string]web.Host{}
+	byDomain := map[string]webrender.Host{}
 	for _, h := range hosts {
 		byDomain[h.Domain] = h
 	}
@@ -158,7 +157,7 @@ func TestBuildHosts(t *testing.T) {
 	if !primary.Primary {
 		t.Fatal("primary flag missing")
 	}
-	mounts := map[string]web.Mount{}
+	mounts := map[string]webrender.Mount{}
 	for _, m := range primary.Mounts {
 		mounts[m.App] = m
 	}
@@ -271,21 +270,23 @@ func TestRebuildSyncsRenderedFileset(t *testing.T) {
 	if len(fh.intents) != 1 || fh.intents[0] != "web.sync_sites" {
 		t.Fatalf("intents = %v", fh.intents)
 	}
-	var files map[string]string
-	if err := json.Unmarshal([]byte(fh.args[0]["files"]), &files); err != nil {
+	// Rebuild sends the routing model; render it here the way helperd
+	// would to check which vhosts it produces.
+	var p webrender.SyncPayload
+	if err := json.Unmarshal([]byte(fh.args[0]["payload"]), &p); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{web.TopFile, "box.example.com.conf", "example.com.conf", "www.example.com.conf"} {
+	files, err := webrender.Render(p.Config, p.Hosts)
+	if err != nil {
+		t.Fatalf("payload does not render: %v", err)
+	}
+	for _, want := range []string{webrender.TopFile, "box.example.com.conf", "example.com.conf", "www.example.com.conf"} {
 		if _, ok := files[want]; !ok {
 			t.Errorf("fileset missing %s (have %d files)", want, len(files))
 		}
 	}
 	if _, ok := files["pointed.net.conf"]; ok {
 		t.Error("pointed.net.conf must not be rendered")
-	}
-	// The fileset must satisfy the sync intent's own validation.
-	if _, err := helper.EncodeSyncArgs(files); err != nil {
-		t.Fatal(err)
 	}
 }
 

@@ -14,6 +14,7 @@ Steps:
   dovecot-plugin  - version-specific Dovecot spam-learning plugin + sa-learn scripts
                     [dep: dovecot:version - shares 20-imap.conf and 10-mail.conf]
 """
+from __future__ import annotations
 
 import os
 import subprocess

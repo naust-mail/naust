@@ -5,6 +5,7 @@ Scans all services, shows health status, lets you manage each one.
 Navigate with up/down, Enter to open a service, Esc to quit.
 Exits non-zero if any service is degraded.
 """
+from __future__ import annotations
 
 import os
 import sys

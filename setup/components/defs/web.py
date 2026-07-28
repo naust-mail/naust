@@ -19,6 +19,7 @@ Steps:
 The iOS/autoconfig/autodiscover/mta-sts files are hostname + mode dependent,
 so they re-run when PRIMARY_HOSTNAME or MTA_STS_MODE changes.
 """
+from __future__ import annotations
 
 import contextlib
 import os

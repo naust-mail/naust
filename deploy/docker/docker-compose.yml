@@ -440,6 +440,9 @@ services:
       dockerfile: deploy/docker/beszel-hub/Dockerfile
     container_name: naust-beszel-hub
     restart: unless-stopped
+    # tini reaps the backgrounded first-run seed process (entrypoint.sh) once
+    # it exits, while beszel stays PID 1 for correct signal handling.
+    init: true
     profiles:
       - beszel
     networks:

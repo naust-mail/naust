@@ -1,7 +1,5 @@
 package helper
 
-import "os"
-
 // Closed vocabularies for every intent. Nothing here is caller-extensible;
 // unknown names are rejected before any command runs.
 
@@ -60,17 +58,6 @@ var postfixKeys = map[string]bool{
 	"smtp_sasl_password_maps":    true,
 	"smtp_sasl_security_options": true,
 	"smtp_tls_security_level":    true,
-}
-
-// configTarget is one named file config.write may replace. The path and
-// mode are baked in here; callers never supply paths.
-type configTarget struct {
-	path string
-	mode os.FileMode
-}
-
-var configTargets = map[string]configTarget{
-	"nginx_local": {path: "/etc/nginx/conf.d/local.conf", mode: 0o644},
 }
 
 // There is deliberately no postfix.map intent: the only Postfix lookup

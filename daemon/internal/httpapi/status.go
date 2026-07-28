@@ -12,7 +12,7 @@ import (
 
 // CheckRunner is the slice of *checks.Engine the API uses.
 type CheckRunner interface {
-	RunNow(req checks.RunRequest)
+	RunNow(req checks.RunRequest) bool
 	Busy() bool
 }
 
@@ -62,7 +62,14 @@ func (s *Server) handleChecksRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unknown category: "+req.Category)
 		return
 	}
-	s.Checks.RunNow(checks.RunRequest{Checks: req.Checks, Category: req.Category, Domain: req.Domain})
+	if !s.Checks.RunNow(checks.RunRequest{
+	    Checks: req.Checks,
+	    Category: req.Category,
+	    Domain: req.Domain,
+	}) {
+        writeError(w, http.StatusConflict, "checks already running")
+        return
+    }
 	w.WriteHeader(http.StatusAccepted)
 }
 

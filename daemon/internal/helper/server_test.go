@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // startServer runs a Server on a temp socket and returns the socket path.
@@ -170,5 +171,50 @@ func TestSocketRejectsWrongUID(t *testing.T) {
 	resp := roundTrip(t, sock, string(req)+"\n")
 	if resp.OK || !strings.Contains(resp.Error, "uid") {
 		t.Fatalf("want uid rejection, got %+v", resp)
+	}
+}
+
+// A half-open connection that never sends a request must not stall the
+// accept loop: a second caller must still be served promptly. With a
+// serial accept loop this would block until the first connection's read
+// deadline expired.
+func TestServerStalledConnDoesNotBlockOthers(t *testing.T) {
+	sock := startServer(t, &fakeRunner{})
+
+	// Open a connection and never write to it.
+	stall, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stall.Close()
+
+	// A second caller must get a response well within the 30s read
+	// timeout the stalled connection is sitting under.
+	c, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := c.Write([]byte(`{"intent":"host.reboot"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bufio.NewReader(c).ReadBytes('\n'); err != nil {
+		t.Fatalf("second caller was not served while one connection stalled: %v", err)
+	}
+}
+
+// A caller-supplied value with an embedded newline must not produce a
+// second line in the audit log - otherwise a compromised manager could
+// forge fake intent records.
+func TestRedactedArgsEscapesControlChars(t *testing.T) {
+	got := redactedArgs("web.sync_sites", map[string]string{
+		"payload": "line1\nintent=host.reboot args={} uid=0 dur=0s ok",
+	})
+	if strings.Contains(got, "\n") {
+		t.Fatalf("audit value leaked a raw newline: %q", got)
+	}
+	if !strings.Contains(got, `\n`) {
+		t.Fatalf("newline was not escaped: %q", got)
 	}
 }

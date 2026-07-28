@@ -1,4 +1,14 @@
-package httpapi
+// Package mailaddr holds the address and password validation rules for
+// mail accounts and aliases. It is a leaf (its only dependency is the
+// dns package for IDNA), so both the HTTP API (httpapi) and the
+// break-glass/admin operations (adminops) validate through exactly one
+// implementation - the panel and the boxctl migration path cannot drift.
+//
+// Internationalized domains are punycoded at the boundary (NormalizeDomain)
+// so everything stored and materialized is ASCII. User account addresses
+// stay ASCII-only by policy: they are login identifiers and maildir path
+// components.
+package mailaddr
 
 import (
 	"fmt"
@@ -8,18 +18,14 @@ import (
 	"naust/daemon/internal/dns"
 )
 
-// Internationalized domains are punycoded at the API boundary (see
-// asciiEmailDomain) so everything stored and materialized is ASCII.
-// User account addresses stay ASCII-only by policy: they are login
-// identifiers and maildir path components.
-
 // User account addresses are restricted to what Dovecot handles
 // predictably: lowercase letters, digits, underscore, dash, dot. The
 // maildir path derives from the address, hence the tight charset and
 // length cap.
 var userEmailCharset = regexp.MustCompile(`^[a-z0-9_\-.@]+$`)
 
-func validateUserEmail(email string) error {
+// UserEmail validates an address usable as a login/mailbox account.
+func UserEmail(email string) error {
 	if len(email) > 255 || !userEmailCharset.MatchString(email) {
 		return fmt.Errorf("invalid email address for a user account: %s", email)
 	}
@@ -30,22 +36,22 @@ func validateUserEmail(email string) error {
 	return nil
 }
 
-// validateAliasSource additionally allows the empty local part
-// ("@domain.tld"), Postfix's catch-all form.
-func validateAliasSource(source string) error {
+// AliasSource validates an alias source, additionally allowing the empty
+// local part ("@domain.tld"), Postfix's catch-all form.
+func AliasSource(source string) error {
 	if domain, ok := strings.CutPrefix(source, "@"); ok {
 		if !validDomain(domain) {
 			return fmt.Errorf("invalid catch-all domain: %s", source)
 		}
 		return nil
 	}
-	return validateEmailBasic(source)
+	return EmailBasic(source)
 }
 
-// validateEmailBasic is the permissive structural check used for alias
-// sources and forwarding destinations, which may be external addresses
-// with mixed case and a wider local-part charset.
-func validateEmailBasic(addr string) error {
+// EmailBasic is the permissive structural check used for alias sources
+// and forwarding destinations, which may be external addresses with
+// mixed case and a wider local-part charset.
+func EmailBasic(addr string) error {
 	if len(addr) > 320 || strings.ContainsAny(addr, " \t\r\n") {
 		return fmt.Errorf("invalid email address: %s", addr)
 	}
@@ -56,11 +62,11 @@ func validateEmailBasic(addr string) error {
 	return nil
 }
 
-// asciiEmailDomain converts an internationalized domain in an email
+// NormalizeDomain converts an internationalized domain in an email
 // address (or "@domain" catch-all) to punycode; the local part is left
 // alone. Shape problems fall through to the validators, which see the
 // converted form.
-func asciiEmailDomain(addr string) string {
+func NormalizeDomain(addr string) string {
 	local, domain, ok := strings.Cut(addr, "@")
 	if !ok {
 		return addr
@@ -92,10 +98,10 @@ func validDomain(domain string) bool {
 	return strings.ContainsFunc(labels[len(labels)-1], func(r rune) bool { return r < '0' || r > '9' })
 }
 
-// isDCVAddress reports whether the address is one commonly used for
-// domain control validation; those may not become user accounts (an
-// attacker who obtains such a mailbox can obtain certificates).
-func isDCVAddress(email string) bool {
+// IsDCV reports whether the address is one commonly used for domain
+// control validation; those may not become user accounts (an attacker
+// who obtains such a mailbox can obtain certificates).
+func IsDCV(email string) bool {
 	email = strings.ToLower(email)
 	for _, local := range []string{"admin", "administrator", "postmaster", "hostmaster", "webmaster", "abuse"} {
 		if strings.HasPrefix(email, local+"@") || strings.HasPrefix(email, local+"+") {
@@ -105,7 +111,9 @@ func isDCVAddress(email string) bool {
 	return false
 }
 
-func validatePassword(pw string) error {
+// Password enforces the account password policy shared by the panel and
+// the recovery/migration paths.
+func Password(pw string) error {
 	if strings.TrimSpace(pw) == "" {
 		return fmt.Errorf("no password provided")
 	}

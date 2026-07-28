@@ -17,6 +17,7 @@ Steps:
   dovecot-spam-learning - version-specific Dovecot spam-learning plugin + rspamc pipe scripts
                           [dep: dovecot:version - 2.3 needs dovecot-antispam, 2.4 uses imapsieve]
 """
+from __future__ import annotations
 
 import os
 import subprocess

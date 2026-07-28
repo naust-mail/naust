@@ -10,6 +10,7 @@ Steps:
   logrotate    - write logrotate config for /var/log/filebrowser.log
   systemd      - install and enable the systemd unit
 """
+from __future__ import annotations
 
 import os
 import pathlib

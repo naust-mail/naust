@@ -7,6 +7,7 @@ Steps:
   config  - write config.ini (security settings, fail2ban logging)
   domain  - write default.json (IMAP/SMTP domain config for all mail domains)
 """
+from __future__ import annotations
 
 import os
 import subprocess

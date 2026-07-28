@@ -174,6 +174,71 @@ func TestDemotedAdminTokensRevoked(t *testing.T) {
 	}
 }
 
+// writeToken mints a write-scoped API token for the given admin session.
+func writeToken(t *testing.T, s *Server, session string) string {
+	t.Helper()
+	w := doJSON(t, s, "POST", "/api/tokens", session, api.CreateAPITokenRequest{Name: "bot", Scope: "write"})
+	var created api.CreateAPITokenResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("create token: status %d body %s: %v", w.Code, w.Body, err)
+	}
+	if created.Token == "" {
+		t.Fatalf("create token returned none: status %d body %s", w.Code, w.Body)
+	}
+	return created.Token
+}
+
+// A write-scoped API token must never escalate to a persistent admin
+// session: it cannot create an admin, promote a user to admin, or reset
+// an admin's password. It can still provision regular users - that is
+// legitimate automation.
+func TestWriteTokenCannotEscalateToAdmin(t *testing.T) {
+	s, _ := newTestServer(t)
+	session := login(t, s).Token
+	token := writeToken(t, s, session)
+
+	// A regular target for the promote / password cases.
+	if w := doJSON(t, s, "POST", "/api/users", session, api.CreateUserRequest{
+		Email: "bob@example.com", Password: testPassword,
+	}); w.Code != 201 {
+		t.Fatalf("seed bob: %d %s", w.Code, w.Body)
+	}
+
+	// 1. Create an admin outright - blocked.
+	if w := doJSON(t, s, "POST", "/api/users", token, api.CreateUserRequest{
+		Email: "eve@example.com", Password: testPassword, Role: "admin",
+	}); w.Code != 403 {
+		t.Errorf("token create-admin: status = %d, want 403", w.Code)
+	}
+
+	// 2. Promote an existing user to admin - blocked.
+	adminRole := "admin"
+	if w := doJSON(t, s, "PATCH", "/api/users/bob@example.com", token,
+		api.UpdateUserRequest{Role: &adminRole}); w.Code != 403 {
+		t.Errorf("token promote-to-admin: status = %d, want 403", w.Code)
+	}
+
+	// 3. Reset an admin's password - blocked (admin@example.com is admin).
+	if w := doJSON(t, s, "PUT", "/api/users/admin@example.com/password", token,
+		api.SetPasswordRequest{Password: testPassword}); w.Code != 403 {
+		t.Errorf("token reset-admin-password: status = %d, want 403", w.Code)
+	}
+
+	// 4. Provisioning a regular user still works through the token.
+	if w := doJSON(t, s, "POST", "/api/users", token, api.CreateUserRequest{
+		Email: "carol@example.com", Password: testPassword,
+	}); w.Code != 201 {
+		t.Errorf("token create regular user: status = %d, want 201, body %s", w.Code, w.Body)
+	}
+
+	// 5. The interactive session can still do all of it.
+	if w := doJSON(t, s, "POST", "/api/users", session, api.CreateUserRequest{
+		Email: "dave@example.com", Password: testPassword, Role: "admin",
+	}); w.Code != 201 {
+		t.Errorf("session create-admin: status = %d, want 201, body %s", w.Code, w.Body)
+	}
+}
+
 func TestTOTPLoginFlow(t *testing.T) {
 	s, _ := newTestServer(t)
 	session := login(t, s).Token

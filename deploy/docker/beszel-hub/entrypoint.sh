@@ -2,9 +2,9 @@
 # Beszel hub container entrypoint.
 #
 # Runs the beszel component itself (creates the beszel system user,
-# generates the hub<->agent Ed25519 keypair + hub.env/agent.env/config.yml
-# onto the shared storage volume), then starts the hub. Self-contained,
-# matching munin's Docker pattern - management runs no Python setup
+# generates the hub<->agent Ed25519 keypair + agent.env/config.yml and the
+# seed script onto the shared storage volume), then starts the hub. Self-
+# contained, matching munin's Docker pattern - management runs no Python setup
 # component of its own in Docker, so nothing else generates these files.
 
 set -euo pipefail
@@ -27,16 +27,16 @@ cd "$NAUST/setup"
 python3 -m components.runner beszel
 cd "$NAUST"
 
-HUB_ENV="${STORAGE_ROOT}/beszel/hub.env"
-if [ ! -f "$HUB_ENV" ]; then
-    echo "ERROR: ${HUB_ENV} was not generated - is MONITORING_TOOL=beszel set?" >&2
+SEED_SCRIPT="/usr/local/lib/beszel-seed.py"
+if [ ! -f "$SEED_SCRIPT" ]; then
+    echo "ERROR: ${SEED_SCRIPT} was not generated - is MONITORING_TOOL=beszel set?" >&2
     exit 1
 fi
 
-set -a
-# shellcheck source=/dev/null
-source "$HUB_ENV"
-set +a
-
 echo "Beszel hub configured. Starting..."
+# Seed the single trusted-header user once the hub is listening. Backgrounded
+# because the hub must be serving the create-user API first; the script polls
+# for it and no-ops if a user already exists. No password is ever persisted.
+# Docker's init (tini) reaps this short-lived process when it exits.
+python3 "$SEED_SCRIPT" &
 exec beszel serve --http "0.0.0.0:8090" --dir "${STORAGE_ROOT}/beszel"

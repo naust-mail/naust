@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 
+	"naust/daemon/internal/adminops"
 	"naust/daemon/internal/api"
 	"naust/daemon/internal/auth"
+	"naust/daemon/internal/mailaddr"
 	"naust/daemon/internal/mailcrypt"
 	"naust/daemon/internal/store/ent"
 	entapitoken "naust/daemon/internal/store/ent/apitoken"
@@ -16,9 +18,7 @@ import (
 )
 
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := s.Store.User.Query().
-		Order(entuser.ByEmail()).
-		All(r.Context())
+	users, err := adminops.ListUsers(r.Context(), s.Store)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "user query failed")
 		return
@@ -35,57 +35,44 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	if err := validateUserEmail(req.Email); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := validatePassword(req.Password); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	role, err := parseRole(req.Role, entuser.RoleUser)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.QuotaBytes < 0 {
-		writeError(w, http.StatusBadRequest, "quota_bytes may not be negative")
+	// Granting admin is a session-scoped privilege check, so it stays in
+	// the HTTP layer; adminops.CreateUser takes the role as given.
+	if role == entuser.RoleAdmin && !isSession(r) {
+		writeError(w, http.StatusForbidden, "granting admin requires an interactive session")
 		return
 	}
-	// DCV addresses may not be user accounts - except the very first
-	// account, created during setup before the operator knows the rule.
-	n, err := s.Store.User.Query().Count(r.Context())
+	u, err := adminops.CreateUser(r.Context(), s.Store, s.TenantID, adminops.CreateUserParams{
+		Email:      req.Email,
+		Role:       role,
+		QuotaBytes: req.QuotaBytes,
+		Password:   req.Password,
+	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "user query failed")
-		return
-	}
-	if n > 0 && isDCVAddress(req.Email) {
-		writeError(w, http.StatusBadRequest, "that address is frequently used for domain control validation and cannot be a user account; use an alias instead")
-		return
-	}
-
-	hash, err := auth.HashPassword(req.Password)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "password hashing failed")
-		return
-	}
-	u, err := s.Store.User.Create().
-		SetEmail(req.Email).
-		SetPasswordHash(hash).
-		SetRole(role).
-		SetQuotaBytes(req.QuotaBytes).
-		SetTenantID(s.TenantID).
-		Save(r.Context())
-	if ent.IsConstraintError(err) {
-		writeError(w, http.StatusConflict, "a user with that email already exists")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "user creation failed")
+		writeAccountError(w, err, "user creation failed")
 		return
 	}
 	s.mailDataChanged()
 	writeJSON(w, http.StatusCreated, apiUser(u))
+}
+
+// writeAccountError maps an adminops account/alias error to its HTTP
+// status: input problems to 400, a duplicate to 409, anything else to 500
+// with the generic fallback message.
+func writeAccountError(w http.ResponseWriter, err error, fallback string) {
+	var ve *adminops.ValidationError
+	switch {
+	case errors.As(err, &ve):
+		writeError(w, http.StatusBadRequest, ve.Error())
+	case errors.Is(err, adminops.ErrUserExists), errors.Is(err, adminops.ErrAliasExists):
+		writeError(w, http.StatusConflict, err.Error())
+	default:
+		writeError(w, http.StatusInternalServerError, fallback)
+	}
 }
 
 func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +90,10 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		role, err := parseRole(*req.Role, "")
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if role == entuser.RoleAdmin && !isSession(r) {
+			writeError(w, http.StatusForbidden, "granting admin requires an interactive session")
 			return
 		}
 		if u.Role == entuser.RoleAdmin && role != entuser.RoleAdmin {
@@ -146,12 +137,16 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	if err := validatePassword(req.Password); err != nil {
+	if err := mailaddr.Password(req.Password); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	u, ok := s.userByPath(w, r)
 	if !ok {
+		return
+	}
+	if u.Role == entuser.RoleAdmin && !isSession(r) {
+		writeError(w, http.StatusForbidden, "setting an admin's password requires an interactive session")
 		return
 	}
 	// An admin reset cannot re-wrap an encrypted account's mail key
@@ -200,7 +195,7 @@ func (s *Server) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusForbidden, "current password is incorrect")
 		return
 	}
-	if err := validatePassword(req.NewPassword); err != nil {
+	if err := mailaddr.Password(req.NewPassword); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -11,6 +11,7 @@ Steps:
   opendmarc-config - configure opendmarc.conf
   postfix-milters  - set smtpd_milters for OpenDKIM + OpenDMARC [dep: postfix:spam-filter]
 """
+from __future__ import annotations
 
 import os
 import subprocess

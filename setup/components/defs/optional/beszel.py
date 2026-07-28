@@ -9,8 +9,10 @@ Steps:
 
 Hub listens on 127.0.0.1:8090. nginx proxies /admin/beszel/ with
 TRUSTED_AUTH_HEADER so users never see a Beszel login screen.
-The pre-seeded hub.env user is the only account; USER_CREATION is intentionally off.
+The single trusted-header user is seeded on first boot by beszel-seed.service
+via the create-user API - no password is ever persisted. USER_CREATION is off.
 """
+from __future__ import annotations
 
 import hashlib
 import os
@@ -43,13 +45,23 @@ _AGENT_URL = f"{_BASE_URL}/beszel-agent_linux_amd64.tar.gz"
 COMPONENT = Component(
 	name="beszel",
 	packages=[],
-	services=["beszel-hub", "beszel-agent"],
+	# beszel-seed and beszel-hub-restart are WantedBy=multi-user.target
+	# oneshot bootstrap units - that only auto-triggers on an actual reboot,
+	# not when a unit is freshly enabled on an already-running box. Listing
+	# them here makes the runner's restart-after-tasks-ran step (systemctl
+	# restart, which just starts an inactive oneshot) trigger them on every
+	# setup run that actually changed the systemd task, first install
+	# included. Order matters: hub must be up before seed can create the
+	# user, and seed must finish (writing config.yml + its marker) before
+	# hub-restart runs. Both are idempotent no-ops once already seeded.
+	services=["beszel-hub", "beszel-agent", "beszel-seed", "beszel-hub-restart"],
 	docker_services=["beszel-hub", "beszel-agent"],
 	enabled=lambda env: env.get("MONITORING_TOOL", "none") == "beszel",
 	naust_backup_groups=["beszel"],
 )
 
 _SYSTEMD_DIR = os.path.join(SETUP_DIR, "conf", "systemd")
+_SEED_SCRIPT_TPL = os.path.join(SETUP_DIR, "conf", "beszel", "beszel-seed.py")
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -74,12 +86,12 @@ def make_tasks(env: dict, runtime: str) -> list[dict]:
 			"name": "hub-keys",
 			"targets": [os.path.join(storage_root, "beszel", "id_ed25519")],
 			"uptodate": [config_changed(artifacts.fn_stamp(_generate_keypair))],
-			"actions": [(_generate_keypair, [storage_root, env["PRIMARY_HOSTNAME"], runtime])],
+			"actions": [(_generate_keypair, [storage_root])],
 		},
 		{
 			"name": "systemd",
-			"uptodate": [config_changed(f"{storage_root}:{env['PRIMARY_HOSTNAME']}:{artifacts.fn_stamp(_install_units)}")],
-			"actions": [(_install_units, [storage_root, env["PRIMARY_HOSTNAME"]])],
+			"uptodate": [config_changed(f"{storage_root}:{env['PRIMARY_HOSTNAME']}:{runtime}:{artifacts.hash_files(_SEED_SCRIPT_TPL)}:{artifacts.fn_stamp(_install_units)}")],
+			"actions": [(_install_units, [storage_root, env["PRIMARY_HOSTNAME"], runtime])],
 		},
 	]
 
@@ -127,26 +139,39 @@ def _install_binaries() -> None:
 	_fetch_and_verify(_AGENT_URL, _BESZEL_AGENT_SHA256, "/usr/local/bin/beszel-agent")
 
 
-def _install_units(storage_root: str, primary_hostname: str) -> None:
-	for unit in ("beszel-hub.service", "beszel-agent.service"):
+def _install_units(storage_root: str, primary_hostname: str, runtime: str) -> None:
+	# The seed script drives the create-user API to provision the trusted-header
+	# user without persisting a password; beszel-seed.service runs it on boot.
+	# It also writes config.yml's systems: block once that user exists - see
+	# the script's own docstring for why that can't happen at setup time.
+	data_dir = os.path.join(storage_root, "beszel")
+	agent_host = "beszel-agent" if runtime == DOCKER else "127.0.0.1"
+	seed = (
+		pathlib.Path(_SEED_SCRIPT_TPL)
+		.read_text(encoding="utf-8")
+		.replace("${DATA_DIR}", data_dir)
+		.replace("${AGENT_HOST}", agent_host)
+		.replace("${SYSTEM_NAME}", primary_hostname)
+	)
+	artifacts.write_file("/usr/local/lib/beszel-seed.py", seed, mode=0o755)
+
+	for unit in ("beszel-hub.service", "beszel-agent.service", "beszel-seed.service", "beszel-hub-restart.service"):
 		src = os.path.join(_SYSTEMD_DIR, unit)
 		dst = f"/lib/systemd/system/{unit}"
 		content = pathlib.Path(src).read_text(encoding="utf-8").replace("${STORAGE_ROOT}", storage_root).replace("${PRIMARY_HOSTNAME}", primary_hostname)
 		pathlib.Path(dst).write_text(content, encoding="utf-8")
 
 	subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
-	for unit in ("beszel-hub", "beszel-agent"):
+	for unit in ("beszel-hub", "beszel-agent", "beszel-seed", "beszel-hub-restart"):
 		subprocess.run(["systemctl", "enable", unit], check=True, capture_output=True)
 
 
-def _generate_keypair(storage_root: str, primary_hostname: str, runtime: str) -> None:
+def _generate_keypair(storage_root: str) -> None:
 	import uuid
 
 	data_dir = os.path.join(storage_root, "beszel")
 	key_path = os.path.join(data_dir, "id_ed25519")
 	agent_env_path = os.path.join(data_dir, "agent.env")
-	hub_env_path = os.path.join(data_dir, "hub.env")
-	config_path = os.path.join(data_dir, "config.yml")
 	user_file = os.path.join(data_dir, "beszel-user")
 
 	# Never clobber an existing keypair - this guard holds even under --force.
@@ -163,9 +188,9 @@ def _generate_keypair(storage_root: str, primary_hostname: str, runtime: str) ->
 
 	pub_key = pathlib.Path(f"{key_path}.pub").read_text(encoding="utf-8").strip()
 
-	# Token shared between agent.env and config.yml.
-	# Hub reads config.yml on startup and creates the system + fingerprint record.
-	# Agent uses the same token to connect. Users field omitted - hub defaults to first user.
+	# Token shared between agent.env and the config.yml that beszel-seed.py
+	# writes once the trusted-header user exists (see that script for why
+	# config.yml isn't written here at setup time).
 	token = str(uuid.uuid4())
 
 	# KEY holds a full "ssh-ed25519 AAAA... comment" line, which contains
@@ -174,28 +199,21 @@ def _generate_keypair(storage_root: str, primary_hostname: str, runtime: str) ->
 	# EnvironmentFile= (bare metal) parses lines literally either way.
 	pathlib.Path(agent_env_path).write_text(f'KEY="{pub_key}"\nTOKEN={token}\n', encoding="utf-8")
 
-	# hub.env: consumed by the initial migration on first DB creation only.
-	# USER_EMAIL is a random internal identity, not guessable from public info.
-	# USER_PASSWORD is random; DISABLE_PASSWORD_AUTH=true means it can never be used.
+	# The trusted-header identity: a random internal email, not guessable from
+	# public info. No password is generated or stored here - beszel-seed.service
+	# creates the matching users record on first boot via the create-user API.
 	hub_email = f"beszel-{os.urandom(12).hex()}@beszel.local"
-	hub_password = os.urandom(24).hex()
-	pathlib.Path(hub_env_path).write_text(f"USER_EMAIL={hub_email}\nUSER_PASSWORD={hub_password}\n", encoding="utf-8")
 
-	# config.yml: read by hub on startup to provision the local agent as a
-	# system. On bare metal hub and agent are co-located (127.0.0.1); in
-	# Docker the agent runs in a separate container reached by service name.
-	agent_host = "beszel-agent" if runtime == DOCKER else "127.0.0.1"
-	pathlib.Path(config_path).write_text(f"systems:\n  - name: {primary_hostname}\n    host: {agent_host}\n    port: 45876\n    token: {token}\n", encoding="utf-8")
-
-	# beszel-user: read by web_update.py for nginx config generation (root-only).
+	# beszel-user: the internal identity, read by web_update.py (as root) for
+	# nginx config and by beszel-seed.service (as beszel) to seed the user.
+	# It is only an email, not a secret - group-readable by beszel is fine.
 	pathlib.Path(user_file).write_text(hub_email, encoding="utf-8")
-	os.chmod(user_file, 0o600)
+	subprocess.run(["chown", "root:beszel", user_file], check=True)
+	os.chmod(user_file, 0o640)
 
 	subprocess.run(
-		["chown", "beszel:beszel", key_path, f"{key_path}.pub", agent_env_path, hub_env_path, config_path],
+		["chown", "beszel:beszel", key_path, f"{key_path}.pub", agent_env_path],
 		check=True,
 	)
 	os.chmod(key_path, 0o600)
 	os.chmod(agent_env_path, 0o640)
-	os.chmod(hub_env_path, 0o640)
-	os.chmod(config_path, 0o640)

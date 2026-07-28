@@ -271,6 +271,17 @@ func userFrom(r *http.Request) *ent.User {
 	return callerFrom(r).user
 }
 
+// isSession reports whether the caller authenticated with an interactive
+// session rather than an API token. Privilege-granting and credential
+// operations gate on it so a token can never create, become, or unlock
+// an admin session - mint an admin, promote to admin, or reset an
+// admin's password. This mirrors the requireSession wall around MFA,
+// encryption, and token management; those escalation levers just live on
+// the operational (requireAdmin) routes and so need the check inline.
+func isSession(r *http.Request) bool {
+	return callerFrom(r).scope == "full"
+}
+
 // requireAuth resolves the bearer credential - an API token when it
 // carries the token prefix, a session otherwise - and enforces token
 // scope: read tokens may only GET.

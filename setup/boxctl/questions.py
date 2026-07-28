@@ -1,4 +1,5 @@
 """Bare metal wizard steps and validators."""
+from __future__ import annotations
 
 import contextlib
 import ipaddress

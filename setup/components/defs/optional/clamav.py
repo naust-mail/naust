@@ -12,6 +12,7 @@ Steps:
   milter-config   - write clamav-milter.conf and add milter to postfix (baremetal only)
   freshclam       - download initial signature database (skipped if already present)
 """
+from __future__ import annotations
 
 import os
 import subprocess

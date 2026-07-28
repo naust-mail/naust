@@ -2,9 +2,13 @@
 Component registry. Each defs/*.py file exposes a COMPONENT instance and a
 make_tasks(env, runtime) function. The runner imports all defs and uses these.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
-from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+	from collections.abc import Callable
 
 BAREMETAL = "baremetal"
 DOCKER = "docker"
@@ -43,3 +47,15 @@ class Component:
 	# have finished, so ordering against the group's own creation is never
 	# an issue. Skipped individually if the group doesn't exist.
 	naust_backup_groups: list[str] = field(default_factory=list)
+	# Callable(env, runtime) run once, after every enabled component's doit
+	# tasks have finished (before service restarts). For fixups that depend
+	# on another component's output existing but can't be expressed as a
+	# doit task_dep without hurting parallelism - e.g. re-owning a secret
+	# that had to be created by an earlier-running component before this
+	# component's own runtime user existed. Runs unconditionally on every
+	# invocation regardless of what doit considers cached, so keep it fast
+	# and idempotent. Hooks across different components are NOT ordered
+	# relative to each other - only guaranteed to run after every doit task
+	# has finished. A hook may depend on other components' doit output, but
+	# never on another component's post_install having already run.
+	post_install: Callable[[dict, str], None] | None = None

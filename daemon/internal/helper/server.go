@@ -10,9 +10,12 @@ import (
 	"log"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+	"unicode"
 )
 
 const (
@@ -20,20 +23,31 @@ const (
 	// at 1MB after decoding; 4MB leaves room for JSON escaping.
 	maxRequestLine = 4 << 20
 	readTimeout    = 30 * time.Second
+
+	// maxConns bounds how many connections may be reading at once, so a
+	// flood of half-open connections cannot exhaust goroutines. Excess
+	// connections wait in the kernel backlog.
+	maxConns = 32
 )
 
-// Server accepts one connection at a time and executes one request per
-// connection. Serial on purpose: privileged operations must not race
-// each other, and the caller is a single manager process.
+// Server reads connections concurrently but executes privileged
+// operations one at a time (execMu). Concurrency is only for the read
+// and handshake so a slow or half-open caller cannot stall the accept
+// loop; the execution itself stays serial because privileged operations
+// must not race each other.
 type Server struct {
 	Deps Deps
 	// AllowUID restricts callers to one peer UID when >= 0. Socket file
 	// permissions are the primary gate; this is defense in depth.
 	AllowUID int
 	Log      *log.Logger
+
+	// execMu serializes intent execution across concurrent connections.
+	execMu sync.Mutex
 }
 
 func (s *Server) Serve(l net.Listener) error {
+	sem := make(chan struct{}, maxConns)
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -42,7 +56,11 @@ func (s *Server) Serve(l net.Listener) error {
 			}
 			return err
 		}
-		s.handle(conn)
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem }()
+			s.handle(conn)
+		}()
 	}
 }
 
@@ -75,9 +93,13 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 
-	// Execution may legitimately outlast the read deadline (apt).
+	// Execution may legitimately outlast the read deadline (apt). Hold
+	// execMu so privileged operations run one at a time even though reads
+	// are concurrent.
 	conn.SetDeadline(time.Time{})
+	s.execMu.Lock()
 	result, execErr := Dispatch(context.Background(), s.Deps, req)
+	s.execMu.Unlock()
 
 	conn.SetDeadline(time.Now().Add(readTimeout))
 	if execErr != nil {
@@ -124,9 +146,22 @@ func redactedArgs(intent string, args map[string]string) string {
 		} else if len(v) > 200 {
 			v = v[:200] + "..."
 		}
-		parts = append(parts, k+"="+v)
+		parts = append(parts, k+"="+sanitizeLogValue(v))
 	}
 	return strings.Join(parts, " ")
+}
+
+// sanitizeLogValue escapes control characters so a caller-supplied arg
+// value cannot forge additional audit lines - an embedded newline would
+// otherwise let a compromised caller write fake intent records. Values
+// with no control characters pass through unchanged.
+func sanitizeLogValue(v string) string {
+	for _, r := range v {
+		if unicode.IsControl(r) {
+			return strconv.Quote(v)
+		}
+	}
+	return v
 }
 
 // peerUID reads SO_PEERCRED from a Unix socket connection.

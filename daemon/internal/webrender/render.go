@@ -1,17 +1,24 @@
-// Package web renders nginx configuration from the routing table: the
-// semantic web state (hosts, app mounts, customization rules) goes in,
-// a set of per-hostname config files comes out. The renderer is pure -
+// Package webrender renders nginx configuration from the routing table:
+// the semantic web state (hosts, app mounts, customization rules) goes
+// in, a set of per-hostname config files comes out. The renderer is pure -
 // no filesystem, no environment, no store access. Callers resolve
 // everything (cert paths, backend hosts, enabled mounts) first; in
 // particular, mounts referencing disabled or absent apps must be
 // filtered out by the caller, so the renderer never proxies to a dead
 // backend.
 //
+// This is the shared, trusted boundary renderer, imported by BOTH the
+// unprivileged manager (which builds the routing model from the store)
+// and the privileged helper (which runs Render on it). Rendering happens
+// on the helper side so the manager can supply only field values, never
+// nginx directives - so every input field is validated here (see the
+// validators below) because nginx parses this output as root.
+//
 // The stored model stays backend-neutral (see web-slice design); all
 // nginx knowledge lives here. Every generated file starts with
 // ManagedMark, which is how the sync intent tells our files from
 // user-owned ones it must never touch.
-package web
+package webrender
 
 import (
 	"fmt"
@@ -101,16 +108,166 @@ type Rule struct {
 	WebSockets      bool
 }
 
+// SyncPayload is what the manager sends to helperd's web.sync_sites
+// intent: the routing model, never rendered nginx. helperd renders it on
+// the privileged side (see internal/helper/websync.go), so a compromised
+// manager can supply only field values, never nginx directives.
+type SyncPayload struct {
+	Config Config
+	Hosts  []Host
+}
+
 var safeDomain = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*$`)
+
+// Field validators. The renderer is the trust boundary: it runs on the
+// privileged side (helperd) against input from the unprivileged manager,
+// so every value it interpolates into a directive must be checked here.
+// A value that could end a directive early (";"), open or close a block
+// ("{}"), start a new line, or smuggle a variable ("$") would otherwise
+// let the caller inject arbitrary nginx - which nginx parses as root.
+
+// safePath accepts an absolute path in a conservative charset. Every
+// path the renderer emits (cert files, roots, sockets, the ACME
+// webroot) fits; anything with a directive-breaking or whitespace
+// character is rejected.
+func safePath(s string) bool {
+	if s == "" || s[0] != '/' {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '/' || r == '.' || r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// safeHost accepts a hostname or IPv4 literal used as a proxy backend.
+func safeHost(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// safeURLPath accepts a mount point: an absolute URL path or a bare "/".
+func safeURLPath(s string) bool {
+	if s == "" || s[0] != '/' {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '/' || r == '.' || r == '_' || r == '-' || r == '~':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// safeToken accepts a value going into a quoted header (AuthUser).
+func safeToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '@' || r == '.' || r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// noControl rejects control characters (a newline in a comment value
+// like CertHash would otherwise escape the comment).
+func noControl(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// validate checks the renderer configuration.
+func (c Config) validate() error {
+	if !safePath(c.ACMEWebroot) {
+		return fmt.Errorf("unsafe ACME webroot %q", c.ACMEWebroot)
+	}
+	// PHPSocket may be empty on hosts with no PHP webmail; appBlock
+	// rejects an empty socket for the apps that need it.
+	if c.PHPSocket != "" && !safePath(c.PHPSocket) {
+		return fmt.Errorf("unsafe PHP socket %q", c.PHPSocket)
+	}
+	return nil
+}
+
+// validate checks every host field the renderer interpolates.
+func (h Host) validate() error {
+	if !safeDomain.MatchString(h.Domain) {
+		return fmt.Errorf("unsafe domain name %q", h.Domain)
+	}
+	if !safePath(h.CertFile) {
+		return fmt.Errorf("unsafe cert file %q", h.CertFile)
+	}
+	if !safePath(h.KeyFile) {
+		return fmt.Errorf("unsafe key file %q", h.KeyFile)
+	}
+	if !noControl(h.CertHash) {
+		return fmt.Errorf("unsafe cert hash")
+	}
+	if h.RedirectTo != "" && !safeDomain.MatchString(h.RedirectTo) {
+		return fmt.Errorf("unsafe redirect target %q", h.RedirectTo)
+	}
+	if h.Root != "" && !safePath(h.Root) {
+		return fmt.Errorf("unsafe root %q", h.Root)
+	}
+	if h.Include != "" && !safePath(h.Include) {
+		return fmt.Errorf("unsafe include path %q", h.Include)
+	}
+	for _, m := range h.Mounts {
+		if !safeURLPath(m.Path) {
+			return fmt.Errorf("unsafe mount path %q", m.Path)
+		}
+		if m.BackendHost != "" && !safeHost(m.BackendHost) {
+			return fmt.Errorf("unsafe backend host %q", m.BackendHost)
+		}
+		if m.BackendPort < 0 || m.BackendPort > 65535 {
+			return fmt.Errorf("backend port %d out of range", m.BackendPort)
+		}
+		if m.AuthUser != "" && !safeToken(m.AuthUser) {
+			return fmt.Errorf("unsafe auth user %q", m.AuthUser)
+		}
+	}
+	return nil
+}
 
 // Render produces the complete managed fileset: TopFile plus one
 // "<domain>.conf" per host. Deterministic for identical input, so the
 // applier can hash the result for change detection.
 func Render(cfg Config, hosts []Host) (map[string]string, error) {
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
 	files := map[string]string{TopFile: renderTop()}
 	for _, h := range hosts {
-		if !safeDomain.MatchString(h.Domain) {
-			return nil, fmt.Errorf("unsafe domain name %q", h.Domain)
+		if err := h.validate(); err != nil {
+			return nil, err
 		}
 		fn := h.Domain + ".conf"
 		if _, dup := files[fn]; dup {

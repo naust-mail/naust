@@ -16,6 +16,7 @@ Steps:
 
 Bare metal only: Docker images ship their binaries at image build time.
 """
+from __future__ import annotations
 
 import os
 

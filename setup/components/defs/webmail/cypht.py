@@ -8,6 +8,7 @@ Steps:
   logrotate - write logrotate config for auth log
   config    - write .env and run config_gen.php (every run)
 """
+from __future__ import annotations
 
 import os
 import subprocess
@@ -44,8 +45,8 @@ COMPONENT = Component(
 
 # Pinned to a commit rather than a release tag so merged upstream fixes land
 # without waiting for a release. Update CYPHT_COMMIT + CYPHT_SHA256 together.
-CYPHT_COMMIT = "0e8c64c01acb862e0271c14491166334245de279"
-CYPHT_SHA256 = "9f4704482915e8467ef872bc953214477d89dd6950da7196980867fbf9caa7b0"
+CYPHT_COMMIT = "fa1b9a7e4af4cfc00bc5eed3e7b7883808b60b1a"
+CYPHT_SHA256 = "2d0301522d4ab7a238a9f9299b6428455499e87d950febb24cadaadb6d0d83c5"
 CYPHT_URL = f"https://github.com/cypht-org/cypht/archive/{CYPHT_COMMIT}.tar.gz"
 
 _CYPHT_SRC = "/usr/local/src/cypht"

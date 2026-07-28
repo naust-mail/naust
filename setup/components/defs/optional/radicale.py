@@ -13,6 +13,7 @@ Steps:
   namespace    - detect mount-namespace support; write drop-in if not available
   systemd      - install and enable the systemd unit
 """
+from __future__ import annotations
 
 import os
 import pathlib

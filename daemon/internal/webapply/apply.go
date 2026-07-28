@@ -1,11 +1,12 @@
 // Package webapply converges the web tier: it derives the hostname
 // set from the mail domain model, resolves app mounts against the
 // registry and box configuration, folds in per-domain customizations
-// from the store, renders the nginx fileset (internal/web), and hands
-// it to helperd's web.sync_sites intent, which tests and reloads
-// nginx. Like the other appliers it is kicked after mutations and
-// coalesces bursts; the sync intent is idempotent, so spurious kicks
-// are free.
+// from the store, and hands the resolved routing model to helperd's
+// web.sync_sites intent, which renders it (internal/webrender), tests,
+// and reloads nginx. Rendering happens on the privileged side, so this
+// unprivileged applier only ever sends data. Like the other appliers it
+// is kicked after mutations and coalesces bursts; the sync intent is
+// idempotent, so spurious kicks are free.
 package webapply
 
 import (
@@ -30,7 +31,7 @@ import (
 	entalias "naust/daemon/internal/store/ent/alias"
 	entsetting "naust/daemon/internal/store/ent/setting"
 	entuser "naust/daemon/internal/store/ent/user"
-	"naust/daemon/internal/web"
+	"naust/daemon/internal/webrender"
 )
 
 // SettingMounts is the Setting row holding app placement overrides: a
@@ -184,11 +185,10 @@ func (a *Applier) Rebuild(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	files, err := web.Render(a.renderConfig(), hosts)
-	if err != nil {
-		return fmt.Errorf("render: %w", err)
-	}
-	args, err := helper.EncodeSyncArgs(files)
+	// Send the routing model, not rendered nginx: helperd renders it on
+	// the privileged side so a compromised manager can supply only field
+	// values, never nginx directives. webrender.Render validates the fields.
+	args, err := helper.EncodePayload(a.renderConfig(), hosts)
 	if err != nil {
 		return err
 	}
@@ -201,15 +201,15 @@ func (a *Applier) Rebuild(ctx context.Context) error {
 		return fmt.Errorf("sync_sites result: %w", err)
 	}
 	for _, sk := range res.Skipped {
-		if sk.TemplateVersion != 0 && sk.TemplateVersion != web.TemplateVersion {
+		if sk.TemplateVersion != 0 && sk.TemplateVersion != webrender.TemplateVersion {
 			a.Log.Printf("webapply: user-owned %s is stamped v%d, templates are at v%d (stale eject)",
-				sk.File, sk.TemplateVersion, web.TemplateVersion)
+				sk.File, sk.TemplateVersion, webrender.TemplateVersion)
 		}
 	}
 	return nil
 }
 
-func (a *Applier) renderConfig() web.Config {
+func (a *Applier) renderConfig() webrender.Config {
 	sock := a.PHPSocket
 	if sock == "" {
 		// Debian's php-fpm names its default pool socket
@@ -222,15 +222,15 @@ func (a *Applier) renderConfig() web.Config {
 			sock = "/run/php/php8.3-fpm.sock"
 		}
 	}
-	return web.Config{
+	return webrender.Config{
 		ACMEWebroot: filepath.Join(a.StorageRoot, "ssl", "lets_encrypt", "webroot"),
 		PHPSocket:   sock,
 	}
 }
 
-// BuildHosts assembles the full []web.Host for rendering: derived
+// BuildHosts assembles the full []webrender.Host for rendering: derived
 // sites x customization rows x resolved mounts.
-func (a *Applier) BuildHosts(ctx context.Context, in Input) ([]web.Host, error) {
+func (a *Applier) BuildHosts(ctx context.Context, in Input) ([]webrender.Host, error) {
 	sites := Derive(in)
 
 	rows, err := a.Store.WebDomain.Query().WithRules().All(ctx)
@@ -252,9 +252,9 @@ func (a *Applier) BuildHosts(ctx context.Context, in Input) ([]web.Host, error) 
 		return nil, fmt.Errorf("scan certificates: %w", err)
 	}
 
-	hosts := make([]web.Host, 0, len(sites))
+	hosts := make([]webrender.Host, 0, len(sites))
 	for _, site := range sites {
-		h := web.Host{Domain: site.Domain, HSTS: "on"}
+		h := webrender.Host{Domain: site.Domain, HSTS: "on"}
 		h.CertFile, h.KeyFile = sslcert.Resolve(certs, sslRoot, a.PrimaryHostname, site.Domain)
 		h.CertHash = hashFiles(h.KeyFile, h.CertFile)
 
@@ -271,7 +271,7 @@ func (a *Applier) BuildHosts(ctx context.Context, in Input) ([]web.Host, error) 
 				h.Root = ""
 			}
 			for _, r := range row.Edges.Rules {
-				h.Rules = append(h.Rules, web.Rule{
+				h.Rules = append(h.Rules, webrender.Rule{
 					Kind:            string(r.Kind),
 					Path:            r.Path,
 					Target:          r.Target,
@@ -302,7 +302,7 @@ func (a *Applier) BuildHosts(ctx context.Context, in Input) ([]web.Host, error) 
 // collision drops the mount with a log line. The API validates
 // upfront, so fallbacks here are a safety net that keeps one bad
 // setting from taking the whole web tier down.
-func (a *Applier) resolveMounts(ctx context.Context) ([]web.Mount, error) {
+func (a *Applier) resolveMounts(ctx context.Context) ([]webrender.Mount, error) {
 	overrides := map[string]string{}
 	row, err := a.Store.Setting.Query().Where(entsetting.Key(SettingMounts)).Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
@@ -314,7 +314,7 @@ func (a *Applier) resolveMounts(ctx context.Context) ([]web.Mount, error) {
 		}
 	}
 
-	var mounts []web.Mount
+	var mounts []webrender.Mount
 	taken := map[string]bool{}
 	for _, svc := range registry.All() {
 		if !svc.Enabled(a.Conf) {
@@ -329,7 +329,7 @@ func (a *Applier) resolveMounts(ctx context.Context) ([]web.Mount, error) {
 			continue
 		}
 		taken[path] = true
-		mounts = append(mounts, web.Mount{
+		mounts = append(mounts, webrender.Mount{
 			App:         svc.Name,
 			Path:        path,
 			BackendHost: a.backendHost(svc),

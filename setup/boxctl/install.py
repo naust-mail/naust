@@ -8,12 +8,12 @@ Flow:
   4. Components (one doit run, rolling log with active-component tracking)
   5. boxctl bootstrap --install  (admin URL + TLS fingerprint)
 """
+from __future__ import annotations
 
 import contextlib
 import glob
 import json
 import os
-import pathlib
 import re
 import shutil
 import signal
@@ -97,7 +97,7 @@ def _fmt_mmss(sec: float) -> str:
 
 
 LOG_PATH = "/tmp/naust-setup.log"  # noqa: S108 - fixed path so it survives across re-runs and is discoverable for support
-_logfile: "open | None" = None
+_logfile: open | None = None
 
 
 def _log(line: str) -> None:
@@ -671,19 +671,6 @@ def main() -> None:
 	if not _preflight():
 		sys.exit(1)
 
-	# ── Migrations (re-run only) ───────────────────────────────────────────────
-	if os.path.exists(CONF_PATH):
-		migrate = os.path.join(_SETUP, "migrate.py")
-		if os.path.exists(migrate):
-			r = subprocess.run(
-				[sys.executable, migrate, "--migrate"],
-				capture_output=True,
-				text=True,
-			)
-			if r.returncode != 0:
-				print(f"  {red('Migration failed:')}\n{(r.stdout + r.stderr).strip()}\n")
-				sys.exit(1)
-
 	# ── Detect IPs (best-effort, shown as defaults in the wizard) ────────────
 	initial = load_conf(CONF_PATH)
 
@@ -798,22 +785,6 @@ def main() -> None:
 	while d != "/":
 		os.chmod(d, 0o755)
 		d = os.path.dirname(d)
-	# Stamp migration number on first install.
-	ver_file = os.path.join(storage_root, "naust.version")
-	if not os.path.exists(ver_file):
-		migrate = os.path.join(_SETUP, "migrate.py")
-		if os.path.exists(migrate):
-			r = subprocess.run(
-				[sys.executable, migrate, "--current"],
-				capture_output=True,
-				text=True,
-			)
-			if r.returncode == 0 and r.stdout.strip():
-				pathlib.Path(ver_file).write_text(r.stdout.strip() + "\n", encoding="utf-8")
-				subprocess.run(
-					["chown", f"{storage_user}:{storage_user}", ver_file],
-					capture_output=True,
-				)
 
 	# boxctl (the operator CLI) is a Go binary put on PATH by the boxctl
 	# component below, which also creates the `naust` alias. The Python installer

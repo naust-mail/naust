@@ -18,6 +18,7 @@ uptodate conventions:
   targets=['/path']          - re-run if output file is missing
   [False]                    - always run (configure steps)
 """
+from __future__ import annotations
 
 import grp
 import importlib
@@ -32,12 +33,15 @@ import sys
 import time
 import types
 from collections import defaultdict
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import fcntl
 
 from .component import Component, BAREMETAL, DOCKER
 from . import packages as pkg
+
+if TYPE_CHECKING:
+	from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
@@ -378,6 +382,13 @@ def run(env: dict, component_names: list[str] | None = None, force: bool = False
 			component_tasks[comp.name] = tasks
 
 	ran = _run_doit(component_tasks, force=force, parallel=parallel) if component_tasks else set()
+
+	# Cross-component fixups that need every component's tasks done first,
+	# regardless of doit's internal ordering. See Component.post_install.
+	for comp, _ in enabled:
+		if comp.post_install is not None:
+			log.info("Running post-install hook for %s", comp.name)
+			comp.post_install(env, runtime)
 
 	# Grant naust read access to any group an optional component created for
 	# its own service files, now that every component's tasks (including

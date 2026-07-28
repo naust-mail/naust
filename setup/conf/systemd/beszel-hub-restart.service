@@ -1,0 +1,28 @@
+[Unit]
+Description=Restart Beszel Hub once, after first-run system provisioning
+# The hub only reads config.yml and syncs it against the users table at boot
+# (internal/hub/config/config.go). beszel-seed.service writes config.yml's
+# systems: block after creating the trusted-header user, so a second boot is
+# needed for the sync to pick it up. ConditionPathExists gates this so it is
+# a no-op on every boot after the first successful seed.
+After=beszel-seed.service
+Requires=beszel-seed.service
+ConditionPathExists=${STORAGE_ROOT}/beszel/.needs-hub-restart
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart beszel-hub.service
+ExecStartPost=/bin/rm -f ${STORAGE_ROOT}/beszel/.needs-hub-restart
+
+# Sandboxing: its only actions are restarting one unit and removing its own
+# marker file.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=${STORAGE_ROOT}/beszel
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -8,9 +8,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates \
     # python3/pip run the beszel component: creates the beszel system user
-    # and generates the hub<->agent keypair + hub.env/agent.env/config.yml
-    # onto the shared storage volume (self-contained, matching munin's
+    # and generates the hub<->agent keypair + agent.env/config.yml + the seed
+    # script onto the shared storage volume (self-contained, matching munin's
     # Docker pattern - management runs no Python setup component itself).
+    # python3 also runs the first-run seed script at container start.
     python3 python3-pip \
     # ssh-keygen (hub<->agent Ed25519 keypair)
     openssh-client \

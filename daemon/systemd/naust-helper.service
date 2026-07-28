@@ -15,7 +15,7 @@ User=root
 # Group owns RuntimeDirectory: /run/naust must be traversable by the
 # manager (socket group members), not just root.
 Group=naust
-ExecStart=/usr/local/lib/naust/helperd -socket /run/naust/helper.sock -socket-group naust
+ExecStart=/usr/local/lib/naust/helperd -socket /run/naust/helper.sock -socket-group naust -allow-user naust
 RuntimeDirectory=naust
 RuntimeDirectoryMode=0750
 Restart=on-failure

@@ -27,9 +27,25 @@ func main() {
 	socketPath := flag.String("socket", "/run/naust/helper.sock", "unix socket path to listen on")
 	socketGroup := flag.String("socket-group", "naust", "group granted connect access to the socket")
 	allowUID := flag.Int("allow-uid", -1, "restrict callers to this peer uid (-1 allows any; socket permissions remain the primary gate)")
+	allowUser := flag.String("allow-user", "", "restrict callers to this peer user's uid, resolved by name at startup (empty disables; takes precedence over -allow-uid)")
 	flag.Parse()
 
 	logger := log.New(os.Stderr, "", log.LstdFlags)
+
+	// -allow-user pins the caller to a named account (managerd's user)
+	// without baking its install-time-assigned uid into the unit file.
+	allowedUID := *allowUID
+	if *allowUser != "" {
+		u, err := user.Lookup(*allowUser)
+		if err != nil {
+			logger.Fatalf("resolve -allow-user %q: %v", *allowUser, err)
+		}
+		uid, err := strconv.Atoi(u.Uid)
+		if err != nil {
+			logger.Fatalf("parse uid for user %q: %v", *allowUser, err)
+		}
+		allowedUID = uid
+	}
 
 	if err := os.MkdirAll(filepath.Dir(*socketPath), 0o750); err != nil {
 		logger.Fatalf("create socket directory: %v", err)
@@ -52,7 +68,7 @@ func main() {
 
 	srv := &helper.Server{
 		Deps:     helper.Deps{Run: helper.ExecRunner{}},
-		AllowUID: *allowUID,
+		AllowUID: allowedUID,
 		Log:      logger,
 	}
 
@@ -63,7 +79,7 @@ func main() {
 		l.Close()
 	}()
 
-	logger.Printf("helperd listening on %s (group %s, allow-uid %d)", *socketPath, *socketGroup, *allowUID)
+	logger.Printf("helperd listening on %s (group %s, allow-uid %d)", *socketPath, *socketGroup, allowedUID)
 	if err := srv.Serve(l); err != nil {
 		logger.Fatalf("serve: %v", err)
 	}

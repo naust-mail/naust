@@ -10,6 +10,7 @@ require /etc/naust.conf. At build time RUNTIME is unset so
 packages.ensure_installed() runs apt normally. At container runtime
 RUNTIME=docker so ensure_installed() is a no-op (packages already present).
 """
+from __future__ import annotations
 
 import importlib
 import pkgutil

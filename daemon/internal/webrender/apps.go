@@ -1,4 +1,4 @@
-package web
+package webrender
 
 import (
 	"fmt"
@@ -120,6 +120,13 @@ func adminBlock(b *strings.Builder, m Mount) {
 		proxy_pass_request_body off;
 		proxy_set_header Content-Length "";
 		proxy_set_header X-Original-URI $request_uri;
+		# credentialFrom() prefers an Authorization header over the session
+		# cookie, which is correct for real API-token clients but wrong here:
+		# this subrequest carries whatever Authorization header the original
+		# request had, which may belong to the proxied app's own backend
+		# (e.g. beszel's PocketBase client attaches its own JWT), not Naust.
+		# Blank it so this gate always checks the Naust session cookie.
+		proxy_set_header Authorization "";
 	}
 
 `, m.BackendHost, m.BackendPort, m.Path)
@@ -232,6 +239,16 @@ func beszelBlock(b *strings.Builder, m Mount) {
 		# nginx overwrites any client-supplied value.
 		proxy_set_header X-Beszel-User "%[3]s";
 
+		# Trailing slash strips the matched /admin/beszel prefix before
+		# forwarding. Beszel's hub is APP_URL-aware and its PocketBase JS
+		# client (new PocketBase(basePath)) constructs every request with
+		# that prefix already on it - but its Go router (server_production.go)
+		# registers /api/... routes unprefixed, so nginx is the layer that
+		# must translate the client's prefixed URL back to what the backend
+		# actually listens on. Verified: forwarding the prefix through
+		# unchanged makes API calls miss the real route and fall through to
+		# the SPA-serving catch-all instead. Static assets tolerate either
+		# form (matched by substring), so this only affects API/data calls.
 		proxy_pass http://%[1]s:%[2]d/;
 		proxy_set_header Host $host;
 		proxy_set_header X-Forwarded-For $remote_addr;

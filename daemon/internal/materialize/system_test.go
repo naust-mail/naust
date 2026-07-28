@@ -92,23 +92,23 @@ func TestSystemRoutingPerTenant(t *testing.T) {
 	snap := Snapshot{
 		OperatorTenant: 1,
 		Users: []UserRow{
-			{Email: "op@julian.cv", Admin: true, CreatedAt: t0, TenantID: 1},
+			{Email: "op@other.com", Admin: true, CreatedAt: t0, TenantID: 1},
 			{Email: "hello@example.com", Admin: true, CreatedAt: t0, TenantID: 2},
 			{Email: "worker@example.com", CreatedAt: t0, TenantID: 2},
 		},
 	}
-	out := ApplySystemRouting(snap, "box.julian.cv")
+	out := ApplySystemRouting(snap, "box.other.com")
 	aliasMaps := RenderAliasMaps(out)
 
 	// Tenant domains route to the tenant's own admin, never the operator.
 	if !strings.Contains(aliasMaps, "postmaster@example.com hello@example.com\n") {
 		t.Errorf("tenant domain must route to tenant admin:\n%s", aliasMaps)
 	}
-	if strings.Contains(aliasMaps, "postmaster@example.com op@julian.cv") {
+	if strings.Contains(aliasMaps, "postmaster@example.com op@other.com") {
 		t.Error("tenant mail leaked to the operator")
 	}
 	// Infrastructure routes to the operator.
-	if !strings.Contains(aliasMaps, "root@box.julian.cv op@julian.cv\n") {
+	if !strings.Contains(aliasMaps, "root@box.other.com op@other.com\n") {
 		t.Errorf("hostname must route to operator admin:\n%s", aliasMaps)
 	}
 }

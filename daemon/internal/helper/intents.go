@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	maxContentLen = 1 << 20 // 1MB cap on any file content argument
-	maxValueLen   = 1024    // cap on postconf values
+	maxValueLen = 1024 // cap on postconf values
 )
 
 // intentDef is one entry in the fixed menu: how to validate its args and
@@ -48,24 +47,6 @@ var Intents = map[string]intentDef{
 		execute: func(ctx context.Context, d Deps, args map[string]string) (string, error) {
 			_, err := d.Run.Run(ctx, []string{"/usr/sbin/postconf", "-e", args["key"] + "=" + args["value"]}, nil)
 			return "", err
-		},
-	},
-
-	"config.write": {
-		timeout: 30 * time.Second,
-		args:    []string{"target", "content"},
-		validate: func(args map[string]string) error {
-			if _, ok := configTargets[args["target"]]; !ok {
-				return fmt.Errorf("config target %q not in allowlist", args["target"])
-			}
-			if len(args["content"]) > maxContentLen {
-				return fmt.Errorf("content exceeds %d bytes", maxContentLen)
-			}
-			return nil
-		},
-		execute: func(ctx context.Context, d Deps, args map[string]string) (string, error) {
-			t := configTargets[args["target"]]
-			return "", writeFileAtomic(filepath.Join(d.Root, t.path), []byte(args["content"]), t.mode)
 		},
 	},
 

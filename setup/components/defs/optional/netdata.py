@@ -6,6 +6,7 @@ Steps:
   config   - write /etc/netdata/netdata.conf (loopback-only, disable telemetry)
   systemd  - enable netdata service
 """
+from __future__ import annotations
 
 import hashlib
 import os

@@ -114,12 +114,18 @@ func (e *Engine) Kick() {
 }
 
 // RunNow queues a manual run and wakes the scheduler. Never blocks.
-func (e *Engine) RunNow(req RunRequest) {
-	e.mu.Lock()
-	e.pending = append(e.pending, req)
-	e.mu.Unlock()
-	e.busy.Add(1) // counted until the request is executed
-	e.Kick()
+func (e *Engine) RunNow(req RunRequest) bool {
+    e.mu.Lock()
+    defer e.mu.Unlock()
+
+    if e.busy.Load() > 0 {
+        return false
+    }
+
+    e.pending = append(e.pending, req)
+    e.busy.Add(1)
+    e.Kick()
+    return true
 }
 
 // Busy reports whether a run is executing or queued.

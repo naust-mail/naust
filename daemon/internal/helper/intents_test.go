@@ -51,8 +51,7 @@ func TestValidationRejections(t *testing.T) {
 		{"newline in value", "postfix.set", map[string]string{"key": "relayhost", "value": "a\nb"}, "control character"},
 		{"oversized value", "postfix.set", map[string]string{"key": "relayhost", "value": strings.Repeat("x", 2000)}, "exceeds"},
 		{"removed map intent", "postfix.map", map[string]string{"map": "sasl_passwd", "content": "x"}, "unknown intent"},
-		{"unlisted config target", "config.write", map[string]string{"target": "sudoers", "content": "x"}, "not in allowlist"},
-		{"oversized content", "config.write", map[string]string{"target": "nginx_local", "content": strings.Repeat("x", maxContentLen+1)}, "exceeds"},
+		{"removed config.write intent", "config.write", map[string]string{"target": "nginx_local", "content": "x"}, "unknown intent"},
 		{"args on no-arg intent", "host.reboot", map[string]string{"force": "1"}, "do not match"},
 	}
 	for _, tc := range cases {
@@ -157,44 +156,6 @@ func TestPostfixQueueReturnsOutput(t *testing.T) {
 	// No-arg intent: extra args are rejected before execution.
 	if err := dispatch(t, d, "postfix.queue", map[string]string{"flush": "1"}); err == nil {
 		t.Fatal("args on postfix.queue must be rejected")
-	}
-}
-
-func TestConfigWriteAtomicWithMode(t *testing.T) {
-	root := t.TempDir()
-	dir := filepath.Join(root, "etc/nginx/conf.d")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	d := Deps{Run: &fakeRunner{}, Root: root}
-
-	content := "server { listen 127.0.0.1:8080; }\n"
-	if err := dispatch(t, d, "config.write", map[string]string{"target": "nginx_local", "content": content}); err != nil {
-		t.Fatal(err)
-	}
-
-	path := filepath.Join(dir, "local.conf")
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != content {
-		t.Fatalf("content mismatch: %q", got)
-	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi.Mode().Perm() != 0o644 {
-		t.Fatalf("mode %v, want 0644", fi.Mode().Perm())
-	}
-	// No temp files left behind.
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("stray files in %s: %v", dir, entries)
 	}
 }
 

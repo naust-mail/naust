@@ -8,9 +8,8 @@ ExecStartPre=+/bin/chown beszel:beszel ${STORAGE_ROOT}/beszel
 ExecStart=/usr/local/bin/beszel serve --http "127.0.0.1:8090" --dir "${STORAGE_ROOT}/beszel"
 User=beszel
 Group=beszel
-# hub.env supplies USER_EMAIL + USER_PASSWORD consumed by the initial migration
-# (first DB creation only). After that these are ignored.
-EnvironmentFile=${STORAGE_ROOT}/beszel/hub.env
+# The single trusted-header user is seeded by beszel-seed.service after first
+# boot via the create-user API - no password is ever persisted here.
 # nginx injects a fixed internal identity via this header after validating the
 # admin session. Password auth is disabled - this header is the only way in.
 # nginx MUST strip any client-supplied value of this header before proxying.

@@ -8,6 +8,7 @@ Bridges rav per-user SQLite databases to CardDAV/CalDAV:
 
 Database path: $RAV_DATA_DIR/<sha256(email)>/db.sqlite
 """
+from __future__ import annotations
 
 import hashlib
 import logging

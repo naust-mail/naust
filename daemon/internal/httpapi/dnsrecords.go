@@ -2,63 +2,32 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"naust/daemon/internal/adminops"
 	"naust/daemon/internal/api"
 	"naust/daemon/internal/dns"
 	"naust/daemon/internal/store/ent"
-	entalias "naust/daemon/internal/store/ent/alias"
 	entdnsrecord "naust/daemon/internal/store/ent/dnsrecord"
 	entsetting "naust/daemon/internal/store/ent/setting"
-	entuser "naust/daemon/internal/store/ent/user"
 )
 
 // settingSecondaryNS holds the secondary-nameserver list as a JSON
 // array of strings.
 const settingSecondaryNS = "dns_secondary_nameservers"
 
-// Custom DNS has no natural upper bound from the domains/aliases that
-// drive every other quota in this API, so it needs its own: without a
-// cap, a scripted or malicious admin session could grow a zone (and the
-// zone files rendered from it) without limit.
-const (
-	maxDNSRecordsPerZone = 500
-	maxDNSValuesPerName  = 50
-)
+// maxDNSValuesPerName caps how many values one qname/rtype may hold. The
+// per-zone cap lives in adminops (adminops.MaxDNSRecordsPerZone), shared
+// with the migration create path.
+const maxDNSValuesPerName = 50
 
-// dnsZones derives the zone apexes this box hosts: every domain with a
-// user or alias, plus the box's own hostname, with subdomains folded
-// into their parent zone.
+// dnsZones derives the zone apexes this box hosts. It delegates to adminops
+// so the API and the migration path agree on what DNS this box owns.
 func (s *Server) dnsZones(r *http.Request) ([]string, error) {
-	emails, err := s.Store.User.Query().
-		Select(entuser.FieldEmail).
-		Strings(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	sources, err := s.Store.Alias.Query().
-		Select(entalias.FieldSource).
-		Strings(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	seen := map[string]bool{}
-	var domains []string
-	add := func(d string) {
-		if d != "" && !seen[d] {
-			seen[d] = true
-			domains = append(domains, d)
-		}
-	}
-	add(s.PrimaryHostname)
-	for _, addr := range append(emails, sources...) {
-		if _, domain, ok := strings.Cut(addr, "@"); ok {
-			add(domain)
-		}
-	}
-	return dns.Zones(domains), nil
+	return adminops.HostedZones(r.Context(), s.Store, s.PrimaryHostname)
 }
 
 // resolveDNSName normalizes a record name (including punycoding of
@@ -104,9 +73,7 @@ func (s *Server) handleDNSZones(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListDNSRecords(w http.ResponseWriter, r *http.Request) {
-	records, err := s.Store.DNSRecord.Query().
-		Order(entdnsrecord.ByID()).
-		All(r.Context())
+	records, err := adminops.ListDNSRecords(r.Context(), s.Store)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "record query failed")
 		return
@@ -136,50 +103,17 @@ func (s *Server) handleCreateDNSRecord(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	rtype, err := parseRType(req.RType)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "unknown record type")
-		return
-	}
-	qname, zone, ok := s.resolveDNSName(w, r, req.QName)
-	if !ok {
-		return
-	}
 	value := strings.TrimSpace(req.Value)
-	// The dynamic-DNS idiom: an empty A/AAAA value means "my address".
-	if value == "" && (rtype == entdnsrecord.RtypeA || rtype == entdnsrecord.RtypeAAAA) {
-		value = clientIP(r)
+	// The dynamic-DNS idiom: an empty A/AAAA value means "my address". This
+	// stays in the HTTP layer because it needs the request's client IP.
+	if value == "" {
+		if rt := strings.ToUpper(strings.TrimSpace(req.RType)); rt == "A" || rt == "AAAA" {
+			value = clientIP(r)
+		}
 	}
-	value, err = dns.ValidateValue(qname, zone, string(rtype), value)
+	rec, zone, err := adminops.CreateDNSRecord(r.Context(), s.Store, s.TenantID, s.PrimaryHostname, req.QName, req.RType, value)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	zoneCount, err := s.Store.DNSRecord.Query().
-		Where(entdnsrecord.Or(entdnsrecord.Qname(zone), entdnsrecord.QnameHasSuffix("."+zone))).
-		Count(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "record count failed")
-		return
-	}
-	if zoneCount >= maxDNSRecordsPerZone {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("at most %d custom DNS records per zone", maxDNSRecordsPerZone))
-		return
-	}
-
-	rec, err := s.Store.DNSRecord.Create().
-		SetQname(qname).
-		SetRtype(rtype).
-		SetValue(value).
-		SetTenantID(s.TenantID).
-		Save(r.Context())
-	if ent.IsConstraintError(err) {
-		writeError(w, http.StatusConflict, "that record already exists")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "record creation failed")
+		writeDNSError(w, err)
 		return
 	}
 	s.dnsDataChanged()
@@ -189,6 +123,21 @@ func (s *Server) handleCreateDNSRecord(w http.ResponseWriter, r *http.Request) {
 		Value: rec.Value,
 		Zone:  zone,
 	})
+}
+
+// writeDNSError maps an adminops DNS error to its HTTP status.
+func writeDNSError(w http.ResponseWriter, err error) {
+	var ve *adminops.ValidationError
+	switch {
+	case errors.As(err, &ve):
+		writeError(w, http.StatusBadRequest, ve.Error())
+	case errors.Is(err, adminops.ErrZoneNotHosted):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, adminops.ErrDNSRecordExists):
+		writeError(w, http.StatusConflict, "that record already exists")
+	default:
+		writeError(w, http.StatusInternalServerError, "record creation failed")
+	}
 }
 
 func (s *Server) handleReplaceDNSRecords(w http.ResponseWriter, r *http.Request) {
@@ -237,8 +186,8 @@ func (s *Server) handleReplaceDNSRecords(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "record count failed")
 		return
 	}
-	if zoneCount-existing+len(values) > maxDNSRecordsPerZone {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("at most %d custom DNS records per zone", maxDNSRecordsPerZone))
+	if zoneCount-existing+len(values) > adminops.MaxDNSRecordsPerZone {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("at most %d custom DNS records per zone", adminops.MaxDNSRecordsPerZone))
 		return
 	}
 

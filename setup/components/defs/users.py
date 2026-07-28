@@ -14,6 +14,7 @@ Steps:
 
 Both postfix and dovecot are restarted when any task runs.
 """
+from __future__ import annotations
 
 import os
 import subprocess

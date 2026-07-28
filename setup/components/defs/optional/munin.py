@@ -15,6 +15,7 @@ munin behind auth_request like every other monitoring backend. The
 muninweb binary itself is installed by the daemon component
 (defs/daemon.py), which owns all Go daemon binaries as one artifact set.
 """
+from __future__ import annotations
 
 import os
 import shlex

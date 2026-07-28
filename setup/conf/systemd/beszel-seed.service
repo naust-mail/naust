@@ -1,0 +1,28 @@
+[Unit]
+Description=Beszel Hub first-run user seeding
+# Seeds the single trusted-header user via the hub's create-user API instead of
+# a persisted USER_PASSWORD. Ordered after the hub; the script waits for the
+# API to listen. No-ops once a user exists, so it is safe to run every boot.
+# Also writes config.yml's systems: block on first success - see the script.
+After=beszel-hub.service
+Requires=beszel-hub.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/beszel-seed.py
+User=beszel
+Group=beszel
+
+# Sandboxing: it reads beszel-user/agent.env and writes config.yml plus its
+# restart marker, all under STORAGE_ROOT/beszel; otherwise it only talks to
+# the local hub API.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=${STORAGE_ROOT}/beszel
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
